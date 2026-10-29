@@ -132,3 +132,27 @@ export function Claims({ s, cfg }: ViewProps) {
         {!dist && c.status === "approved" && <button className="sm" onClick={async () => { if (await run(() => api(s, `/api/claims/${c.id}/settle`, { method: "POST" }))) reload(); }}>Settle (credit note)</button>}
         {c.status === "settled" && <button className="sm ghost" onClick={() => openHtml(s, `/api/claims/${c.id}/print`)}>Credit note</button>}</div></div>)}</>;
 }
+
+// ---------- Leads ----------
+export function Leads({ s }: ViewProps) {
+  const [due, setDue] = useState(false); const [rows, reload] = useData<any[]>(s, `/api/leads${due ? "?due=1" : ""}`, [due]);
+  const [form, setForm] = useState<any>({ kind: "outlet" }); const [open, setOpen] = useState<any>(null); const [fu, reloadFu] = useData<any[]>(s, open ? `/api/leads/${open.id}/followups` : null, [open?.id]);
+  const [note, setNote] = useState(""), [next, setNext] = useState("");
+  const F = (k: string, l: string, type = "text") => <Field label={l}><input type={type} value={form[k] || ""} onChange={e => setForm({ ...form, [k]: e.target.value })} /></Field>;
+  return <><h2>Leads</h2>
+    <details className="card"><summary><b>+ New lead</b></summary>
+      <Field label="Type"><select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })}><option value="outlet">Outlet</option><option value="dealer">Dealer / distributor</option></select></Field>
+      {F("name", "Business name")}{F("owner_name", "Owner")}{F("phone", "Phone", "tel")}{F("city", "Town / city")}{F("next_follow_up", "Follow up on", "date")}{F("notes", "Notes")}
+      <button onClick={async () => { if (await run(() => api(s, "/api/leads", { method: "POST", body: JSON.stringify(form) }))) { setForm({ kind: "outlet" }); reload(); } }}>Save lead</button></details>
+    <label><input type="checkbox" checked={due} onChange={e => setDue(e.target.checked)} /> Only follow-ups due today</label>
+    {!rows ? <Loading /> : !rows.length ? <p className="muted">No leads yet.</p> : rows.map(l => <div key={l.id} className="card" onClick={() => setOpen(l)}>
+      <b>{l.name}</b> <span className="muted">· {l.kind} · {l.city || ""} · {l.status}{l.next_follow_up ? ` · next ${l.next_follow_up}` : ""}</span>
+      {open?.id === l.id && <div onClick={e => e.stopPropagation()}>
+        {l.phone && <p><a href={`tel:${l.phone}`}>📞 {l.phone}</a></p>}
+        {fu?.map(f => <div key={f.id} className="muted small">{String(f.created_at).slice(0, 10)} {f.by_name}: {f.note}</div>)}
+        {!["converted", "lost"].includes(l.status) && <><Field label="Follow-up note"><input value={note} onChange={e => setNote(e.target.value)} /></Field><Field label="Next date"><input type="date" value={next} onChange={e => setNext(e.target.value)} /></Field>
+          <div className="row-btns"><button className="sm" onClick={async () => { if (await run(() => api(s, `/api/leads/${l.id}/followups`, { method: "POST", body: JSON.stringify({ note, next_date: next || undefined }) }))) { setNote(""); reloadFu(); reload(); } }}>Add follow-up</button>
+            <button className="sm" onClick={async () => { if (confirm(`Make ${l.name} an outlet?`) && await run(() => api(s, `/api/leads/${l.id}/convert`, { method: "POST", body: "{}" }))) reload(); }}>Convert to outlet</button>
+            <button className="sm ghost" onClick={async () => { const r = prompt("Why lost?"); if (r != null && await run(() => api(s, `/api/leads/${l.id}`, { method: "PATCH", body: JSON.stringify({ status: "lost", lost_reason: r }) }))) reload(); }}>Mark lost</button></div></>}</div>}
+    </div>)}</>;
+}

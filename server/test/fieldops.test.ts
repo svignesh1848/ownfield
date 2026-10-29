@@ -95,3 +95,19 @@ describe("barcodes", () => {
     expect((await request(app).get("/api/inventory").set(as("dist"))).body.rows.find((x: any) => x.sku === "SAMPLE-BC-1").qty).toBe(3);
   });
 });
+
+describe("leads", () => {
+  it("capture, follow up, and convert into an outlet", async () => {
+    await on({ leads: true });
+    const l = (await request(app).post("/api/leads").set(as("rep")).send({ name: "Sample Prospect Store", kind: "outlet", city: "Salem", phone: "9000000099", next_follow_up: "2026-01-01" }).expect(201)).body;
+    expect(l.assigned_to).toBe(id.rep);
+    expect((await request(app).get("/api/leads?due=1").set(as("rep")).expect(200)).body.length).toBe(1);
+    await request(app).post(`/api/leads/${l.id}/followups`).set(as("rep")).send({ note: "Sample: met owner, wants price list", next_date: "2099-01-01" }).expect(201);
+    expect((await request(app).get("/api/leads").set(as("adm"))).body[0].status).toBe("contacted");
+    await request(app).patch(`/api/leads/${l.id}`).set(as("rep")).send({ status: "converted" }).expect(400);
+    const c = (await request(app).post(`/api/leads/${l.id}/convert`).set(as("rep")).send({}).expect(201)).body;
+    expect(c.shop.code).toBe(`LEAD-${l.id}`);
+    expect((await request(app).get("/api/shops").set(as("adm"))).body.some((s: any) => s.code === `LEAD-${l.id}`)).toBe(true);
+    await request(app).post(`/api/leads/${l.id}/convert`).set(as("rep")).send({}).expect(409);
+  });
+});
