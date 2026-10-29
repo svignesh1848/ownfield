@@ -8,21 +8,23 @@ import { Collections } from "./collect";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 import { Invoices, Targets, Reports, Visits } from "./step4";
 import { PurchaseOrders, DistributorTerms } from "./po";
+import { UsersAdmin, SecurityPage, MyAccount, ResetPassword, useIdleLogout, deviceId } from "./security";
 import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives, RetailerHome } from "./phase3";
 
-export type Session = { token: string; user: { id: number; name: string; role: string; companyCode: string | null } };
+export type Session = { token: string; idleMinutes?: number; enrollTotp?: boolean; user: { id: number; name: string; role: string; companyCode: string | null } };
 const SAVED: Record<string, string> = { POST: "Saved", PUT: "Changes saved", PATCH: "Changes saved", DELETE: "Deleted" };
 export const api = async (s: Session | null, url: string, opts: RequestInit = {}) => {
   const r = await fetch(url, { ...opts, headers: { ...(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(s ? { Authorization: `Bearer ${s.token}` } : {}) } });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || r.statusText);
+  if (r.status === 401 && s) { localStorage.removeItem("ff"); setTimeout(() => location.reload(), 1500); }
+  if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { body: j });
   const m = (opts.method || "GET").toUpperCase();
   if (m !== "GET" && !/\/api\/(auth|orders\/preview)/.test(url)) toast(SAVED[m] || "Saved");
   return j;
 };
 
 function Login({ onLogin }: { onLogin: (s: Session) => void }) {
-  const [f, setF] = useState({ companyCode: "", email: "", password: "" }); const [show, setShow] = useState(false);
+  const [f, setF] = useState({ companyCode: "", email: "", password: "", totp: "" }); const [show, setShow] = useState(false); const [needTotp, setNeedTotp] = useState(false);
   const [err, setErr] = useState<{ field?: string; text: string } | null>(null); const [busy, setBusy] = useState(false);
   const demo = f.companyCode.trim().toUpperCase() === "DEMO";
   const submit = async (e: any) => {
@@ -31,8 +33,8 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) return setErr({ field: "email", text: "Enter a valid email, e.g. name@company.com" });
     if (!f.password) return setErr({ field: "password", text: "Enter your password" });
     setBusy(true); setErr(null);
-    try { onLogin(await api(null, "/api/auth/login", { method: "POST", body: JSON.stringify({ ...f, companyCode: f.companyCode.trim(), email: f.email.trim() }) })); }
-    catch (x: any) { setErr({ field: /company code/i.test(x.message) ? "companyCode" : /email or password/i.test(x.message) ? "password" : undefined, text: /fetch/i.test(x.message) ? "Can't reach the server. Check your internet connection." : x.message }); }
+    try { onLogin(await api(null, "/api/auth/login", { method: "POST", body: JSON.stringify({ ...f, totp: f.totp || undefined, deviceId: deviceId(), companyCode: f.companyCode.trim(), email: f.email.trim() }) })); }
+    catch (x: any) { if (x.body?.totpRequired) { setNeedTotp(true); setErr({ field: "totp", text: x.message }); return; } setErr({ field: /company code/i.test(x.message) ? "companyCode" : /email or password/i.test(x.message) ? "password" : undefined, text: /fetch/i.test(x.message) ? "Can't reach the server. Check your internet connection." : x.message }); }
     finally { setBusy(false); }
   };
   const fe = (k: string) => err?.field === k ? err.text : undefined;
@@ -49,14 +51,17 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     <Field label="Password" error={fe("password")}>
       <div className="pw"><input type={show ? "text" : "password"} autoComplete="current-password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} />
         <button type="button" className="ghost sm" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></Field>
+    {needTotp && <Field label="6-digit code from your authenticator app" error={fe("totp")}>
+      <input inputMode="numeric" autoComplete="one-time-code" value={f.totp} onChange={e => setF({ ...f, totp: e.target.value })} /></Field>}
     {err && !err.field && <p className="err">{err.text}</p>}
     <button className="block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+    <p className="center"><a href="#reset">Have a reset code from your administrator?</a></p>
     <p className="center"><a href="#signup">New here? Create your company</a></p>
     <p className="muted small center">Platform owner? Use company code PLATFORM.</p></form></div>;
 }
 
 function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
-  const [f, setF] = useState({ companyName: "", companyCode: "", industry: "", adminName: "", email: "", password: "", confirm: "", website: "" });
+  const [f, setF] = useState({ companyName: "", companyCode: "", industry: "", adminName: "", email: "", password: "", confirm: "", website: "" }); const [consent, setConsent] = useState(false);
   const [codeEdited, setCodeEdited] = useState(false); const [codeOk, setCodeOk] = useState<null | { available: boolean; suggestion?: string }>(null);
   const [tpl, setTpl] = useState<any[]>([]); const [show, setShow] = useState(false);
   const [err, setErr] = useState<{ field?: string; text: string } | null>(null); const [busy, setBusy] = useState(false);
@@ -81,10 +86,11 @@ function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
     if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) return fail("email", "Enter a valid email, e.g. name@company.com");
     if (f.password.length < 8 || !/[A-Za-z]/.test(f.password) || !/[0-9]/.test(f.password)) return fail("password", "Use at least 8 characters with a letter and a number");
     if (f.password !== f.confirm) return fail("confirm", "Passwords don't match");
+    if (!consent) return fail("consent", "Please accept the privacy notice to continue");
     setBusy(true); setErr(null);
     try {
       const { confirm, ...body } = f;
-      const r = await api(null, "/api/signup", { method: "POST", body: JSON.stringify({ ...body, companyCode: f.companyCode.trim().toUpperCase(), email: f.email.trim() }) });
+      const r = await api(null, "/api/signup", { method: "POST", body: JSON.stringify({ ...body, consent, companyCode: f.companyCode.trim().toUpperCase(), email: f.email.trim() }) });
       location.hash = "home"; onLogin(r); toast("Welcome! Your company is ready.");
     } catch (x: any) {
       const field = /code/i.test(x.message) ? "companyCode" : /email/i.test(x.message) ? "email" : /password/i.test(x.message) ? "password" : undefined;
@@ -112,6 +118,8 @@ function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
     <Field label="Confirm password" error={fe("confirm")}>
       <input type={show ? "text" : "password"} autoComplete="new-password" value={f.confirm} onChange={e => set("confirm", e.target.value)} /></Field>
     <input style={{ display: "none" }} tabIndex={-1} autoComplete="off" value={f.website} onChange={e => set("website", e.target.value)} aria-hidden="true" />
+    <label className="small"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> I have read the <a href="/privacy.html" target="_blank" rel="noopener">privacy notice</a> and agree to my data being processed to run this account.</label>
+    {fe("consent") && <p className="err">{fe("consent")}</p>}
     {err && !err.field && <p className="err">{err.text}</p>}
     <button className="block" disabled={busy}>{busy ? "Creating…" : "Create company"}</button>
     <p className="center"><a href="#">Already have an account? Sign in</a></p></form></div>;
@@ -157,7 +165,7 @@ export const label = (k: string) => WORDS[k] || k.replace(/_/g, " ").replace(/^.
 
 export const TAB_LABEL: Record<string, string> = { home: "Home", beat: "Today's beat", order: "New order", orders: "Orders", collect: "Collect", targets: "Targets", catalog: "Products",
   inbox: "New orders", invoices: "Invoices", collections: "Collections", POs: "Purchase orders", stock: "Stock", profile: "My profile", dashboard: "Team activity", beats: "Beat plans",
-  visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules" };
+  visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", security: "Security & privacy", account: "My account", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules" };
 export type Go = (tab: string) => void;
 export type ViewProps = { s: Session; cfg: Cfg; reload: () => void; onUsage: (u: any) => void; go: Go };
 
@@ -166,6 +174,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   const [cfg, setCfg] = useState<Cfg | null>(null); const [usage, setUsage] = useState<any>(null);
   const [tab, setTabRaw] = useState(() => location.hash.slice(1) || "home"); const [more, setMore] = useState(false); const [err, setErr] = useState("");
   const setTab = (t: string) => { setTabRaw(t); setMore(false); history.replaceState(null, "", `#${t}`); window.scrollTo(0, 0); };
+  useIdleLogout(s.idleMinutes || 60, onLogout);
   const reload = () => api(s, "/api/company/settings").then(setCfg).catch(e => setErr(e.message));
   useEffect(() => { reload(); if (mgr) api(s, "/api/company/usage").then(setUsage).catch(() => {}); }, []);
   if (!cfg) return err ? <Empty icon="⚠️" title="Couldn't load your company" text={err} action="Try again" onAction={reload} /> : <Loading text="Loading your workspace…" />;
@@ -174,17 +183,17 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
     ["Sales", ["home", "dashboard", "orders", "beats", "visits", "targets", "shops", ...(f.schemes ? ["schemes"] : []), ...(f.audits ? ["audits"] : []), ...(f.leave ? ["leave"] : []), ...(f.incentives ? ["incentives"] : [])]],
     ["Distributors", ["distributors", ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : [])]],
     ["Finance", [...(f.invoicing ? ["invoices", "collections"] : []), ...(f.expenses ? ["expenses"] : []), "reports"]],
-    ["Setup", ["catalog", "users", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : [])] : [])]]]
-    : role === "retailer" ? [["Menu", ["home", "order", "orders", "catalog"]]]
-    : role === "sales_rep" ? [["Menu", ["home", "beat", "order", "orders", ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "catalog"]]]
-    : [["Menu", ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "catalog"]]];
+    ["Setup", ["catalog", "users", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : []), "security"] : []), "account"]]]
+    : role === "retailer" ? [["Menu", ["home", "order", "orders", "catalog", "account"]]]
+    : role === "sales_rep" ? [["Menu", ["home", "beat", "order", "orders", ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "catalog", "account"]]]
+    : [["Menu", ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "catalog", "account"]]];
   const tabs = groups.flatMap(g => g[1]);
   const primary = (mgr ? ["home", "orders", f.invoicing ? "collections" : "dashboard", "reports"] : role === "retailer" ? ["home", "order", "orders", "catalog"] : role === "sales_rep" ? ["home", "beat", "order", f.invoicing ? "collect" : "orders"]
     : ["home", "inbox", f.invoicing && f.distributorBilling ? "invoices" : "catalog", f.stock ? "stock" : f.purchaseOrders ? "POs" : "profile"]).filter(t => tabs.includes(t));
-  const cur = tabs.includes(tab) ? tab : "home";
+  const cur = s.enrollTotp ? "account" : tabs.includes(tab) ? tab : "home";
   const views: Record<string, any> = { home: mgr ? ManagerHome : role === "retailer" ? RetailerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
-    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: Users, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
+    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, account: (p: ViewProps) => <MyAccount s={p.s} onSignedOut={onLogout} />, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
   const C = views[cur];
   const Item = ({ t }: { t: string }) => <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{TAB_LABEL[t] || t}</span></button>;
   return <div className="shell">
@@ -216,6 +225,7 @@ function App() {
   const set = (v: Session | null) => { setS(v); v ? localStorage.setItem("ff", JSON.stringify(v)) : localStorage.removeItem("ff"); };
   const [hash, setHash] = useState(location.hash);
   useEffect(() => { const h = () => setHash(location.hash); addEventListener("hashchange", h); return () => removeEventListener("hashchange", h); }, []);
+  if (!s && (hash === "#reset" || new URLSearchParams(location.search).has("reset"))) return <><ResetPassword onDone={() => { location.hash = ""; setHash(""); }} /><Toasts /></>;
   if (!s) return <>{hash === "#signup" ? <Signup onLogin={set} /> : <Login onLogin={set} />}<Toasts /></>;
   return <>{s.user.role === "platform_owner" ? <main><header className="top"><b>FieldForce · Platform</b><button className="sm ghost" onClick={() => set(null)}>Sign out</button></header><Platform s={s} /></main>
     : <Company s={s} onLogout={() => { set(null); location.hash = ""; }} />}<Toasts /></>;

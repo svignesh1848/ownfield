@@ -117,7 +117,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     if (guard.locked(acct)) { await audit(db, { companyId: co.id, action: "login.locked", target: acct, ip }); return res.status(429).json({ error: "Too many failed sign-ins. This account is locked for 15 minutes." }); }
     const rows = code === PLATFORM_CODE
       ? (await db.query("SELECT u.*, NULL AS code, FALSE AS require_totp, FALSE AS device_binding FROM users u WHERE u.company_id IS NULL AND u.email=$1 AND u.role='platform_owner'", [mail])).rows
-      : (await db.query("SELECT u.*, c.code, c.require_totp, c.device_binding FROM users u JOIN companies c ON c.id=u.company_id WHERE c.code=$1 AND u.email=$2 AND u.active=TRUE", [code, mail])).rows;
+      : (await db.query("SELECT u.*, c.code, c.require_totp, c.device_binding, c.idle_minutes FROM users u JOIN companies c ON c.id=u.company_id WHERE c.code=$1 AND u.email=$2 AND u.active=TRUE", [code, mail])).rows;
     const u = rows[0];
     const fail = async (why: string) => {
       const n = guard.failed(acct);
@@ -142,7 +142,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     await audit(db, { companyId: u.company_id, userId: u.id, action: "login.success", target: mail, detail: { ua }, ip });
     const enroll = !!u.require_totp && !u.totp_enabled;
     const token = sign(u, enroll ? { enroll: true } : {});
-    res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code }, ...(enroll ? { enrollTotp: true } : {}) });
+    res.json({ token, idleMinutes: Number(u.idle_minutes || process.env.IDLE_LOGOUT_MIN || 60), user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code }, ...(enroll ? { enrollTotp: true } : {}) });
   }));
 
   // ---- Public self sign-up (free plan) ----
