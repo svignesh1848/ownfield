@@ -134,7 +134,7 @@ Next (proposed): offline photo queue, a real GSP adapter for e-invoicing (needs 
 
 ## UI walkthrough (mobile)
 
-![OwnField login (phone)](docs/ui-9-ownfield-login.png)
+![OwnField login (phone)](docs/ui-10-logo-login.png)
 
 | Login | Rep home | New order | Admin home |
 |---|---|---|---|
