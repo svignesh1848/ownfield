@@ -1,5 +1,6 @@
 import { emit, checkLowStock } from "./integrations/webhooks.js";
 import { logMove } from "./inventory.js";
+import { geofenceCheck } from "./tracking.js";
 // Step 2: beats, visits (GPS check-in/out), orders, distributor inbox, manager dashboard.
 import type { Express, Request, Response, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
@@ -108,6 +109,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (await onLeave(db, cid, req.user.uid)) throw bad("You are on approved leave today, so visits are paused.", 409);
     const open = (await db.query("SELECT id FROM visits WHERE rep_id=$1 AND check_out_at IS NULL", [req.user.uid])).rows[0];
     if (open) throw bad("check out of the current visit first", 409);
+    await geofenceCheck(db, cid, Number(req.body.shopId), lat, lng);
     res.status(201).json((await db.query("INSERT INTO visits (company_id,rep_id,shop_id,in_lat,in_lng) VALUES ($1,$2,$3,$4,$5) RETURNING *",
       [cid, req.user.uid, Number(req.body.shopId), lat, lng])).rows[0]);
   }));

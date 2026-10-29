@@ -197,6 +197,13 @@ CREATE TABLE IF NOT EXISTS leads (
   shop_id INTEGER REFERENCES shops(id), lost_reason TEXT, created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS lead_followups (
   id SERIAL PRIMARY KEY, lead_id INTEGER NOT NULL REFERENCES leads(id), user_id INTEGER REFERENCES users(id), note TEXT NOT NULL, outcome TEXT, next_date TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS location_pings (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), user_id INTEGER NOT NULL REFERENCES users(id), at TIMESTAMPTZ NOT NULL,
+  lat NUMERIC NOT NULL, lng NUMERIC NOT NULL, acc NUMERIC);
+CREATE INDEX IF NOT EXISTS location_pings_user ON location_pings (company_id, user_id, at);
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS lat NUMERIC;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS lng NUMERIC;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS geofence_m INTEGER;
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

@@ -111,3 +111,25 @@ describe("leads", () => {
     await request(app).post(`/api/leads/${l.id}/convert`).set(as("rep")).send({}).expect(409);
   });
 });
+
+describe("location trail and geofence", () => {
+  it("keeps useful pings in working hours, sums distance, and enforces the check-in radius", async () => {
+    await on({ tracking: true, gps: true });
+    await request(app).put("/api/track/settings").set(as("adm")).send({ start: "00:00", end: "23:59", radiusM: 100 }).expect(200);
+    const t0 = Date.now() - 600_000, at = (m: number) => new Date(t0 + m * 60_000).toISOString();
+    const r = (await request(app).post("/api/track/pings").set(as("rep")).send({ points: [
+      { at: at(0), lat: 13.0827, lng: 80.2707, acc: 10 }, { at: at(1), lat: 13.08271, lng: 80.27071, acc: 10 }, // < 25 m: dropped
+      { at: at(2), lat: 13.0917, lng: 80.2707, acc: 10 }, { at: at(3), lat: 13.2, lng: 80.3, acc: 900 }] }).expect(200)).body; // poor accuracy: dropped
+    expect(r).toMatchObject({ received: 4, kept: 2 });
+    const tr = (await request(app).get(`/api/track?repId=${id.rep}`).set(as("adm")).expect(200)).body;
+    expect(tr.points.length).toBe(2); expect(tr.distance_km).toBeGreaterThan(0.9); expect(tr.distance_km).toBeLessThan(1.1);
+    // first check-in pins the outlet; a later one far away is refused
+    const v = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2, lat: 13.0827, lng: 80.2707 }).expect(201)).body;
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ lat: 13.0827, lng: 80.2707 }).expect(200);
+    const far = await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2, lat: 13.0927, lng: 80.2707 }).expect(409);
+    expect(far.body.error).toContain("Check in within 100 m");
+    await request(app).put(`/api/shops/${id.s2}/geofence`).set(as("adm")).send({ lat: 13.0827, lng: 80.2707, radiusM: 2000 }).expect(200);
+    const ok = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2, lat: 13.0927, lng: 80.2707 }).expect(201)).body;
+    await request(app).post(`/api/visits/${ok.id}/checkout`).set(as("rep")).send({ lat: 13.0927, lng: 80.2707 }).expect(200);
+  });
+});

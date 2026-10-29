@@ -156,3 +156,49 @@ export function Leads({ s }: ViewProps) {
             <button className="sm ghost" onClick={async () => { const r = prompt("Why lost?"); if (r != null && await run(() => api(s, `/api/leads/${l.id}`, { method: "PATCH", body: JSON.stringify({ status: "lost", lost_reason: r }) }))) reload(); }}>Mark lost</button></div></>}</div>}
     </div>)}</>;
 }
+
+// ---------- Location trail ----------
+/** While the rep app is open, take a GPS fix every few minutes and send them in small batches (kept offline until sent). */
+export function useTracking(s: Session, on: boolean) {
+  useEffect(() => {
+    if (!on || !navigator.geolocation) return;
+    let every = 180_000; const KEY = "ff-pings";
+    const flush = () => { const q = JSON.parse(localStorage.getItem(KEY) || "[]"); if (!q.length || !navigator.onLine) return;
+      api(s, "/api/track/pings", { method: "POST", body: JSON.stringify({ points: q.slice(0, 100) }) }).then(() => localStorage.setItem(KEY, JSON.stringify(q.slice(100)))).catch(() => {}); };
+    const take = () => navigator.geolocation.getCurrentPosition(p => {
+      const q = JSON.parse(localStorage.getItem(KEY) || "[]"); q.push({ at: new Date().toISOString(), lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) });
+      localStorage.setItem(KEY, JSON.stringify(q.slice(-300))); if (q.length >= 5) flush();
+    }, () => {}, { enableHighAccuracy: false, maximumAge: 60_000, timeout: 20_000 });
+    let t: any; api(s, "/api/track/settings").then((c: any) => { every = c.intervalSec * 1000; take(); t = setInterval(() => { take(); }, every); }).catch(() => {});
+    const f = setInterval(flush, 300_000); window.addEventListener("online", flush);
+    return () => { clearInterval(t); clearInterval(f); window.removeEventListener("online", flush); flush(); };
+  }, [on]);
+}
+function Plot({ pts, visits }: { pts: any[]; visits: any[] }) {
+  if (pts.length < 2) return <p className="muted">Not enough points for a trail.</p>;
+  const xs = pts.map(p => p.lng), ys = pts.map(p => p.lat), [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const W = 320, H = 240, k = Math.min(W / ((x1 - x0) || 1e-4), H / ((y1 - y0) || 1e-4)) * 0.9, X = (x: number) => 16 + (x - x0) * k, Y = (y: number) => H - 16 - (y - y0) * k;
+  return <svg viewBox={`0 0 ${W + 32} ${H}`} style={{ width: "100%", maxWidth: 420, background: "#f4f6f8", borderRadius: 8 }}>
+    <polyline fill="none" stroke="#2563eb" strokeWidth="2" points={pts.map(p => `${X(p.lng)},${Y(p.lat)}`).join(" ")} />
+    <circle cx={X(pts[0].lng)} cy={Y(pts[0].lat)} r="5" fill="#16a34a" /><circle cx={X(pts[pts.length - 1].lng)} cy={Y(pts[pts.length - 1].lat)} r="5" fill="#dc2626" />
+    {visits.filter(v => v.in_lat != null).map((v, i) => <circle key={i} cx={X(Number(v.in_lng))} cy={Y(Number(v.in_lat))} r="4" fill="#f59e0b"><title>{v.name}</title></circle>)}</svg>;
+}
+export function Trail({ s }: ViewProps) {
+  const admin = s.user.role === "company_admin";
+  const [reps] = useData<any[]>(s, "/api/reps"); const [rep, setRep] = useState(""); const [day, setDay] = useState(today());
+  const [tr] = useData<any>(s, rep ? `/api/track?repId=${rep}&day=${day}` : null, [rep, day]);
+  const [cfg, , setCfg] = useData<any>(s, "/api/track/settings"); const [shops] = useData<any[]>(s, "/api/shops"); const [shop, setShop] = useState(""), [radius, setRadius] = useState("");
+  return <><h2>Location trail</h2>
+    <div className="row-btns"><select value={rep} onChange={e => setRep(e.target.value)}><option value="">Pick a rep</option>{reps?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select><input type="date" value={day} onChange={e => setDay(e.target.value)} /></div>
+    {tr && <div className="card"><b>{tr.distance_km} km</b> travelled · {tr.points.length} points · {tr.visits.length} visits<Plot pts={tr.points} visits={tr.visits} />
+      <p className="muted small">Green = first point, red = last, orange = check-ins.</p></div>}
+    {admin && cfg && <form className="card" onSubmit={async e => { e.preventDefault(); const r = await run(() => api(s, "/api/track/settings", { method: "PUT", body: JSON.stringify(cfg) })); if (r) setCfg(r); }}>
+      <h3>Settings</h3><div className="row-btns"><Field label="Working hours from"><input type="time" value={cfg.start} onChange={e => setCfg({ ...cfg, start: e.target.value })} /></Field><Field label="to"><input type="time" value={cfg.end} onChange={e => setCfg({ ...cfg, end: e.target.value })} /></Field></div>
+      <Field label="Ping every (seconds)"><input type="number" min={60} max={900} value={cfg.intervalSec} onChange={e => setCfg({ ...cfg, intervalSec: Number(e.target.value) })} /></Field>
+      <Field label="Check-in radius (metres)"><input type="number" min={25} value={cfg.radiusM} onChange={e => setCfg({ ...cfg, radiusM: Number(e.target.value) })} /></Field>
+      <label><input type="checkbox" checked={cfg.enforceRadius} onChange={e => setCfg({ ...cfg, enforceRadius: e.target.checked })} /> Refuse check-ins outside the radius</label><button>Save</button></form>}
+    <div className="card"><h3>Radius for one outlet</h3><select value={shop} onChange={e => setShop(e.target.value)}><option value="">Pick outlet</option>{shops?.map(x => <option key={x.id} value={x.id}>{x.name}{x.lat ? "" : " (not pinned yet)"}</option>)}</select>
+      <input type="number" placeholder="metres" value={radius} onChange={e => setRadius(e.target.value)} />
+      <button className="sm" onClick={() => { const x = shops?.find(y => String(y.id) === shop); if (x) run(() => api(s, `/api/shops/${x.id}/geofence`, { method: "PUT", body: JSON.stringify({ lat: x.lat, lng: x.lng, radiusM: radius }) })); }}>Save</button>
+      <p className="muted small">An outlet is pinned at its first check-in with GPS.</p></div></>;
+}
