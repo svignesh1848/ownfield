@@ -1,3 +1,4 @@
+import { emit } from "./integrations/webhooks.js";
 // Step 4: GST invoices & credit notes (returns). HSN/SAC-based rates, CGST+SGST (intra-state) vs IGST (inter-state),
 // numbering per Indian financial year (April–March), printable HTML. Every write runs in one DB transaction.
 import { einvBlock } from "./einvoice.js";
@@ -51,6 +52,7 @@ async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "invoice" 
     [cid, d.kind, number, fy, d.date, d.orderId, d.refId, d.shop.id, seller, buyer, pos, intra, d.reason ?? null, sum("taxable"), sum("cgst"), sum("sgst"), sum("igst"), roundOff, total, uid, d.issuer])).rows[0];
   for (const l of lines) await tx.query(`INSERT INTO invoice_lines (invoice_id,order_line_id,ref_line_id,variant_id,description,hsn,base_qty,uom,rate,taxable,gst_rate,cgst,sgst,igst,total)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [inv.id, l.orderLineId ?? null, l.refLineId ?? null, l.variantId, l.description, l.hsn, l.baseQty, l.uom, l.rate, l.taxable, l.gstRate, l.cgst, l.sgst, l.igst, l.total]);
+  await emit(tx, cid, d.kind === "invoice" ? "invoice.created" : "credit_note.created", { id: inv.id, number: inv.number, kind: inv.kind, order_id: inv.order_id, shop_id: inv.shop_id, total: Number(inv.total) });
   return inv;
 }
 
@@ -175,7 +177,7 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
           let cap = Number(a.qty); const s = Math.min(skip, cap); skip -= s; cap -= s;
           const put = Math.min(cap, left); if (put <= 0) continue;
           const st = (await tx.query("SELECT qty FROM stock WHERE id=$1", [a.stock_id])).rows[0];
-          if (!(await tx.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(st.qty) + put, a.stock_id, st.qty])).rows[0]) throw bad("stock changed — retry", 409);
+          if (!(await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(st.qty) + put, a.stock_id, st.qty])).rows[0]) throw bad("stock changed — retry", 409);
           left -= put;
         }
       }

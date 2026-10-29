@@ -1,3 +1,4 @@
+import { emit, checkLowStock } from "./integrations/webhooks.js";
 // Step 2: beats, visits (GPS check-in/out), orders, distributor inbox, manager dashboard.
 import type { Express, Request, Response, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
@@ -60,7 +61,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!(await shopIn(cid, req.params.id))) throw bad("shop not found", 404);
     const d = req.body?.distributorId;
     if (d != null && !(await userIn(cid, d, "distributor"))) throw bad("distributor not found", 404);
-    await db.query("UPDATE shops SET distributor_id=$1 WHERE id=$2", [d == null ? null : Number(d), Number(req.params.id)]);
+    await db.query("UPDATE shops SET updated_at=NOW(), distributor_id=$1 WHERE id=$2", [d == null ? null : Number(d), Number(req.params.id)]);
     res.json({ ok: true });
   }));
   app.get("/api/distributors", auth(...MGR), wrap(async (req, res) => {
@@ -167,6 +168,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         [cid, String(clientRef), req.user.uid, shop.id, loc, total, savings])).rows[0];
       for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount,gross,scheme_id,free) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
         [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
+      await emit(tx, cid, "order.created", { id: o.id, client_ref: o.client_ref, shop_id: o.shop_id, distributor_id: o.distributor_id, total: Number(o.total), status: o.status });
       return o;
     });
     res.status(201).json(credit.ok ? o : { ...o, creditWarning: credit.reasons });
@@ -205,11 +207,18 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const { settings } = await getCompany(db, cid);
     const updated = await withTx(db, async tx => {
       // Status compare-and-set + stock allocation commit together or not at all.
-      const u = (await tx.query("UPDATE orders SET status=$1 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status])).rows[0];
+      const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status=$1 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
       if (to === "accepted" && settings.features.stock) await allocateStock(tx, cid, o);
+      const ev = { id: u.id, client_ref: u.client_ref, from: o.status, status: to, total: Number(u.total) };
+      await emit(tx, cid, "order.status_changed", ev);
+      if (to === "accepted") await emit(tx, cid, "order.approved", ev);
       return u;
     });
+    if (to === "accepted" && settings.features.stock) {
+      const vids = (await db.query("SELECT DISTINCT variant_id FROM order_lines WHERE order_id=$1", [o.id])).rows.map(r => r.variant_id);
+      await checkLowStock(db, cid, vids, o.distributor_id ?? null);
+    }
     res.json(updated);
   }));
 
@@ -251,7 +260,7 @@ export async function allocateStock(db: Db, cid: number, o: any, hooks: { afterF
       const after = new Map<number, number>();
       for (const p of plan) after.set(p.row.id, (after.get(p.row.id) ?? orig.get(p.row.id)!) - p.take);
       for (const [id, q] of after) {
-        const ok = (await db.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [q, id, orig.get(id)])).rows[0];
+        const ok = (await db.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [q, id, orig.get(id)])).rows[0];
         if (!ok) throw bad("stock changed while allocating — please retry", 409);
         if (hooks.afterFirstUpdate) { const h = hooks.afterFirstUpdate; hooks.afterFirstUpdate = undefined; await h(); }
       }

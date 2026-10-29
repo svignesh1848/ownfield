@@ -1,3 +1,4 @@
+import { emit } from "./integrations/webhooks.js";
 // Step 5d: collections. Outstanding per outlet per issuer (company or a billing distributor) = invoices − credit notes − payments.
 // Payments by cash/UPI/cheque/NEFT with FIFO or chosen-invoice allocation, cheque bounce reversal, receipts RCPT/<FY>/<seq>,
 // credit days / credit limit with warn-or-block on new orders, ageing buckets.
@@ -155,6 +156,7 @@ export function registerCollectionRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       const p = (await tx.query(`INSERT INTO payments (company_id,issuer,number,fy,shop_id,pay_date,mode,reference,cheque_date,amount,collected_by)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [cid, issuer, number, fy, shop.id, payDate, mode, b.reference ? String(b.reference) : null, chequeDate, amount, req.user.uid])).rows[0];
       for (const a of plan) await tx.query("INSERT INTO payment_allocations (payment_id,invoice_id,amount) VALUES ($1,$2,$3)", [p.id, a.id, a.amount]);
+      await emit(tx as Db, cid, "collection.created", { id: p.id, number: p.number, shop_id: p.shop_id, amount: Number(p.amount), mode: p.mode, pay_date: p.pay_date });
       return p;
     });
     void seller;

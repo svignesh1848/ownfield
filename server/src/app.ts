@@ -20,6 +20,9 @@ import { getCompany } from "./catalog.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 import { securityHeaders, tightCors, loginGuard, audit, errorHandler } from "./security.js";
 import { registerAccountRoutes, newDeviceCheck, totpVerify } from "./accounts.js";
+import { registerApiV1 } from "./integrations/api.js";
+import { registerIntegrationRoutes, registerInbound } from "./integrations/admin.js";
+import "./connectors/service.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor", "retailer"] as const;
 export type Role = (typeof ROLES)[number];
@@ -47,7 +50,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   app.set("trust proxy", 1); // one hop: nginx on the same box
   app.disable("x-powered-by");
   securityHeaders(app); tightCors(app);
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "1mb", verify: (req, _res, buf) => { if (req.url?.startsWith("/api/v1/inbound/")) (req as any).rawBody = buf; } }));
   const guard = loginGuard();
   const idleMs = () => Number(process.env.IDLE_LOGOUT_MIN || 60) * 60_000;
   const lastSeen = new Map<string, number>();
@@ -253,6 +256,9 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerLeaveRoutes({ app, db, auth, wrap, tenant });
   registerIncentiveRoutes({ app, db, auth, wrap, tenant });
   registerAccountRoutes({ app, db, auth, wrap, tenant, guard });
+  registerIntegrationRoutes({ app, db, auth, wrap, tenant });
+  registerInbound(app, db);
+  registerApiV1(app, db);
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {
