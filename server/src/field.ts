@@ -5,6 +5,7 @@ import { geofenceCheck } from "./tracking.js";
 import type { Express, Request, Response, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
 import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
+import { getFlow } from "./flow.js";
 import type { Uom } from "./templates.js";
 import { activeSchemes, applySchemes } from "./schemes.js";
 import { creditCheck } from "./collections.js";
@@ -133,8 +134,18 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const { settings } = await getCompany(db, cid);
     const [lat, lng] = coordOpt(settings.features.gps, req.body?.lat, req.body?.lng);
     const custom = JSON.stringify(cleanCustom(settings.customFields.visit, req.body?.custom || {}));
-    const r = await db.query(`UPDATE visits SET check_out_at=NOW(), out_lat=$1, out_lng=$2, notes=$3, custom=$4
-      WHERE id=$5 AND company_id=$6 AND rep_id=$7 AND check_out_at IS NULL RETURNING *`, [lat, lng, req.body?.notes ?? null, custom, Number(req.params.id), cid, req.user.uid]);
+    // Productive call = an order at this outlet during the visit; otherwise the rep picks a no-order reason.
+    const v = (await db.query("SELECT * FROM visits WHERE id=$1 AND company_id=$2 AND rep_id=$3 AND check_out_at IS NULL", [Number(req.params.id), cid, req.user.uid])).rows[0];
+    if (!v) throw bad("open visit not found", 404);
+    const ordered = (await db.query("SELECT id FROM orders WHERE company_id=$1 AND shop_id=$2 AND rep_id=$3 AND created_at>=$4 LIMIT 1", [cid, v.shop_id, req.user.uid, v.check_in_at])).rows[0];
+    const flow = await getFlow(db, cid); let reason: string | null = null;
+    if (!ordered) {
+      reason = req.body?.noOrderReason ? String(req.body.noOrderReason).trim().slice(0, 80) : null;
+      if (flow.requireNoOrderReason && !reason) throw Object.assign(bad("No order taken — pick a reason before you check out"), { body: { reasons: flow.noOrderReasons } });
+      if (reason && flow.noOrderReasons.length && !flow.noOrderReasons.includes(reason)) throw bad("pick one of the listed reasons");
+    }
+    const r = await db.query(`UPDATE visits SET check_out_at=NOW(), out_lat=$1, out_lng=$2, notes=$3, custom=$4, no_order_reason=$8
+      WHERE id=$5 AND company_id=$6 AND rep_id=$7 AND check_out_at IS NULL RETURNING *`, [lat, lng, req.body?.notes ?? null, custom, Number(req.params.id), cid, req.user.uid, reason]);
     if (!r.rows[0]) throw bad("open visit not found", 404);
     res.json(r.rows[0]);
   }));

@@ -42,8 +42,8 @@ describe("visits", () => {
     await request(app).post("/api/visits/checkin").set(H("r1")).send({ shopId: ids.s1 }).expect(400);
     const v = (await request(app).post("/api/visits/checkin").set(H("r1")).send({ shopId: ids.s1, lat: 13.08, lng: 80.27 }).expect(201)).body;
     await request(app).post("/api/visits/checkin").set(H("r1")).send({ shopId: ids.s2, lat: 13, lng: 80 }).expect(409);
-    await request(app).post(`/api/visits/${v.id}/checkout`).set(H("r2")).send({ lat: 13, lng: 80 }).expect(404);
-    expect((await request(app).post(`/api/visits/${v.id}/checkout`).set(H("r1")).send({ lat: 13.081, lng: 80.271 }).expect(200)).body.check_out_at).toBeTruthy();
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(H("r2")).send({ noOrderReason: "Shop closed", lat: 13, lng: 80 }).expect(404);
+    expect((await request(app).post(`/api/visits/${v.id}/checkout`).set(H("r1")).send({ noOrderReason: "Shop closed", lat: 13.081, lng: 80.271 }).expect(200)).body.check_out_at).toBeTruthy();
   });
 });
 

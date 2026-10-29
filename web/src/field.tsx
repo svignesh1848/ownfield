@@ -1,5 +1,6 @@
 import { ScanButton } from "./ops";
 import { t, t as i18n } from "./i18n";
+import { Field } from "./ui";
 import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { CustomInputs, attrText } from "./config";
@@ -66,6 +67,8 @@ export function ShopsMap({ s, cfg }: { s: Session; cfg: Cfg }) {
 
 export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
   const [beats, setBeats] = useState<any[]>([]); const [visits, setVisits] = useState<any[]>([]); const [msg, setMsg] = useState(""); const [vc, setVc] = useState<Record<string, any>>({});
+  const [flow, setFlow] = useState<any>(null); const [why, setWhy] = useState("");
+  useEffect(() => { api(s, "/api/flow-settings").then(setFlow).catch(() => {}); }, []);
   const OV = "ff-open-visit", local = () => JSON.parse(localStorage.getItem(OV) || "null");
   const load = () => { api(s, "/api/beats").then(setBeats).catch(() => {}); api(s, "/api/visits").then(v => setVisits([...(local() ? [local()] : []), ...v])).catch(() => setVisits(local() ? [local()] : [])); };
   useEffect(load, []);
@@ -75,7 +78,7 @@ export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
     localStorage.setItem(OV, JSON.stringify({ id: "offline", offline: true, shop_id: x.id, shop_name: x.name, check_in_at: new Date().toISOString(), ...p, clientRef: `v${Date.now().toString(36)}` }));
   };
   const checkout = async (o: any, p: any) => {
-    if (!o.offline) return api(s, `/api/visits/${o.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc }) });
+    if (!o.offline) return api(s, `/api/visits/${o.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc, noOrderReason: why || undefined }) });
     await api(s, "/api/visits/offline", { method: "POST", body: JSON.stringify({ clientRef: o.clientRef, shopId: o.shop_id, checkInAt: o.check_in_at, checkOutAt: new Date().toISOString(), lat: o.lat, lng: o.lng, custom: vc }) });
     localStorage.removeItem(OV);
   };
@@ -85,7 +88,8 @@ export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
   return <><h2>{t("My beat")}</h2>{beats.some(b => b.onLeaveToday) && <div className="banner">{t("🌴 You are on approved leave today. Visits are paused — enjoy your day off.")}</div>}{open && <div className="usage warn">{t("In visit:")}{" "}<b>{open.shop_name}</b> since {fmtDate(open.check_in_at, true).slice(11)}
       {cfg.settings.features.photos && !open.offline && <VisitPhotos s={s} visitId={open.id} canAdd />}
       {vdefs.length > 0 && <CustomInputs defs={vdefs} value={vc} onChange={setVc} />}
-      <button className="sm" onClick={() => act(p => checkout(open, p))}>{t("Check out")}</button></div>}
+      {flow?.noOrderReasons?.length > 0 && <Field label={t("No order? Pick a reason")} help={t("Leave blank if you took an order in this visit.")}><select value={why} onChange={e => setWhy(e.target.value)}><option value="">{t("I took an order")}</option>{flow.noOrderReasons.map((r: string) => <option key={r} value={r}>{t(r)}</option>)}</select></Field>}
+      <button className="sm" onClick={() => act(async p => { await checkout(open, p); setWhy(""); })}>{t("Check out")}</button></div>}
     {!beats.length && <Empty icon="🗺️" title={t("No beat assigned yet")} text={t("A beat is your list of outlets to visit. Ask your manager to assign one.")} />}
     {beats.map(b => <div key={b.id}><h3>{b.name}</h3>{b.shops.map((x: any) => {
       const done = visits.some(v => v.shop_id === x.id && v.check_out_at && new Date(v.check_in_at).toDateString() === new Date().toDateString());

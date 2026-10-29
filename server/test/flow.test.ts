@@ -65,3 +65,21 @@ describe("2. van payments and day-end settlement", () => {
     expect(Number((await db.query("SELECT COUNT(*) AS n FROM payments WHERE mode IN ('cash','upi')")).rows[0].n)).toBe(2);
   });
 });
+
+describe("3. productive calls and no-order reasons", () => {
+  it("checkout without an order needs a listed reason; coverage shows productive vs non-productive", async () => {
+    await on({ coverage: true, gps: false });
+    await request(app).put("/api/flow-settings").set(as("rep")).send({}).expect(403);
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ noOrderReasons: ["Shop closed", "Enough stock"] }).expect(200);
+    const v = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s }).expect(201)).body;
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({}).expect(400);
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ noOrderReason: "Bad weather" }).expect(400);
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ noOrderReason: "Enough stock" }).expect(200);
+    const v2 = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2 }).expect(201)).body;
+    await request(app).post("/api/orders").set(as("rep")).send({ clientRef: "o-prod", shopId: id.s2, lines: [{ sku, qty: 1 }] }).expect(201);
+    await request(app).post(`/api/visits/${v2.id}/checkout`).set(as("rep")).send({}).expect(200); // order taken → productive, no reason needed
+    const c = (await request(app).get("/api/coverage").set(as("mgr"))).body.reps.find((r: any) => r.rep_id === id.rep);
+    expect(c).toMatchObject({ total_calls: 2, productive_calls: 1, non_productive_calls: 1 });
+    expect(c.no_order_reasons["Enough stock"]).toBe(1);
+  });
+});

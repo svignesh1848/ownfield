@@ -132,8 +132,8 @@ describe("services (non-stock) and feature toggles", () => {
     const o = await request(app).post("/api/orders").set(as("SV_rep")).send({ clientRef: "sv1", shopId: sid, lines: [{ sku: "SAMC-PREMIUM", qty: 1 }] }).expect(201);
     expect(Number(o.body.total)).toBe(8000);
     const v = (await request(app).post("/api/visits/checkin").set(as("SV_rep")).send({ shopId: sid }).expect(201)).body;
-    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("SV_rep")).send({ custom: { customer_rating: "5" } }).expect(400);
-    const done = (await request(app).post(`/api/visits/${v.id}/checkout`).set(as("SV_rep")).send({ custom: { work_done: "Sample filter clean", customer_rating: "5" } }).expect(200)).body;
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("SV_rep")).send({ noOrderReason: "Shop closed", custom: { customer_rating: "5" } }).expect(400);
+    const done = (await request(app).post(`/api/visits/${v.id}/checkout`).set(as("SV_rep")).send({ noOrderReason: "Shop closed", custom: { work_done: "Sample filter clean", customer_rating: "5" } }).expect(200)).body;
     expect(JSON.parse(done.custom)).toEqual({ work_done: "Sample filter clean", customer_rating: "5" });
     // GPS still required where enabled
     await request(app).post("/api/visits/checkin").set(as("PH_rep")).send({ shopId: await shopId("PH") }).expect(400);

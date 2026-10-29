@@ -125,12 +125,12 @@ describe("location trail and geofence", () => {
     expect(tr.points.length).toBe(2); expect(tr.distance_km).toBeGreaterThan(0.9); expect(tr.distance_km).toBeLessThan(1.1);
     // first check-in pins the outlet; a later one far away is refused
     const v = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2, lat: 13.0827, lng: 80.2707 }).expect(201)).body;
-    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ lat: 13.0827, lng: 80.2707 }).expect(200);
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ noOrderReason: "Shop closed", lat: 13.0827, lng: 80.2707 }).expect(200);
     const far = await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2, lat: 13.0927, lng: 80.2707 }).expect(409);
     expect(far.body.error).toContain("Check in within 100 m");
     await request(app).put(`/api/shops/${id.s2}/geofence`).set(as("adm")).send({ lat: 13.0827, lng: 80.2707, radiusM: 2000 }).expect(200);
     const ok = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s2, lat: 13.0927, lng: 80.2707 }).expect(201)).body;
-    await request(app).post(`/api/visits/${ok.id}/checkout`).set(as("rep")).send({ lat: 13.0927, lng: 80.2707 }).expect(200);
+    await request(app).post(`/api/visits/${ok.id}/checkout`).set(as("rep")).send({ noOrderReason: "Shop closed", lat: 13.0927, lng: 80.2707 }).expect(200);
   });
 });
 
@@ -144,7 +144,7 @@ describe("coverage report", () => {
     const sunday = new Date(day + "T00:00:00Z").getUTCDay() === 0;
     expect(r.planned_calls).toBe(sunday ? 0 : 3);
     expect(r.total_calls).toBeGreaterThanOrEqual(1);       // the geofence test visited one outlet today
-    expect(r.productive_calls).toBeGreaterThanOrEqual(1);  // and orders were taken there earlier today
+    expect(r.non_productive_calls).toBeGreaterThanOrEqual(1);  // those visits ended with a no-order reason (orders earlier in the day don't count)
     if (!sunday) { expect(r.missed_outlets.length).toBe(3 - (r.total_calls - r.unplanned_calls)); expect(r.beat_adherence_pct).toBeLessThan(100); }
     await request(app).get("/api/coverage?from=2026-01-01&to=2026-03-01").set(as("adm")).expect(400);
   });

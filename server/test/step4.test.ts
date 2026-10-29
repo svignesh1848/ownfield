@@ -148,7 +148,7 @@ describe("visit photos", () => {
     expect(Buffer.compare(got.body, jpeg)).toBe(0);
     await request(app).get(`/api/photos/${p.id}`).set(as("rep2")).expect(404);
     expect((await request(app).get(`/api/visits/${v.id}/photos`).set(as("rep"))).body).toHaveLength(1);
-    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ lat: 13.08, lng: 80.27 }).expect(200);
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ noOrderReason: "Shop closed", lat: 13.08, lng: 80.27 }).expect(200);
   });
 });
 
