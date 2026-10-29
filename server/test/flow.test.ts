@@ -46,3 +46,22 @@ describe("1. van load from source stock, and unload", () => {
     expect(kinds).toContain("van_load"); expect(kinds).toContain("van_unload");
   });
 });
+
+describe("2. van payments and day-end settlement", () => {
+  it("takes cash, UPI or credit; settlement shows cash and stock differences; manager signs off", async () => {
+    await request(app).post("/api/van/sale").set(as("rep")).send({ clientRef: "p0", shopId: id.s, lines: [{ sku, qty: 1 }], payment: { mode: "card" } }).expect(400);
+    const a = (await request(app).post("/api/van/sale").set(as("rep")).send({ clientRef: "p1", shopId: id.s, lines: [{ sku, qty: 2 }], payment: { mode: "cash" } }).expect(201)).body;
+    await request(app).post("/api/van/sale").set(as("rep")).send({ clientRef: "p2", shopId: id.s2, lines: [{ sku, qty: 1 }], payment: { mode: "upi", reference: "UPI123" } }).expect(201);
+    await request(app).post("/api/van/sale").set(as("rep")).send({ clientRef: "p3", shopId: id.s2, lines: [{ sku, qty: 1 }], payment: { mode: "credit" } }).expect(201);
+    const cash = Number(a.invoice.total);
+    const L = (await request(app).get("/api/van/today").set(as("rep"))).body;
+    expect(L.settlement.cash).toBeCloseTo(cash); expect(L.settlement.upi).toBeGreaterThan(0); expect(L.settlement.credit).toBeGreaterThan(0);
+    await request(app).post(`/api/van/loads/${L.id}/signoff`).set(as("mgr")).expect(409); // not closed yet
+    const cr = await request(app).post("/api/van/close").set(as("rep")).send({ counts: [{ sku, qty: L.lines[0].left - 1 }], cashCounted: 0 }); if (cr.status !== 200) console.log("CLOSE", cr.body); const c = cr.body;
+    expect(c.settlement).toMatchObject({ cash_diff: -cash, stock_diff_units: -1, signed_off_by: null });
+    await request(app).post(`/api/van/loads/${L.id}/signoff`).set(as("rep")).expect(403);
+    const s = (await request(app).post(`/api/van/loads/${L.id}/signoff`).set(as("mgr")).send({ note: "₹50 short, recovered" }).expect(200)).body;
+    expect(s.settlement.signed_off_by).toBe("Mgr");
+    expect(Number((await db.query("SELECT COUNT(*) AS n FROM payments WHERE mode IN ('cash','upi')")).rows[0].n)).toBe(2);
+  });
+});

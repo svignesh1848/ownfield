@@ -5,7 +5,7 @@ import { withTx } from "./db.js";
 import { bad, today, getCompany, fefoRows } from "./catalog.js";
 import { logMove } from "./inventory.js";
 import { priceLines } from "./field.js";
-import { invoiceOrder, loadInvoice } from "./billing.js";
+import { invoiceOrder, loadInvoice, fyOf, nextNumber, r2 } from "./billing.js";
 import { emit } from "./integrations/webhooks.js";
 import { type Ctx, MGR, requireFeature } from "./common.js";
 
@@ -21,7 +21,15 @@ export async function vanSummary(db: Db, load: any) {
     });
   const orders = (await db.query("SELECT o.id, o.client_ref, o.total, s.name AS shop_name FROM orders o JOIN shops s ON s.id=o.shop_id WHERE o.van_load_id=$1 ORDER BY o.id", [load.id])).rows
     .map(o => ({ ...o, total: Number(o.total) }));
-  return { ...load, lines, orders, sales_total: Math.round(orders.reduce((a, o) => a + o.total, 0) * 100) / 100 };
+  const pays = (await db.query("SELECT mode, amount FROM van_payments WHERE load_id=$1", [load.id])).rows;
+  const by = (m: string) => r2(pays.filter(p => p.mode === m).reduce((a, p) => a + Number(p.amount), 0));
+  const sales_total = Math.round(orders.reduce((a, o) => a + o.total, 0) * 100) / 100;
+  const signer = load.signed_off_by ? (await db.query("SELECT name FROM users WHERE id=$1", [load.signed_off_by])).rows[0]?.name : null;
+  // Settlement: cash the rep should hand over vs counted, and stock left vs counted.
+  const settlement = { cash: by("cash"), upi: by("upi"), credit: by("credit"), cash_counted: load.cash_counted == null ? null : Number(load.cash_counted),
+    cash_diff: load.cash_counted == null ? null : r2(Number(load.cash_counted) - by("cash")),
+    stock_diff_units: lines.reduce((a: number, l: any) => a + (l.variance || 0), 0), signed_off_by: signer, signed_off_at: load.signed_off_at ?? null };
+  return { ...load, lines, orders, sales_total, settlement };
 }
 
 export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
@@ -83,6 +91,10 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (dup) return res.json({ order: dup, duplicate: true });
     const shop = (await db.query("SELECT * FROM shops WHERE id=$1 AND company_id=$2", [Number(shopId), cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
     const items = (Array.isArray(req.body?.lines) ? req.body.lines : []).filter((l: any) => Number(l.qty) > 0); if (!items.length) throw bad("add at least one product");
+    const pb = req.body?.payment || {}, pay = { mode: String(pb.mode || "cash"), amount: pb.amount == null || pb.amount === "" ? null : Number(pb.amount), reference: pb.reference ? String(pb.reference).slice(0, 60) : null };
+    if (!["cash", "upi", "credit"].includes(pay.mode)) throw bad("payment must be cash, UPI or credit");
+    if (pay.amount != null && !(pay.amount >= 0)) throw bad("amount must be ≥ 0");
+    if (pay.mode === "credit" && !settings.features.invoicing) throw bad("credit sales need invoicing turned on");
     const { priced } = await priceLines(db, cid, settings, items, null);
     const want = new Map<number, number>(); for (const l of priced) want.set(l.vid, (want.get(l.vid) || 0) + l.base);
     const gstOk = settings.features.invoicing && settings.gst.gstin && settings.gst.stateCode && settings.gst.legalName;
@@ -100,6 +112,20 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
       await emit(tx, cid, "order.created", { id: o.id, client_ref: o.client_ref, shop_id: o.shop_id, total, status: o.status, van: true });
       const inv = gstOk ? await invoiceOrder(tx, cid, req.user.uid, settings, { key: "company", g: settings.gst }, o, today()) : null;
+      // Payment at the counter: cash, UPI or credit (unpaid part stays outstanding on the invoice).
+      const due = inv ? Number(inv.total) : total;
+      const paid = pay.mode === "credit" ? 0 : Math.min(due, pay.amount == null ? due : pay.amount);
+      if (paid > 0) {
+        let pid: number | null = null;
+        if (inv) {
+          const fy = fyOf(today()), number = `RCPT/${fy}/${String(await nextNumber(tx, cid, "receipt", fy)).padStart(4, "0")}`;
+          const p = (await tx.query(`INSERT INTO payments (company_id,issuer,number,fy,shop_id,pay_date,mode,reference,amount,collected_by) VALUES ($1,'company',$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+            [cid, number, fy, shop.id, today(), pay.mode, pay.reference, paid, req.user.uid])).rows[0];
+          await tx.query("INSERT INTO payment_allocations (payment_id,invoice_id,amount) VALUES ($1,$2,$3)", [p.id, inv.id, paid]); pid = p.id;
+        }
+        await tx.query("INSERT INTO van_payments (load_id,order_id,mode,amount,reference,payment_id) VALUES ($1,$2,$3,$4,$5,$6)", [L.id, o.id, pay.mode, paid, pay.reference, pid]);
+      }
+      if (due - paid > 0.004) await tx.query("INSERT INTO van_payments (load_id,order_id,mode,amount) VALUES ($1,$2,'credit',$3)", [L.id, o.id, r2(due - paid)]);
       return { o, inv };
     });
     res.status(201).json({ order: out.o, invoice: out.inv ? await loadInvoice(db, cid, out.inv.id) : null, van: await vanSummary(db, L) });
@@ -141,9 +167,18 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     for (const c of Array.isArray(req.body?.counts) ? req.body.counts : []) { const q = Number(c.qty); if (!Number.isInteger(q) || q < 0) throw bad("counts must be whole numbers ≥ 0"); counts.set(String(c.sku), q); }
     const sum = await vanSummary(db, L);
     for (const l of sum!.lines) await db.query("UPDATE van_lines SET counted=$1 WHERE load_id=$2 AND variant_id=$3", [counts.has(l.sku) ? counts.get(l.sku) : l.expected, L.id, l.variant_id]);
-    await db.query("UPDATE van_loads SET status='closed', closed_at=NOW(), closed_by=$1 WHERE id=$2", [req.user.uid, L.id]);
+    const cc = req.body?.cashCounted; if (cc != null && cc !== "" && !(Number(cc) >= 0)) throw bad("cash counted must be ≥ 0");
+    await db.query("UPDATE van_loads SET status='closed', closed_at=NOW(), closed_by=$1, cash_counted=$3, settle_note=$4 WHERE id=$2", [req.user.uid, L.id, cc == null || cc === "" ? null : Number(cc), req.body?.note ? String(req.body.note).slice(0, 300) : null]);
     const done = await vanSummary(db, (await db.query("SELECT * FROM van_loads WHERE id=$1", [L.id])).rows[0]);
     await emit(db, cid, "van.closed", { id: L.id, rep_id: repId, day: L.day, variances: done!.lines.filter((l: any) => l.variance).map((l: any) => ({ sku: l.sku, variance: l.variance })) });
     res.json(done);
+  }));
+  // Manager sign-off on a closed van day (after checking the stock and cash differences).
+  app.post("/api/van/loads/:id/signoff", auth(...MGR), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "vanSales");
+    const L = (await db.query("SELECT * FROM van_loads WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0]; if (!L) throw bad("van load not found", 404);
+    if (L.status !== "closed") throw bad("close the day first", 409); if (L.signed_off_by) throw bad("already signed off", 409);
+    await db.query("UPDATE van_loads SET signed_off_by=$1, signed_off_at=NOW(), settle_note=COALESCE($2, settle_note) WHERE id=$3", [req.user.uid, req.body?.note ? String(req.body.note).slice(0, 300) : null, L.id]);
+    res.json(await vanSummary(db, (await db.query("SELECT * FROM van_loads WHERE id=$1", [L.id])).rows[0]));
   }));
 }

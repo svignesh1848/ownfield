@@ -63,6 +63,7 @@ export function VanRep({ s, cfg }: ViewProps) {
   const [van, load] = useData<any>(s, "/api/van/today");
   const [shops] = useData<any[]>(s, "/api/shops");
   const [lines, setLines] = useState<any[]>([{ sku: "", qty: 1 }]), [shop, setShop] = useState(""), [counts, setCounts] = useState<Record<string, number>>({}), [last, setLast] = useState<any>(null);
+  const [pay, setPay] = useState({ mode: "cash", amount: "", reference: "" }), [cash, setCash] = useState("");
   const scan = !!cfg.settings.features.barcode;
   return <><h2>{t("My van")}</h2>
     {!van ? <div className="card"><p>{t("Load your van for today.")}</p><Lines s={s} lines={lines} setLines={setLines} scan={scan} />
@@ -73,11 +74,16 @@ export function VanRep({ s, cfg }: ViewProps) {
         <div className="card"><h3>{t("Sell now")}</h3>
           <Field label={t("Outlet")}><select value={shop} onChange={e => setShop(e.target.value)}><option value="">{t("Pick an outlet")}</option>{shops?.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
           <Lines s={s} lines={lines} setLines={setLines} scan={scan} />
-          <button onClick={async () => { const r: any = await run(() => api(s, "/api/van/sale", { method: "POST", body: JSON.stringify({ clientRef: ref(), shopId: Number(shop), lines: lines.filter(l => l.sku) }) })); if (r) { setLast(r); setLines([{ sku: "", qty: 1 }]); load(); } }}>{t("Sell")}{cfg.settings.features.invoicing ? t(" and invoice") : ""}</button>
+          <Field label={t("Payment")}><select value={pay.mode} onChange={e => setPay({ ...pay, mode: e.target.value })}><option value="cash">{t("Cash")}</option><option value="upi">{t("UPI")}</option>{cfg.settings.features.invoicing && <option value="credit">{t("Credit (pay later)")}</option>}</select></Field>
+          {pay.mode !== "credit" && <div className="row-btns"><input type="number" min={0} placeholder={t("Amount paid (blank = full bill)")} value={pay.amount} onChange={e => setPay({ ...pay, amount: e.target.value })} />
+            {pay.mode === "upi" && <input placeholder={t("UPI reference")} value={pay.reference} onChange={e => setPay({ ...pay, reference: e.target.value })} />}</div>}
+          <button onClick={async () => { const r: any = await run(() => api(s, "/api/van/sale", { method: "POST", body: JSON.stringify({ clientRef: ref(), shopId: Number(shop), lines: lines.filter(l => l.sku), payment: { mode: pay.mode, amount: pay.amount === "" ? null : Number(pay.amount), reference: pay.reference || null } }) })); if (r) { setLast(r); setLines([{ sku: "", qty: 1 }]); load(); } }}>{t("Sell")}{cfg.settings.features.invoicing ? t(" and invoice") : ""}</button>
           {last?.invoice && <p>{t("Invoice")}{" "}<b>{last.invoice.number}</b> · {inr0(last.invoice.total)} · <a href="#" onClick={async e => { e.preventDefault(); const r = await fetch(`/api/invoices/${last.invoice.id}/print`, { headers: { Authorization: `Bearer ${s.token}` } }); const w = window.open(""); w?.document.write(await r.text()); }}>{t("Print")}</a></p>}</div>
         <div className="card"><h3>{t("Day end")}</h3><p className="muted">{t("Count what is left on the van. Leave blank if it matches.")}</p>
           {van.lines.map((l: any) => <Field key={l.sku} label={t("{0} (expected {1})", l.sku, l.left)}><input type="number" min={0} value={counts[l.sku] ?? ""} onChange={e => setCounts({ ...counts, [l.sku]: Number(e.target.value) })} /></Field>)}
-          <button onClick={async () => { const r: any = await run(() => api(s, "/api/van/close", { method: "POST", body: JSON.stringify({ counts: Object.entries(counts).map(([sku, qty]) => ({ sku, qty })) }) })); if (r) { toast(t("Closed. Sales {0}", inr0(r.sales_total))); load(); } }}>{t("Close the day")}</button></div></>}</>;
+          <p>{t("Cash {0} · UPI {1} · Credit {2}", inr0(van.settlement?.cash), inr0(van.settlement?.upi), inr0(van.settlement?.credit))}</p>
+          <Field label={t("Cash in hand (₹)")} help={t("Count the cash you are handing over. Your manager signs off any difference.")}><input type="number" min={0} value={cash} onChange={e => setCash(e.target.value)} /></Field>
+          <button onClick={async () => { const r: any = await run(() => api(s, "/api/van/close", { method: "POST", body: JSON.stringify({ cashCounted: cash === "" ? null : Number(cash), counts: Object.entries(counts).map(([sku, qty]) => ({ sku, qty })) }) })); if (r) { toast(t("Closed. Sales {0}", inr0(r.sales_total))); load(); } }}>{t("Close the day")}</button></div></>}</>;
 }
 export function VanAdmin({ s }: ViewProps) {
   const [day, setDay] = useState(today()); const [loads, reload] = useData<any[]>(s, `/api/van/loads?day=${day}`, [day]);
@@ -88,7 +94,10 @@ export function VanAdmin({ s }: ViewProps) {
       <Lines s={s} lines={lines} setLines={setLines} /><button onClick={async () => { if (await run(() => api(s, "/api/van/load", { method: "POST", body: JSON.stringify({ repId: Number(rep), sourceId: src, lines: lines.filter(l => l.sku) }) }))) reload(); }}>{t("Load")}</button></div>
     <Field label={t("Day")}><input type="date" value={day} onChange={e => setDay(e.target.value)} /></Field>
     {!loads ? <Loading /> : loads.map(l => <div className="card" key={l.id}><b>{l.rep_name}</b> · {l.status} {t("· sales")}{" "}{inr0(l.sales_total)}
-      <Table rows={l.lines} cols={["sku", "loaded", "sold", "unloaded", "expected", "counted", "variance"]} /></div>)}
+      <Table rows={l.lines} cols={["sku", "loaded", "sold", "unloaded", "expected", "counted", "variance"]} />
+      <p>{t("Cash {0} · UPI {1} · Credit {2}", inr0(l.settlement.cash), inr0(l.settlement.upi), inr0(l.settlement.credit))}{l.settlement.cash_counted != null && <> · {t("Cash handed over {0}", inr0(l.settlement.cash_counted))} · <b className={l.settlement.cash_diff ? "err" : ""}>{t("Difference {0}", inr0(l.settlement.cash_diff))}</b></>}{l.settlement.stock_diff_units ? <> · <b className="err">{t("Stock difference {0} units", l.settlement.stock_diff_units)}</b></> : null}</p>
+      {l.status === "closed" && (l.settlement.signed_off_by ? <p className="muted">✓ {t("Signed off by {0}", l.settlement.signed_off_by)}</p>
+        : <button className="sm" onClick={async () => { const note = prompt(t("Note for the sign-off (optional)")) ?? ""; if (await run(() => api(s, `/api/van/loads/${l.id}/signoff`, { method: "POST", body: JSON.stringify({ note }) }))) reload(); }}>{t("Check and sign off")}</button>)}</div>)}
     {loads && !loads.length && <p className="muted">{t("No vans loaded on this day.")}</p>}</>;
 }
 
