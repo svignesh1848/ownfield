@@ -101,3 +101,11 @@ Upload templates are in `sample-data/`. All sample data there is made up.
 
 ## Roadmap
 Next (proposed): offline photo queue, a real GSP adapter for e-invoicing (needs your GSP credentials), and e-way bills.
+
+## UI walkthrough (mobile)
+
+| Login | Rep home | New order | Admin home |
+|---|---|---|---|
+| ![](docs/ui-1-login.png) | ![](docs/ui-2-rep-home.png) | ![](docs/ui-3-order.png) | ![](docs/ui-4-admin-home.png) |
+
+Screenshots use the in-memory DEMO company (`npm run demo -w server`). All of its data is sample data.
