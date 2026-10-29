@@ -1,7 +1,7 @@
 // Phase 3 screens: store audits, expenses, leave & attendance, incentives, retailer app. Plain language, one task per screen.
 import React, { useEffect, useState } from "react";
 import { api, Table, type ViewProps, type Session } from "./main";
-import { t } from "./i18n";
+import { t, t as i18n } from "./i18n";
 import { Empty, Loading, Field, toast, inr0, fmtDate, today } from "./ui";
 
 /** Shrink a photo on the phone before upload (max 1280px, JPEG ~70%) so uploads stay small. */
@@ -32,18 +32,20 @@ const PhotoButton = ({ label, onFile }: { label: string; onFile: (f: File) => vo
 const QTYPE: Record<string, string> = { yes_no: t("Yes / No"), number: t("Number"), text: t("Text"), photo: t("Photo") };
 export function AuditSetup({ s }: ViewProps) {
   const [list, setList] = useState<any[] | null>(null); const [name, setName] = useState("");
-  const [qs, setQs] = useState<{ label: string; type: string; required: boolean }[]>([{ label: "", type: "yes_no", required: false }]);
+  const [qs, setQs] = useState<{ label: string; type: string; required: boolean; target?: string }[]>([{ label: "", type: "yes_no", required: false }]);
   const load = () => api(s, "/api/audit-templates?all=1").then(setList).catch(e => { setList([]); toast(e.message, "err"); }); useEffect(() => { load(); }, []);
   const save = async () => { try { await api(s, "/api/audit-templates", { method: "POST", body: JSON.stringify({ name, questions: qs.filter(q => q.label.trim()) }) }); setName(""); setQs([{ label: "", type: "yes_no", required: false }]); load(); } catch (e: any) { toast(e.message, "err"); } };
   return <><h2>{t("Store checklists")}</h2><p className="muted">{t("Questions your sales reps answer at each outlet visit.")}</p>
     {list == null ? <Loading /> : list.map(t => <div className="row" key={t.id}><b>{t.name}</b> {!t.active && <span className="pill">hidden</span>}
-      <div className="muted small">{t.questions.map((q: any) => `${q.label} (${QTYPE[q.type]})`).join(" · ")}</div>
+      <div className="muted small">{t.questions.map((q: any) => `${q.label} (${QTYPE[q.type]}${q.target ? ` · ${i18n("target {0}", q.target)}` : ""})`).join(" · ")}</div>
       <button className="sm ghost" onClick={() => api(s, `/api/audit-templates/${t.id}`, { method: "PUT", body: JSON.stringify({ active: !t.active }) }).then(load)}>{t.active ? t("Hide") : t("Show again")}</button></div>)}
     <div className="card sub"><h3>{t("New checklist")}</h3>
       <Field label={t("Checklist name")}><input value={name} placeholder={t("e.g. Shelf check")} onChange={e => setName(e.target.value)} /></Field>
       {qs.map((q, i) => <div className="qrow" key={i}><input placeholder={t("Question {0}", i + 1)} value={q.label} onChange={e => setQs(qs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
         <select value={q.type} onChange={e => setQs(qs.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}>{Object.entries(QTYPE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        <label className="chk"><input type="checkbox" checked={q.required} onChange={e => setQs(qs.map((x, j) => j === i ? { ...x, required: e.target.checked } : x))} />{t("Must answer")}</label></div>)}
+        <label className="chk"><input type="checkbox" checked={q.required} onChange={e => setQs(qs.map((x, j) => j === i ? { ...x, required: e.target.checked } : x))} />{t("Must answer")}</label>
+        {q.type === "number" && <input className="sm-input" type="number" min="0" placeholder={t("Target")} value={q.target ?? ""} onChange={e => setQs(qs.map((x, j) => j === i ? { ...x, target: e.target.value } : x))} />}</div>)}
+      <p className="muted small">{t("Perfect store score: each Yes counts fully; a number with a target counts as value ÷ target (up to 100%).")}</p>
       <button className="ghost sm" onClick={() => setQs([...qs, { label: "", type: "yes_no", required: false }])}>{t("+ Add question")}</button>{" "}
       <button onClick={save} disabled={!name.trim()}>{t("Save checklist")}</button></div></>;
 }
@@ -72,8 +74,10 @@ export function AuditReport({ s }: ViewProps) {
   useEffect(() => { setD(null); api(s, `/api/audits?from=${from}&to=${to}`).then(setD).catch(e => setD({ rows: [], err: e.message })); }, [from, to]);
   return <><h2>{t("Store checks")}</h2>
     <div className="two"><Field label={t("From")}><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></Field><Field label={t("To")}><input type="date" value={to} onChange={e => setTo(e.target.value)} /></Field></div>
+    {!!d?.outlets?.length && <div className="card"><h3>{t("Perfect store score by outlet")}</h3><p className="muted small">{t("From each outlet's latest check in these dates. Lowest first.")}</p>
+      <Table rows={d.outlets.map((o: any) => ({ shop_name: o.shop_name, day: fmtDate(o.day), outlet_score: `${o.outlet_score}%` }))} cols={["shop_name", "day", "outlet_score"]} /></div>}
     {!d ? <Loading /> : !d.rows.length ? <Empty icon="✅" title={t("No store checks in these dates")} text={d.err || t("They appear here when reps fill a checklist during a visit.")} />
-      : d.rows.map((r: any) => <div className="row" key={r.id}><b>{r.shop_name}</b> <span className="muted">· {r.rep_name} · {fmtDate(r.day)}</span> {r.score && <span className="pill">{r.score}</span>}
+      : d.rows.map((r: any) => <div className="row" key={r.id}><b>{r.shop_name}</b> <span className="muted">· {r.rep_name} · {fmtDate(r.day)}</span> {r.score && <span className="pill">{r.score}</span>} {r.perfect_score != null && <span className="pill">{t("Score {0}%", r.perfect_score)}</span>}
         <div className="muted small">{r.checklist}: {r.answers.filter((a: any) => a.value !== "").map((a: any) => `${a.label} ${a.value}`).join(" · ")}</div>
         <div className="thumbs">{r.photos.map((p: any) => <AuthImg key={p.id} s={s} src={`/api/audit-photos/${p.id}`} alt={t("Shelf photo")} />)}</div></div>)}</>;
 }

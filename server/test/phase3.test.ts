@@ -1,3 +1,4 @@
+import { perfectScore } from "../src/audits.js";
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import { newDb } from "pg-mem";
@@ -56,6 +57,17 @@ describe("store audits", () => {
     expect(r[0].photos).toHaveLength(1);
     expect((await request(app).get(`/api/audit-photos/${p.id}`).set(H("m")).expect(200)).headers["content-type"]).toMatch(/png/);
     expect((await request(app).get("/api/audits").set(H("r2"))).body.rows).toHaveLength(0);
+  });
+  it("perfect store: targets on number questions roll up into an outlet score", async () => {
+    expect(perfectScore([{ key: "a", label: "a", type: "yes_no" }, { key: "f", label: "f", type: "number", target: 10, weight: 2 }], { a: true, f: 5 })).toBe(67);
+    await request(app).post("/api/audit-templates").set(H("a")).send({ name: "Bad", questions: [{ label: "x", type: "yes_no", target: 3 }] }).expect(400);
+    const t = (await request(app).post("/api/audit-templates").set(H("a")).send({ name: "Perfect store", questions: [
+      { label: "Poster up?", type: "yes_no" }, { label: "Facings count", type: "number", target: 10 }] }).expect(201)).body;
+    expect(t.questions[1].target).toBe(10);
+    await request(app).post(`/api/visits/${ids.v1}/audits`).set(H("r1")).send({ templateId: t.id, answers: { poster_up: "yes", facings_count: 5 } }).expect(201);
+    const d = (await request(app).get("/api/audits").set(H("m")).expect(200)).body;
+    expect(d.rows.find((r: any) => r.checklist === "Perfect store").perfect_score).toBe(75);
+    expect(d.outlets[0]).toMatchObject({ shop_name: "Sample Shop 1", outlet_score: 88 }); // (100 + 75) / 2, both checklists that day
   });
 });
 

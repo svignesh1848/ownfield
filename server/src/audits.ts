@@ -5,7 +5,17 @@ import { type Ctx, MGR, requireFeature, dateOk } from "./common.js";
 import { smallUpload, savePhoto, readPhoto } from "./photos.js";
 
 export const Q_TYPES = ["yes_no", "number", "text", "photo"] as const;
-type Q = { key: string; label: string; type: (typeof Q_TYPES)[number]; required?: boolean };
+type Q = { key: string; label: string; type: (typeof Q_TYPES)[number]; required?: boolean; target?: number; weight?: number };
+/** Perfect store: each yes/no question scores 1 for "yes"; a number question with a target scores value/target (max 1). Weighted average, 0–100. */
+export function perfectScore(qs: Q[], ans: Record<string, any>) {
+  let got = 0, max = 0;
+  for (const q of qs) {
+    const w = q.weight ?? 1;
+    if (q.type === "yes_no" && q.key in ans) { max += w; got += ans[q.key] ? w : 0; }
+    else if (q.type === "number" && q.target && q.key in ans) { max += w; got += w * Math.min(Math.max(Number(ans[q.key]) / q.target, 0), 1); }
+  }
+  return max ? Math.round((got / max) * 100) : null;
+}
 const keyOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
 
 export function cleanQuestions(input: unknown): Q[] {
@@ -15,7 +25,10 @@ export function cleanQuestions(input: unknown): Q[] {
     const label = String(q?.label || "").trim().slice(0, 120); const type = String(q?.type || "yes_no");
     if (!label) throw bad("each question needs a label");
     if (!(Q_TYPES as readonly string[]).includes(type)) throw bad(`question type must be ${Q_TYPES.join("/")}`);
-    return { key: keyOf(q.key || label), label, type, required: !!q.required } as Q;
+    const o: Q = { key: keyOf(q.key || label), label, type: type as Q["type"], required: !!q.required };
+    if (q.target != null && q.target !== "") { const tg = Number(q.target); if (type !== "number" || !(tg > 0)) throw bad("a target can only be set on number questions, and must be more than 0"); o.target = tg; }
+    if (q.weight != null && q.weight !== "") { const w = Number(q.weight); if (!(w > 0 && w <= 10)) throw bad("weight must be between 0 and 10"); if (w !== 1) o.weight = w; }
+    return o;
   });
   if (new Set(out.map(q => q.key)).size !== out.length) throw bad("question labels must be different");
   return out;
@@ -107,10 +120,14 @@ export function registerAuditRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       const photos = (await db.query("SELECT id, question FROM audit_photos WHERE audit_id=$1 ORDER BY id", [r.id])).rows;
       const yn = qs.filter(q => q.type === "yes_no" && q.key in ans);
       out.push({ id: r.id, visit_id: r.visit_id, day: dayKey(r.created_at), rep_name: r.rep_name, shop_name: r.shop_name, checklist: r.checklist,
-        score: yn.length ? `${yn.filter(q => ans[q.key]).length}/${yn.length} yes` : "",
+        score: yn.length ? `${yn.filter(q => ans[q.key]).length}/${yn.length} yes` : "", perfect_score: perfectScore(qs, ans), shop_id: r.shop_id,
         answers: qs.filter(q => q.type !== "photo").map(q => ({ label: q.label, value: q.key in ans ? (q.type === "yes_no" ? (ans[q.key] ? "Yes" : "No") : ans[q.key]) : "" })),
         photos });
     }
-    res.json({ from, to, rows: out });
+    // Outlet score = the latest audit's perfect-store score for each outlet in the period (average across checklists done that day).
+    const latest = new Map<number, { day: string; scores: number[]; shop_name: string }>();
+    for (const r of out) { if (r.perfect_score == null) continue; const c = latest.get(r.shop_id); if (!c || r.day > c.day) latest.set(r.shop_id, { day: r.day, scores: [r.perfect_score], shop_name: r.shop_name }); else if (r.day === c.day) c.scores.push(r.perfect_score); }
+    const outlets = [...latest.entries()].map(([shop_id, c]) => ({ shop_id, shop_name: c.shop_name, day: c.day, outlet_score: Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length) })).sort((a, b) => a.outlet_score - b.outlet_score);
+    res.json({ from, to, rows: out, outlets });
   }));
 }
