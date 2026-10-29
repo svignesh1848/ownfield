@@ -68,7 +68,8 @@ export function VanRep({ s, cfg }: ViewProps) {
     {!van ? <div className="card"><p>{t("Load your van for today.")}</p><Lines s={s} lines={lines} setLines={setLines} scan={scan} />
       <button onClick={async () => { if (await run(() => api(s, "/api/van/load", { method: "POST", body: JSON.stringify({ lines: lines.filter(l => l.sku) }) }))) { setLines([{ sku: "", qty: 1 }]); load(); } }}>{t("Load van")}</button></div>
       : <>
-        <Table rows={van.lines} cols={["sku", "name", "loaded", "sold", "left"]} />
+        <Table rows={van.lines} cols={["sku", "name", "loaded", "sold", "unloaded", "left"]} />
+        <button className="sm ghost" onClick={async () => { if (confirm(t("Put everything left on the van back into stock?")) && await run(() => api(s, "/api/van/unload", { method: "POST", body: JSON.stringify({}) }))) load(); }}>{t("Unload van")}</button>
         <div className="card"><h3>{t("Sell now")}</h3>
           <Field label={t("Outlet")}><select value={shop} onChange={e => setShop(e.target.value)}><option value="">{t("Pick an outlet")}</option>{shops?.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
           <Lines s={s} lines={lines} setLines={setLines} scan={scan} />
@@ -80,13 +81,14 @@ export function VanRep({ s, cfg }: ViewProps) {
 }
 export function VanAdmin({ s }: ViewProps) {
   const [day, setDay] = useState(today()); const [loads, reload] = useData<any[]>(s, `/api/van/loads?day=${day}`, [day]);
-  const [reps] = useData<any[]>(s, "/api/reps"); const [rep, setRep] = useState(""); const [lines, setLines] = useState<any[]>([{ sku: "", qty: 1 }]);
+  const [reps] = useData<any[]>(s, "/api/reps"); const [rep, setRep] = useState(""); const [dists] = useData<any[]>(s, "/api/distributors"); const [src, setSrc] = useState("company"); const [lines, setLines] = useState<any[]>([{ sku: "", qty: 1 }]);
   return <><h2>{t("Van sales")}</h2>
     <div className="card"><h3>{t("Load a van")}</h3><Field label={t("Sales rep")}><select value={rep} onChange={e => setRep(e.target.value)}><option value="">{t("Pick")}</option>{reps?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field>
-      <Lines s={s} lines={lines} setLines={setLines} /><button onClick={async () => { if (await run(() => api(s, "/api/van/load", { method: "POST", body: JSON.stringify({ repId: Number(rep), lines: lines.filter(l => l.sku) }) }))) reload(); }}>{t("Load")}</button></div>
+      <Field label={t("Take stock from")} help={t("Loading takes the stock out of this location; unloading puts it back.")}><select value={src} onChange={e => setSrc(e.target.value)}><option value="company">{t("Company warehouse")}</option>{dists?.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+      <Lines s={s} lines={lines} setLines={setLines} /><button onClick={async () => { if (await run(() => api(s, "/api/van/load", { method: "POST", body: JSON.stringify({ repId: Number(rep), sourceId: src, lines: lines.filter(l => l.sku) }) }))) reload(); }}>{t("Load")}</button></div>
     <Field label={t("Day")}><input type="date" value={day} onChange={e => setDay(e.target.value)} /></Field>
     {!loads ? <Loading /> : loads.map(l => <div className="card" key={l.id}><b>{l.rep_name}</b> · {l.status} {t("· sales")}{" "}{inr0(l.sales_total)}
-      <Table rows={l.lines} cols={["sku", "loaded", "sold", "expected", "counted", "variance"]} /></div>)}
+      <Table rows={l.lines} cols={["sku", "loaded", "sold", "unloaded", "expected", "counted", "variance"]} /></div>)}
     {loads && !loads.length && <p className="muted">{t("No vans loaded on this day.")}</p>}</>;
 }
 
@@ -186,7 +188,7 @@ function Plot({ pts, visits }: { pts: any[]; visits: any[] }) {
 }
 export function Trail({ s }: ViewProps) {
   const admin = s.user.role === "company_admin";
-  const [reps] = useData<any[]>(s, "/api/reps"); const [rep, setRep] = useState(""); const [day, setDay] = useState(today());
+  const [reps] = useData<any[]>(s, "/api/reps"); const [rep, setRep] = useState(""); const [dists] = useData<any[]>(s, "/api/distributors"); const [src, setSrc] = useState("company"); const [day, setDay] = useState(today());
   const [tr] = useData<any>(s, rep ? `/api/track?repId=${rep}&day=${day}` : null, [rep, day]);
   const [cfg, , setCfg] = useData<any>(s, "/api/track/settings"); const [shops] = useData<any[]>(s, "/api/shops"); const [shop, setShop] = useState(""), [radius, setRadius] = useState("");
   return <><h2>{t("Location trail")}</h2>

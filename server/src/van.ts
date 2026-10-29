@@ -2,7 +2,8 @@
 // Van stock is its own ledger (van_lines); loaded − sold = expected at day end, and the counted figure shows any variance.
 import type { Db } from "./db.js";
 import { withTx } from "./db.js";
-import { bad, today, getCompany } from "./catalog.js";
+import { bad, today, getCompany, fefoRows } from "./catalog.js";
+import { logMove } from "./inventory.js";
 import { priceLines } from "./field.js";
 import { invoiceOrder, loadInvoice } from "./billing.js";
 import { emit } from "./integrations/webhooks.js";
@@ -13,9 +14,9 @@ async function openLoad(db: Db, cid: number, repId: number) {
 }
 export async function vanSummary(db: Db, load: any) {
   if (!load) return null;
-  const lines = (await db.query(`SELECT l.variant_id, v.sku, v.barcode, i.name, l.loaded, l.sold, l.counted FROM van_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
+  const lines = (await db.query(`SELECT l.variant_id, v.sku, v.barcode, i.name, l.loaded, l.sold, l.unloaded, l.counted FROM van_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
     WHERE l.load_id=$1 ORDER BY v.sku`, [load.id])).rows.map(l => {
-      const expected = l.loaded - l.sold;
+      const expected = l.loaded - l.sold - l.unloaded;
       return { ...l, left: expected, expected, variance: l.counted == null ? null : l.counted - expected };
     });
   const orders = (await db.query("SELECT o.id, o.client_ref, o.total, s.name AS shop_name FROM orders o JOIN shops s ON s.id=o.shop_id WHERE o.van_load_id=$1 ORDER BY o.id", [load.id])).rows
@@ -31,13 +32,30 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!(await db.query("SELECT id FROM users WHERE id=$1 AND company_id=$2 AND role='sales_rep' AND active=TRUE", [repId, cid])).rows[0]) throw bad("pick a sales rep");
     const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).filter((l: any) => Number(l.qty) > 0);
     if (!lines.length) throw bad("add at least one product with a quantity");
+    const { settings } = await getCompany(db, cid);
+    // Source of the goods: a distributor's stock or the company warehouse. With stock tracking on, loading deducts it (FEFO).
+    const src = req.body?.sourceId == null || req.body.sourceId === "" || req.body.sourceId === "company" ? null : Number(req.body.sourceId);
+    if (src != null && !(await db.query("SELECT id FROM users WHERE id=$1 AND company_id=$2 AND role='distributor'", [src, cid])).rows[0]) throw bad("distributor not found", 404);
+    const fromStock = !!settings.features.stock;
     const load = await withTx(db, async tx => {
       let L = await openLoad(tx, cid, repId);
-      if (!L) L = (await tx.query("INSERT INTO van_loads (company_id,rep_id,day,loaded_by) VALUES ($1,$2,$3,$4) RETURNING *", [cid, repId, today(), req.user.uid])).rows[0];
+      if (!L) L = (await tx.query("INSERT INTO van_loads (company_id,rep_id,day,loaded_by,source_distributor_id,from_stock) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *", [cid, repId, today(), req.user.uid, src, fromStock])).rows[0];
+      else if (L.from_stock && (L.source_distributor_id ?? null) !== src) throw bad("this van was loaded from another source today — unload it first", 409);
       for (const l of lines) {
         const v = (await tx.query("SELECT id FROM variants WHERE company_id=$1 AND (sku=$2 OR barcode=$2)", [cid, String(l.sku ?? "").trim()])).rows[0];
         if (!v) throw bad(`product ${l.sku} not found`, 404);
         const q = Number(l.qty); if (!Number.isInteger(q) || q <= 0 || q > 100000) throw bad("quantities must be whole numbers");
+        if (L.from_stock) {
+          let need = q;
+          for (const r of await fefoRows(tx, cid, L.source_distributor_id ?? null, v.id)) {
+            if (need <= 0) break; const take = Math.min(need, r.qty);
+            if (!(await tx.query("UPDATE stock SET qty=$1, updated_at=NOW() WHERE id=$2 AND qty=$3 RETURNING id", [r.qty - take, r.id, r.qty])).rows[0]) throw bad("stock changed — retry", 409);
+            await tx.query("INSERT INTO van_takes (load_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5)", [L.id, v.id, r.batch_no, r.expiry, take]);
+            await logMove(tx, cid, L.source_distributor_id ?? null, v.id, r.batch_no, -take, "van_load", `van ${L.id}`, req.user.uid);
+            need -= take;
+          }
+          if (need > 0) throw bad(`not enough stock of ${l.sku} at the source: short by ${need}`, 409);
+        }
         const ex = (await tx.query("SELECT id, loaded FROM van_lines WHERE load_id=$1 AND variant_id=$2", [L.id, v.id])).rows[0];
         if (ex) await tx.query("UPDATE van_lines SET loaded=$1 WHERE id=$2", [ex.loaded + q, ex.id]);
         else await tx.query("INSERT INTO van_lines (load_id,variant_id,loaded) VALUES ($1,$2,$3)", [L.id, v.id, q]);
@@ -70,8 +88,8 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const gstOk = settings.features.invoicing && settings.gst.gstin && settings.gst.stateCode && settings.gst.legalName;
     const out = await withTx(db, async tx => {
       for (const [vid, n] of want) {
-        const vl = (await tx.query("SELECT id, loaded, sold FROM van_lines WHERE load_id=$1 AND variant_id=$2", [L.id, vid])).rows[0];
-        const left = vl ? vl.loaded - vl.sold : 0;
+        const vl = (await tx.query("SELECT id, loaded, sold, unloaded FROM van_lines WHERE load_id=$1 AND variant_id=$2", [L.id, vid])).rows[0];
+        const left = vl ? vl.loaded - vl.sold - (vl.unloaded || 0) : 0;
         if (left < n) throw bad(`not enough on the van for ${priced.find(p => p.vid === vid)!.sku}: ${left} left`, 409);
         if (!(await tx.query("UPDATE van_lines SET sold=$1 WHERE id=$2 AND sold=$3 RETURNING id", [vl.sold + n, vl.id, vl.sold])).rows[0]) throw bad("van stock changed — retry", 409);
       }
@@ -85,6 +103,34 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       return { o, inv };
     });
     res.status(201).json({ order: out.o, invoice: out.inv ? await loadInvoice(db, cid, out.inv.id) : null, van: await vanSummary(db, L) });
+  }));
+  // Unload: put what is left on the van back into the source stock (latest-expiry batches taken go back first).
+  app.post("/api/van/unload", auth(...MGR, "sales_rep"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "vanSales");
+    const repId = req.user.role === "sales_rep" ? req.user.uid : Number(req.body?.repId);
+    const L = await openLoad(db, cid, repId); if (!L) throw bad("no open van load", 404);
+    const want = new Map<string, number>(); for (const c of Array.isArray(req.body?.lines) ? req.body.lines : []) { const q = Number(c.qty); if (!Number.isInteger(q) || q < 0) throw bad("quantities must be whole numbers"); want.set(String(c.sku), q); }
+    const sum = await vanSummary(db, L);
+    await withTx(db, async tx => {
+      for (const l of sum!.lines) {
+        const q = want.size ? (want.get(l.sku) ?? 0) : l.left; if (q <= 0) continue;
+        if (q > l.left) throw bad(`only ${l.left} of ${l.sku} left on the van`, 409);
+        await tx.query("UPDATE van_lines SET unloaded=$1 WHERE load_id=$2 AND variant_id=$3", [l.unloaded + q, L.id, l.variant_id]);
+        if (!L.from_stock) continue;
+        let back = q;
+        for (const tk of (await tx.query("SELECT * FROM van_takes WHERE load_id=$1 AND variant_id=$2 AND qty>0 ORDER BY expiry DESC NULLS FIRST, id DESC", [L.id, l.variant_id])).rows) {
+          if (back <= 0) break; const n = Math.min(back, tk.qty);
+          await tx.query("UPDATE van_takes SET qty=$1 WHERE id=$2", [tk.qty - n, tk.id]);
+          const d = L.source_distributor_id ?? null;
+          const ex = (await tx.query(`SELECT id, qty FROM stock WHERE company_id=$1 AND variant_id=$2 AND batch_no=$3 AND ${d == null ? "distributor_id IS NULL" : "distributor_id=$4"}`, d == null ? [cid, l.variant_id, tk.batch_no] : [cid, l.variant_id, tk.batch_no, d])).rows[0];
+          if (ex) await tx.query("UPDATE stock SET qty=$1, updated_at=NOW() WHERE id=$2", [Number(ex.qty) + n, ex.id]);
+          else await tx.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, d, l.variant_id, tk.batch_no, tk.expiry, n]);
+          await logMove(tx, cid, d, l.variant_id, tk.batch_no, n, "van_unload", `van ${L.id}`, req.user.uid);
+          back -= n;
+        }
+      }
+    });
+    res.json(await vanSummary(db, L));
   }));
   // Day end: enter what is physically left on the van; the load closes and variances are kept for the manager.
   app.post("/api/van/close", auth(...MGR, "sales_rep"), wrap(async (req, res) => {

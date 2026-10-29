@@ -218,6 +218,11 @@ CREATE TABLE IF NOT EXISTS message_log (
   status TEXT NOT NULL DEFAULT 'queued', provider TEXT, attempts INTEGER NOT NULL DEFAULT 0, error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS message_log_status ON message_log (status, id);
 CREATE INDEX IF NOT EXISTS message_log_company ON message_log (company_id, id);
+ALTER TABLE van_loads ADD COLUMN IF NOT EXISTS source_distributor_id INTEGER REFERENCES users(id);
+ALTER TABLE van_loads ADD COLUMN IF NOT EXISTS from_stock BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE van_lines ADD COLUMN IF NOT EXISTS unloaded INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS van_takes (
+  id SERIAL PRIMARY KEY, load_id INTEGER NOT NULL REFERENCES van_loads(id), variant_id INTEGER NOT NULL REFERENCES variants(id), batch_no TEXT NOT NULL DEFAULT '', expiry TEXT, qty INTEGER NOT NULL);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {
