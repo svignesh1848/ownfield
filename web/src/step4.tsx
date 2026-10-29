@@ -16,7 +16,7 @@ export function Invoices({ s }: P) {
   const startCn = async (id: number) => { const inv = await api(s, `/api/invoices/${id}`); setCn({ inv, qty: {}, reason: "", restock: true }); };
   return <><h2>Invoices & credit notes</h2>
     <Table rows={rows.map(r => ({ ...r, type: r.kind === "invoice" ? "Invoice" : "Credit note", tax_type: r.intra_state ? "CGST+SGST" : "IGST", taxable: inr(r.taxable), tax: inr(r.tax), total: inr(r.total) }))}
-      cols={["number", "type", "doc_date", "shop_name", "tax_type", "taxable", "tax", "total"]} />
+      cols={["number", "type", "doc_date", ...(s.user.role !== "distributor" ? ["seller"] : []), "shop_name", "tax_type", "taxable", "tax", "total"]} />
     {rows.map(r => <span key={r.id} className="chips"><button className="sm ghost" onClick={() => openPrint(s, r.id).catch(e => setMsg(e.message))}>Print {r.number}</button>
       {r.kind === "invoice" && <button className="sm ghost" onClick={() => startCn(r.id)}>Return / credit note</button>}</span>)}
     {cn && <div className="card sub"><h3>Credit note against {cn.inv.number}</h3>
@@ -89,7 +89,7 @@ export function Visits({ s, cfg }: P) {
 export function GstSettings({ g, onChange }: { g: any; onChange: (g: any) => void }) {
   const f = (k: string, l: string, ph = "") => <label className="fld" key={k}><span>{l}</span><input placeholder={ph} value={g[k] ?? ""} onChange={e => onChange({ ...g, [k]: e.target.value })} /></label>;
   return <><h3>GST invoicing</h3>
-    {f("legalName", "Legal name (supplier)")}{f("gstin", "GSTIN", "15 characters")}{f("stateCode", "State code", "e.g. 33")}{f("address", "Address")}
+    {f("legalName", "Legal name (supplier)")}{f("gstin", "GSTIN", "15 characters")}{f("stateCode", "State code", "e.g. 33")}{f("address", "Address")}{f("city", "City")}{f("pincode", "PIN code")}
     {f("defaultRate", "Default GST %")}
     <label className="fld"><span>GST % by HSN/SAC prefix (longest match wins), e.g. 6109=5, 3004=12</span><input value={typeof g.hsnRates === "string" ? g.hsnRates : (g.hsnRates || []).map((h: any) => `${h.prefix}=${h.rate}`).join(", ")} onChange={e => onChange({ ...g, hsnRates: e.target.value })} /></label>
     {f("invoicePrefix", "Invoice prefix")}{f("creditPrefix", "Credit note prefix")}{f("numberFormat", "Number format — {prefix} {fy} {seq:4}; max 16 chars, restarts every April")}

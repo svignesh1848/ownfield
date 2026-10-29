@@ -64,7 +64,7 @@ function Company({ s }: { s: Session }) {
   if (!cfg) return <p className="muted">Loading…</p>;
   const f = cfg.settings.features;
   const tabs = mgr ? ["dashboard", "beats", "orders", ...(f.invoicing ? ["invoices"] : []), "visits", "targets", "reports", "catalog", "shops", ...(f.stock ? ["stock"] : []), ...(f.schemes ? ["schemes"] : []), ...(f.purchaseOrders ? ["POs"] : []), "distributors", "users", ...(admin ? ["settings", "import"] : [])]
-    : role === "sales_rep" ? ["beat", "order", "orders", "targets", "catalog"] : ["inbox", ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : []), "profile", "catalog"];
+    : role === "sales_rep" ? ["beat", "order", "orders", "targets", "catalog"] : ["inbox", ...(f.invoicing && f.distributorBilling ? ["invoices"] : []), ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : []), "profile", "catalog"];
   const cur = tabs.includes(tab) ? tab : tabs[0];
   const views: Record<string, any> = { dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes, settings: SettingsPage, import: ImportPage, users: Users };

@@ -1,13 +1,13 @@
 // Industry templates. Each one presets features, variant attributes, units and custom fields.
 // Everything stays editable per company afterwards. All sample data is fictitious and labelled "Sample".
-export const FEATURE_KEYS = ["stock", "batches", "sizeGrid", "gps", "schemes", "drugLicence", "services", "photos", "invoicing", "purchaseOrders"] as const;
+export const FEATURE_KEYS = ["stock", "batches", "sizeGrid", "gps", "schemes", "drugLicence", "services", "photos", "invoicing", "purchaseOrders", "distributorBilling"] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type Features = Record<FeatureKey, boolean>;
 export const FIELD_TYPES = ["text", "number", "date", "select"] as const;
 export type CustomField = { key: string; label: string; type: (typeof FIELD_TYPES)[number]; options?: string[]; required?: boolean };
 export const ENTITIES = ["outlet", "product", "visit"] as const;
 export type Uom = { code: string; factor: number }; // factor = base units per unit; the base unit has factor 1
-export type Gst = { legalName: string; gstin: string; stateCode: string; address: string; defaultRate: number; hsnRates: { prefix: string; rate: number }[];
+export type Gst = { legalName: string; gstin: string; stateCode: string; address: string; city?: string; pincode?: string; defaultRate: number; hsnRates: { prefix: string; rate: number }[];
   invoicePrefix: string; creditPrefix: string; numberFormat: string };
 export type PoPricing = { priceBase: "billing" | "mrp"; marginPct: number; productDiscounts: { scope: "item" | "category"; key: string; pct: number }[]; numberFormat: string };
 export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing };

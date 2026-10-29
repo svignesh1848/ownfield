@@ -134,18 +134,21 @@ export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {
   const go = async (fn: () => Promise<any>) => { try { await fn(); setMsg(""); load(); } catch (e: any) { setMsg(e.message); } };
   return <><h2>Orders</h2>{!rows.length && <p className="muted">No orders yet.</p>}{rows.map(o => <OrderCard key={o.id} o={o}>
     {admin && o.status === "placed" && <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/status`, { method: "POST", body: JSON.stringify({ status: "accepted" }) }))}>Accept</button>}
-    {mgr && cfg.settings.features.invoicing && ["accepted", "fulfilled"].includes(o.status) && (o.invoice
+    {mgr && cfg.settings.features.invoicing && ["accepted", "fulfilled"].includes(o.status) && !(cfg.settings.features.distributorBilling && o.distributor_id && !o.invoice) && (o.invoice
       ? <button className="sm ghost" onClick={() => openPrint(s, o.invoice.id).catch(e => setMsg(e.message))}>Print {o.invoice.number}</button>
       : <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/invoice`, { method: "POST", body: "{}" }))}>Create GST invoice</button>)}
   </OrderCard>)}<p className="err">{msg}</p></>;
 }
 
-export function Inbox({ s }: { s: Session }) {
+export function Inbox({ s, cfg }: { s: Session; cfg: Cfg }) {
   const [rows, setRows] = useState<any[]>([]); const [msg, setMsg] = useState("");
   const load = () => api(s, "/api/orders").then(setRows); useEffect(() => { load(); }, []);
   const set = async (id: number, status: string) => { try { await api(s, `/api/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }); load(); } catch (e: any) { setMsg(e.message); } };
   return <><h2>Order inbox</h2>{!rows.length && <p className="muted">No orders routed to you yet.</p>}
     {rows.map(o => <OrderCard key={o.id} o={o}>
       {o.status === "placed" && <><button className="sm" onClick={() => set(o.id, "accepted")}>Accept</button> <button className="sm ghost" onClick={() => set(o.id, "rejected")}>Reject</button></>}
-      {o.status === "accepted" && <button className="sm" onClick={() => set(o.id, "fulfilled")}>Mark fulfilled</button>}</OrderCard>)}<p className="err">{msg}</p></>;
+      {o.status === "accepted" && <button className="sm" onClick={() => set(o.id, "fulfilled")}>Mark fulfilled</button>}
+      {cfg?.settings.features.invoicing && cfg.settings.features.distributorBilling && ["accepted", "fulfilled"].includes(o.status) && (o.invoice
+        ? <button className="sm ghost" onClick={() => openPrint(s, o.invoice.id).catch(e => setMsg(e.message))}>Print {o.invoice.number}</button>
+        : <button className="sm ghost" onClick={async () => { try { await api(s, `/api/orders/${o.id}/invoice`, { method: "POST", body: "{}" }); load(); } catch (e: any) { setMsg(e.message); } }}>Create GST invoice</button>)}</OrderCard>)}<p className="err">{msg}</p></>;
 }

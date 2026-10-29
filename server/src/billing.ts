@@ -3,7 +3,8 @@
 import type { Express, Response, Request, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
 import { bad, getCompany, parseJson, parseDate, today } from "./catalog.js";
-import type { Gst } from "./templates.js";
+import type { Gst, Settings } from "./templates.js";
+import { distributorProfile } from "./purchase.js";
 
 export const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export const fyOf = (date: string) => { const [y, m] = date.split("-").map(Number); const s = m >= 4 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, "0")}`; };
@@ -33,20 +34,20 @@ export const split = (taxable: number, rate: number, intra: boolean) => {
   const c = r2(tax / 2); return { cgst: c, sgst: r2(tax - c), igst: 0 };
 };
 
-async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "invoice" | "credit_note"; date: string; g: Gst; shop: any; orderId: number | null; refId: number | null; reason?: string | null;
+async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "invoice" | "credit_note"; issuer: string; date: string; g: Gst; shop: any; orderId: number | null; refId: number | null; reason?: string | null;
   lines: { orderLineId?: number | null; refLineId?: number | null; variantId: number; description: string; hsn: string | null; baseQty: number; uom: string; rate: number; taxable: number; gstRate: number }[] }) {
   const sellerState = d.g.stateCode, pos = d.shop.state_code || String(d.shop.gstin || "").slice(0, 2) || sellerState;
   const intra = pos === sellerState;
   const fy = fyOf(d.date);
-  const number = formatNumber(d.g.numberFormat, d.kind === "invoice" ? d.g.invoicePrefix : d.g.creditPrefix, fy, await nextNumber(tx, cid, d.kind, fy));
+  const number = formatNumber(d.g.numberFormat, d.kind === "invoice" ? d.g.invoicePrefix : d.g.creditPrefix, fy, await nextNumber(tx, cid, d.issuer === "company" ? d.kind : `${d.kind}:${d.issuer}`, fy));
   const lines = d.lines.map(l => { const t = split(l.taxable, l.gstRate, intra); return { ...l, ...t, total: r2(l.taxable + t.cgst + t.sgst + t.igst) }; });
   const sum = (k: "taxable" | "cgst" | "sgst" | "igst") => r2(lines.reduce((a, l) => a + l[k], 0));
   const gross = r2(sum("taxable") + sum("cgst") + sum("sgst") + sum("igst")), total = Math.round(gross), roundOff = r2(total - gross);
-  const seller = JSON.stringify({ name: d.g.legalName, gstin: d.g.gstin, state: sellerState, address: d.g.address });
-  const buyer = JSON.stringify({ name: d.shop.name, gstin: d.shop.gstin || "", state: pos, address: [d.shop.address, d.shop.city].filter(Boolean).join(", ") });
-  const inv = (await tx.query(`INSERT INTO invoices (company_id,kind,number,fy,doc_date,order_id,ref_invoice_id,shop_id,seller,buyer,place_of_supply,intra_state,reason,taxable,cgst,sgst,igst,round_off,total,created_by)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
-    [cid, d.kind, number, fy, d.date, d.orderId, d.refId, d.shop.id, seller, buyer, pos, intra, d.reason ?? null, sum("taxable"), sum("cgst"), sum("sgst"), sum("igst"), roundOff, total, uid])).rows[0];
+  const seller = JSON.stringify({ name: d.g.legalName, gstin: d.g.gstin, state: sellerState, address: d.g.address, city: d.g.city || "", pin: d.g.pincode || "" });
+  const buyer = JSON.stringify({ name: d.shop.name, gstin: d.shop.gstin || "", state: pos, address: [d.shop.address, d.shop.city].filter(Boolean).join(", "), city: d.shop.city || "", pin: d.shop.pincode || "" });
+  const inv = (await tx.query(`INSERT INTO invoices (company_id,issuer,kind,number,fy,doc_date,order_id,ref_invoice_id,shop_id,seller,buyer,place_of_supply,intra_state,reason,taxable,cgst,sgst,igst,round_off,total,created_by)
+    VALUES ($1,$21,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+    [cid, d.kind, number, fy, d.date, d.orderId, d.refId, d.shop.id, seller, buyer, pos, intra, d.reason ?? null, sum("taxable"), sum("cgst"), sum("sgst"), sum("igst"), roundOff, total, uid, d.issuer])).rows[0];
   for (const l of lines) await tx.query(`INSERT INTO invoice_lines (invoice_id,order_line_id,ref_line_id,variant_id,description,hsn,base_qty,uom,rate,taxable,gst_rate,cgst,sgst,igst,total)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [inv.id, l.orderLineId ?? null, l.refLineId ?? null, l.variantId, l.description, l.hsn, l.baseQty, l.uom, l.rate, l.taxable, l.gstRate, l.cgst, l.sgst, l.igst, l.total]);
   return inv;
@@ -90,31 +91,50 @@ type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; tenant: (req: any
   wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void };
 
 export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
-  const BILL = ["company_admin", "manager"];
+  const BILL = ["company_admin", "manager", "distributor"];
   const ready = async (cid: number) => {
     const { settings } = await getCompany(db, cid);
     if (!settings.features.invoicing) throw bad("invoicing is turned off for this company");
-    const g = settings.gst;
-    if (!g.gstin || !g.stateCode || !g.legalName) throw bad("set legal name, GSTIN and state code in Settings → GST first");
     return settings;
+  };
+  /** Who issues the document: the company, or (with distributor billing on) the distributor under its own GSTIN and numbering. */
+  const issuerOf = async (req: any, cid: number, settings: Settings): Promise<{ key: string; g: Gst }> => {
+    if (req.user.role !== "distributor") {
+      const g = settings.gst;
+      if (!g.gstin || !g.stateCode || !g.legalName) throw bad("set legal name, GSTIN and state code in Settings → GST first");
+      return { key: "company", g };
+    }
+    if (!settings.features.distributorBilling) throw bad("distributor billing is turned off for this company", 403);
+    const p = await distributorProfile(db, cid, req.user.uid);
+    if (!p?.legal_name || !p?.gstin || !p?.state_code) throw bad("set your legal name, GSTIN and state code in your profile first");
+    return { key: `d${req.user.uid}`, g: { ...settings.gst, legalName: p.legal_name, gstin: p.gstin, stateCode: p.state_code, address: p.address || "", city: p.city || "", pincode: p.pincode || "",
+      invoicePrefix: p.invoice_prefix || "INV", creditPrefix: p.credit_prefix || "CN", numberFormat: p.number_format || settings.gst.numberFormat } };
+  };
+  const scope = (req: any) => req.user.role === "distributor" ? `d${req.user.uid}` : null;
+  const visible = async (req: any, cid: number, id: number) => {
+    const inv = await loadInvoice(db, cid, id);
+    if (scope(req) && inv.issuer !== scope(req)) throw bad("invoice not found", 404);
+    return inv;
   };
   const docDate = (v: unknown) => { const d = v ? parseDate(v)! : today(); if (d > today()) throw bad("document date cannot be in the future"); return d; };
 
   app.post("/api/orders/:id/invoice", auth(...BILL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const settings = await ready(cid);
+    const issuer = await issuerOf(req, cid, settings);
     const date = docDate(req.body?.date);
     const inv = await withTx(db, async tx => {
       const o = (await tx.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
-      if (!o) throw bad("order not found", 404);
+      if (!o || (issuer.key !== "company" && o.distributor_id !== req.user.uid)) throw bad("order not found", 404);
+      if (issuer.key === "company" && settings.features.distributorBilling && o.distributor_id) throw bad("this order is billed by its distributor", 409);
       if (!["accepted", "fulfilled"].includes(o.status)) throw bad("only accepted or fulfilled orders can be invoiced", 409);
       if ((await tx.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order already invoiced", 409);
       const shop = (await tx.query("SELECT * FROM shops WHERE id=$1", [o.shop_id])).rows[0];
       const lines = (await tx.query(`SELECT l.*, v.sku, v.attrs, i.name, i.hsn FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
         WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
-      return createDoc(tx, cid, req.user.uid, { kind: "invoice", date, g: settings.gst, shop, orderId: o.id, refId: null, lines: lines.map(l => ({
+      return createDoc(tx, cid, req.user.uid, { kind: "invoice", issuer: issuer.key, date, g: issuer.g, shop, orderId: o.id, refId: null, lines: lines.map(l => ({
         orderLineId: l.id, variantId: l.variant_id, description: `${l.name} ${Object.values(parseJson<Record<string, string>>(l.attrs, {})).join(" / ")} (${l.sku})`.replace(/\s+/g, " "),
-        hsn: l.hsn, baseQty: Number(l.base_qty), uom: l.uom, rate: Number(l.price) * (1 - Number(l.discount_pct) / 100),
+        hsn: l.hsn, baseQty: Number(l.base_qty), uom: l.uom, rate: Number(l.base_qty) ? r2(Number(l.amount) / Number(l.base_qty)) : 0,
         taxable: Number(l.amount), gstRate: rateFor(settings.gst, l.hsn) })) });
     });
     res.status(201).json(await loadInvoice(db, cid, inv.id));
@@ -124,12 +144,14 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   app.post("/api/invoices/:id/credit-note", auth(...BILL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const settings = await ready(cid);
+    const issuer = await issuerOf(req, cid, settings);
     const date = docDate(req.body?.date);
     const want = (Array.isArray(req.body?.lines) ? req.body.lines : []).filter((l: any) => Number(l.qty) > 0);
     if (!want.length) throw bad("at least one line with qty > 0");
     if (!String(req.body?.reason || "").trim()) throw bad("reason required");
     const cn = await withTx(db, async tx => {
       const inv = await loadInvoice(tx, cid, Number(req.params.id));
+      if (inv.issuer !== issuer.key) throw bad("invoice not found", 404);
       if (inv.kind !== "invoice") throw bad("credit notes can only be raised against invoices");
       const shop = (await tx.query("SELECT * FROM shops WHERE id=$1", [inv.shop_id])).rows[0];
       const out = [];
@@ -142,7 +164,7 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         out.push({ refLineId: l.id, variantId: l.variant_id, description: l.description, hsn: l.hsn, baseQty: q, uom: l.uom, rate: l.rate,
           taxable: r2(l.taxable * q / l.base_qty), gstRate: l.gst_rate, orderLineId: l.order_line_id, already: done });
       }
-      const doc = await createDoc(tx, cid, req.user.uid, { kind: "credit_note", date, g: settings.gst, shop, orderId: inv.order_id, refId: inv.id, reason: String(req.body.reason).trim(), lines: out });
+      const doc = await createDoc(tx, cid, req.user.uid, { kind: "credit_note", issuer: issuer.key, date, g: issuer.g, shop, orderId: inv.order_id, refId: inv.id, reason: String(req.body.reason).trim(), lines: out });
       if (req.body?.restock && settings.features.stock) for (const l of out) {
         // Return into the allocated batches, skipping what earlier returns already put back (FIFO over allocations).
         let skip = l.already, left = l.baseQty;
@@ -162,16 +184,18 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
 
   app.get("/api/invoices", auth(...BILL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const rows = (await db.query(`SELECT i.id,i.kind,i.number,i.doc_date,i.order_id,i.ref_invoice_id,i.intra_state,i.taxable,i.cgst,i.sgst,i.igst,i.total,s.name AS shop_name
-      FROM invoices i JOIN shops s ON s.id=i.shop_id WHERE i.company_id=$1 ORDER BY i.id DESC`, [cid])).rows;
+    const sc = scope(req);
+    const rows = (await db.query(`SELECT i.id,i.issuer,i.kind,i.number,i.doc_date,i.order_id,i.ref_invoice_id,i.intra_state,i.taxable,i.cgst,i.sgst,i.igst,i.total,i.seller,s.name AS shop_name
+      FROM invoices i JOIN shops s ON s.id=i.shop_id WHERE i.company_id=$1 ${sc ? "AND i.issuer=$2" : ""} ORDER BY i.id DESC`, sc ? [cid, sc] : [cid])).rows
+      .map(r => ({ ...r, seller: parseJson<any>(r.seller, {}).name }));
     res.json(rows.map(r => ({ ...r, taxable: Number(r.taxable), total: Number(r.total), tax: Number(r.cgst) + Number(r.sgst) + Number(r.igst) })));
   }));
   app.get("/api/invoices/:id", auth(...BILL), wrap(async (req, res) => {
-    const cid = tenant(req, res); if (cid == null) return; res.json(await loadInvoice(db, cid, Number(req.params.id)));
+    const cid = tenant(req, res); if (cid == null) return; res.json(await visible(req, cid, Number(req.params.id)));
   }));
   app.get("/api/invoices/:id/print", auth(...BILL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const inv = await loadInvoice(db, cid, Number(req.params.id));
+    const inv = await visible(req, cid, Number(req.params.id));
     const ref = inv.ref_invoice_id ? (await db.query("SELECT number FROM invoices WHERE id=$1", [inv.ref_invoice_id])).rows[0]?.number : undefined;
     res.type("html").send(invoiceHtml(inv, ref));
   }));

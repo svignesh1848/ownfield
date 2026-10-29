@@ -97,6 +97,7 @@ export function validateSettings(input: any, base: Settings): Settings {
     if (g.gstin && !/^\d{2}[A-Z0-9]{13}$/.test(g.gstin)) throw bad("GSTIN must be 15 characters starting with the 2-digit state code");
     if (g.stateCode && !/^\d{2}$/.test(g.stateCode)) throw bad("state code must be 2 digits");
     if (g.gstin && g.stateCode && g.gstin.slice(0, 2) !== g.stateCode) throw bad("GSTIN does not match state code");
+    if (g.pincode && !/^\d{6}$/.test(String(g.pincode))) throw bad("PIN code must be 6 digits");
     const rate = (r: unknown) => { const n = Number(r); if (!(n >= 0 && n <= 100)) throw bad(`invalid GST rate ${r}`); return n; };
     g.defaultRate = rate(g.defaultRate);
     g.hsnRates = (Array.isArray(g.hsnRates) ? g.hsnRates : String(g.hsnRates || "").split(",").map(p => p.trim()).filter(Boolean).map(p => { const [prefix, r] = p.split("="); return { prefix, rate: r }; }))
@@ -141,13 +142,15 @@ async function importShop({ db, cid, s }: Imp, r: any) {
   if (gstin && !/^\d{2}[A-Z0-9]{13}$/.test(gstin)) throw bad("invalid GSTIN");
   const state = String(r.state_code ?? "").trim().padStart(empty(r.state_code) ? 0 : 2, "0") || gstin?.slice(0, 2) || null;
   if (state && !/^\d{2}$/.test(state)) throw bad("state code must be 2 digits");
-  const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, gstin, dl, custom, state];
+  const pin = String(r.pincode ?? r.pin ?? r.pin_code ?? "").trim() || null;
+  if (pin && !/^\d{6}$/.test(pin)) throw bad("PIN code must be 6 digits");
+  const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, gstin, dl, custom, state, pin];
   const ex = (await db.query("SELECT id, distributor_id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
   if (ex) {
-    await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,distributor_id=$10 WHERE id=$11", [...vals, dist ?? ex.distributor_id, ex.id]);
+    await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,pincode=$10,distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
     return "updated";
   }
-  await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", [...vals, dist, cid, String(r.code)]);
+  await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [...vals, dist, cid, String(r.code)]);
   return "inserted";
 }
 

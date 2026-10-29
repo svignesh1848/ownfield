@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (company_id, email));
 CREATE TABLE IF NOT EXISTS shops (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), code TEXT NOT NULL,
-  name TEXT NOT NULL, owner_name TEXT, phone TEXT, address TEXT, city TEXT, state_code TEXT, gstin TEXT, drug_licence TEXT, custom TEXT,
+  name TEXT NOT NULL, owner_name TEXT, phone TEXT, address TEXT, city TEXT, pincode TEXT, state_code TEXT, gstin TEXT, drug_licence TEXT, custom TEXT,
   distributor_id INTEGER REFERENCES users(id), UNIQUE (company_id, code));
 CREATE TABLE IF NOT EXISTS items (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), code TEXT NOT NULL, name TEXT NOT NULL,
@@ -62,11 +62,11 @@ CREATE TABLE IF NOT EXISTS doc_series (
   company_id INTEGER NOT NULL REFERENCES companies(id), kind TEXT NOT NULL, fy TEXT NOT NULL, next_no INTEGER NOT NULL,
   PRIMARY KEY (company_id, kind, fy));
 CREATE TABLE IF NOT EXISTS invoices (
-  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), kind TEXT NOT NULL, number TEXT NOT NULL, fy TEXT NOT NULL,
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), issuer TEXT NOT NULL DEFAULT 'company', kind TEXT NOT NULL, number TEXT NOT NULL, fy TEXT NOT NULL,
   doc_date TEXT NOT NULL, order_id INTEGER REFERENCES orders(id), ref_invoice_id INTEGER REFERENCES invoices(id), shop_id INTEGER NOT NULL REFERENCES shops(id),
   seller TEXT NOT NULL, buyer TEXT NOT NULL, place_of_supply TEXT, intra_state BOOLEAN NOT NULL, reason TEXT,
   taxable NUMERIC NOT NULL, cgst NUMERIC NOT NULL, sgst NUMERIC NOT NULL, igst NUMERIC NOT NULL, round_off NUMERIC NOT NULL, total NUMERIC NOT NULL,
-  created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, number));
+  created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, issuer, number));
 CREATE TABLE IF NOT EXISTS invoice_lines (
   id SERIAL PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), order_line_id INTEGER REFERENCES order_lines(id),
   ref_line_id INTEGER REFERENCES invoice_lines(id), variant_id INTEGER NOT NULL REFERENCES variants(id), description TEXT NOT NULL, hsn TEXT,

@@ -5,7 +5,7 @@ import { PoSettings, poForSave } from "./po";
 
 type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void };
 const FEATURES: [string, string][] = [["stock", "Stock tracking"], ["batches", "Batch & expiry (FEFO)"], ["sizeGrid", "Size-grid ordering"], ["gps", "GPS check-in required"],
-  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"], ["photos", "Visit photos"], ["invoicing", "GST invoicing & credit notes"], ["purchaseOrders", "Purchase orders from distributors"]];
+  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"], ["photos", "Visit photos"], ["invoicing", "GST invoicing & credit notes"], ["purchaseOrders", "Purchase orders from distributors"], ["distributorBilling", "Distributors invoice under their own GSTIN"]];
 export const attrText = (a: Record<string, string>) => Object.values(a || {}).join(" / ");
 const unitsText = (u: { code: string; factor: number }[]) => u.map(x => `${x.code}=${x.factor}`).join(", ");
 
