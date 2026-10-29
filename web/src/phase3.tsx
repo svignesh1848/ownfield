@@ -158,3 +158,34 @@ export function LeaveApprovals({ s }: ViewProps) {
     {att && <Table rows={att.reps.map((r: any) => ({ rep_name: r.rep, days_worked: r.present, days_on_leave: r.leave }))} cols={["rep_name", "days_worked", "days_on_leave"]} empty={{ title: "No sales reps yet" }} />}
     <p className="muted small">Days worked = days with at least one outlet visit.</p></>;
 }
+
+// ---------- 4) Incentives ----------
+const METRIC: Record<string, string> = { value: "sales value", orders: "number of orders", visits: "number of visits" };
+export function IncentiveRules({ s }: ViewProps) {
+  const [list, setList] = useState<any[] | null>(null); const [name, setName] = useState(""); const [metric, setMetric] = useState("value");
+  const [slabs, setSlabs] = useState([{ minPct: "80", amount: "1000" }, { minPct: "100", amount: "2500" }]);
+  const load = () => api(s, "/api/incentive-rules").then(setList).catch(e => { setList([]); toast(e.message, "err"); }); useEffect(() => { load(); }, []);
+  const save = () => api(s, "/api/incentive-rules", { method: "POST", body: JSON.stringify({ name, metric, slabs: slabs.filter(x => x.minPct).map(x => ({ minPct: Number(x.minPct), amount: Number(x.amount) })) }) })
+    .then(() => { setName(""); load(); }).catch(e => toast(e.message, "err"));
+  return <><h2>Incentive rules</h2><p className="muted">Pay a bonus when a sales rep reaches a % of their monthly target. The highest step reached is paid.</p>
+    {list == null ? <Loading /> : list.map(r => <div className="row" key={r.id}><b>{r.name}</b> {!r.active && <span className="pill">off</span>}
+      <div className="muted small">On {METRIC[r.metric]} target: {r.slabs.map((x: any) => `${x.minPct}% → ${inr0(x.amount)}`).join(" · ")}</div>
+      <button className="sm ghost" onClick={() => api(s, `/api/incentive-rules/${r.id}/active`, { method: "POST", body: JSON.stringify({ active: !r.active }) }).then(load)}>{r.active ? "Turn off" : "Turn on"}</button></div>)}
+    <div className="card sub"><h3>New rule</h3>
+      <Field label="Rule name"><input value={name} placeholder="e.g. Monthly sales bonus" onChange={e => setName(e.target.value)} /></Field>
+      <Field label="Based on the target for"><select value={metric} onChange={e => setMetric(e.target.value)}>{Object.entries(METRIC).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+      {slabs.map((x, i) => <div className="two" key={i}><Field label="If they reach (%)"><input inputMode="numeric" value={x.minPct} onChange={e => setSlabs(slabs.map((y, j) => j === i ? { ...y, minPct: e.target.value.replace(/\D/g, "") } : y))} /></Field>
+        <Field label="They earn (₹)"><input inputMode="numeric" value={x.amount} onChange={e => setSlabs(slabs.map((y, j) => j === i ? { ...y, amount: e.target.value.replace(/[^\d.]/g, "") } : y))} /></Field></div>)}
+      <button className="ghost sm" onClick={() => setSlabs([...slabs, { minPct: "", amount: "" }])}>+ Add step</button>{" "}<button onClick={save} disabled={!name.trim()}>Save rule</button></div></>;
+}
+export function Incentives({ s }: ViewProps) {
+  const [month, setMonth] = useState(month0()); const [d, setD] = useState<any[] | null>(null);
+  useEffect(() => { setD(null); api(s, `/api/incentives?month=${month}`).then(setD).catch(e => { setD([]); toast(e.message, "err"); }); }, [month]);
+  const rep = s.user.role === "sales_rep";
+  return <><h2>{rep ? "My incentives" : "Incentives"}</h2><Field label="Month"><input type="month" value={month} onChange={e => setMonth(e.target.value)} /></Field>
+    {d == null ? <Loading /> : !d.length ? <Empty icon="🏆" title="No sales reps yet" /> : d.map(r => <div className="row" key={r.repId}>
+      {rep ? <div className="earn">{inr0(r.total)}</div> : <><b>{r.rep}</b> · <b>{inr0(r.total)}</b></>}
+      {!r.lines.length && <p className="muted">No incentive rules set up yet.</p>}
+      {r.lines.map((l: any) => <div key={l.ruleId} className="muted small">{l.rule}: {l.target == null ? "no target set this month" : `${l.pct}% of ${METRIC[l.metric]} target → ${inr0(l.earned)}`}
+        {l.next && ` · reach ${l.next.minPct}% to earn ${inr0(l.next.amount)}`}</div>)}</div>)}</>;
+}

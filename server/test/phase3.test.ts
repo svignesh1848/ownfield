@@ -103,6 +103,26 @@ describe("leave & attendance", () => {
   });
 });
 
+describe("incentives", () => {
+  it("admin sets % slabs on a target; rep sees the highest slab earned", async () => {
+    await request(app).get("/api/incentives").set(H("r1")).expect(403);
+    await features("a", { incentives: true }).expect(200);
+    const month = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
+    await request(app).put("/api/targets").set(H("a")).send({ repId: ids.r1, month, metric: "visits", target: 1 }).expect(200);
+    await request(app).post("/api/incentive-rules").set(H("m")).send({ name: "x", metric: "visits", slabs: [{ minPct: 50, amount: 1 }] }).expect(403);
+    await request(app).post("/api/incentive-rules").set(H("a")).send({ name: "Bad", metric: "visits", slabs: [{ minPct: 0, amount: 1 }] }).expect(400);
+    const r = (await request(app).post("/api/incentive-rules").set(H("a")).send({ name: "Visit bonus", metric: "visits", slabs: [{ minPct: 150, amount: 900 }, { minPct: 80, amount: 300 }, { minPct: 100, amount: 500 }] }).expect(201)).body;
+    expect(r.slabs.map((x: any) => x.minPct)).toEqual([80, 100, 150]);
+    const mine = (await request(app).get("/api/incentives").set(H("r1")).expect(200)).body;
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ rep: "Rep One", total: 500, lines: [{ rule: "Visit bonus", pct: 100, earned: 500, next: { minPct: 150, amount: 900 } }] });
+    const all = (await request(app).get("/api/incentives").set(H("m"))).body;
+    expect(all.find((x: any) => x.rep === "Rep Two").total).toBe(0);
+    await request(app).post(`/api/incentive-rules/${r.id}/active`).set(H("a")).send({ active: false }).expect(200);
+    expect((await request(app).get("/api/incentives").set(H("r1"))).body[0].total).toBe(0);
+  });
+});
+
 describe("DEMO sample data", () => {
   it("seeds labelled sample data idempotently", async () => {
     await seedDemo(db); await seedDemo(db);

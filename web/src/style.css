@@ -117,3 +117,4 @@ nav:not(.bottom){display:flex;gap:6px;margin:8px 0;overflow-x:auto}
 .thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;background:#eef1f5;display:inline-block}
 .qa{margin:14px 0}.seg{display:flex;gap:8px}.seg button{flex:1}.qrow{border-bottom:1px solid var(--line);padding:6px 0}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .earn{font-size:28px;font-weight:700;color:var(--accent-d)}
+.earn-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;background:var(--accent-l);color:var(--accent-d);border:1px solid #b7ddd6;margin:8px 0;text-align:left}.earn-card:hover{background:#d8eee9}.earn-card b{font-size:26px}

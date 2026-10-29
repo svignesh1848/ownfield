@@ -12,14 +12,15 @@ const hello = (name: string) => { const h = Number(new Intl.DateTimeFormat("en-I
 export function RepHome({ s, cfg, go }: ViewProps) {
   const f = cfg.settings.features;
   const [d, setD] = useState<any>(null);
-  useEffect(() => { Promise.all([safe(api(s, "/api/beats"), []), safe(api(s, "/api/visits"), []), f.invoicing ? safe(api(s, "/api/outstanding"), []) : []]).then(([beats, visits, out]) => {
+  useEffect(() => { Promise.all([safe(api(s, "/api/beats"), []), safe(api(s, "/api/visits"), []), f.invoicing ? safe(api(s, "/api/outstanding"), []) : [], f.incentives ? safe(api(s, "/api/incentives"), []) : []]).then(([beats, visits, out, inc]) => {
     const t = today(), stops = beats.reduce((a: number, b: any) => a + b.shops.length, 0);
     const done = new Set(visits.filter((v: any) => v.check_out_at && new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(v.check_in_at)) === t).map((v: any) => v.shop_id)).size;
-    setD({ stops, done, open: visits.find((v: any) => !v.check_out_at), due: out.reduce((a: number, r: any) => a + r.outstanding, 0) });
+    setD({ stops, done, open: visits.find((v: any) => !v.check_out_at), due: out.reduce((a: number, r: any) => a + r.outstanding, 0), earned: inc[0]?.total ?? 0, next: inc[0]?.lines.find((l: any) => l.next)?.next });
   }); }, []);
   if (!d) return <Loading />;
   return <><h2 className="hello">{hello(s.user.name)}</h2>
     <p className="muted">{d.stops ? `${d.done} of ${d.stops} outlets visited today` : "No beat assigned yet — ask your manager to assign one."}</p>
+    {f.incentives && <button className="earn-card" onClick={() => go("incentives")}><span>🏆 Earned this month</span><b>{inr0(d.earned)}</b>{d.next && <span className="small">Reach {d.next.minPct}% of target to earn {inr0(d.next.amount)}</span>}</button>}
     {d.open && <div className="banner">You are in a visit at <b>{d.open.shop_name}</b>. <button className="sm" onClick={() => go("beat")}>Continue visit</button></div>}
     <div className="tiles">
       <Tile icon="🗺️" title="Today's beat" text={d.stops ? `${d.stops - d.done} outlets left` : "Not assigned"} onClick={() => go("beat")} />

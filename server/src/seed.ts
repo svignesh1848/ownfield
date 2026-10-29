@@ -48,4 +48,12 @@ export async function seedDemo(db: Db, code = "DEMO") {
     const d = new Date(Date.now() + 7 * 864e5).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     await db.query("INSERT INTO leaves (company_id,rep_id,from_date,to_date,kind,reason) VALUES ($1,$2,$3,$3,'Casual',$4)", [cid, rep.id, d, "Sample leave request"]);
   }
+  // 4) Incentives
+  await enable(db, cid, ["incentives"]);
+  if (!(await one(db, "SELECT id FROM incentive_rules WHERE company_id=$1", [cid]))) {
+    await db.query("INSERT INTO incentive_rules (company_id,name,metric,slabs) VALUES ($1,$2,'value',$3)", [cid, "Monthly sales bonus (sample)", JSON.stringify([{ minPct: 80, amount: 1000 }, { minPct: 100, amount: 2500 }, { minPct: 120, amount: 4000 }])]);
+    const month = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
+    if (rep && !(await one(db, "SELECT id FROM targets WHERE company_id=$1 AND rep_id=$2 AND month=$3 AND metric='value'", [cid, rep.id, month])))
+      await db.query("INSERT INTO targets (company_id,rep_id,month,metric,target) VALUES ($1,$2,$3,'value',$4)", [cid, rep.id, month, 5000]);
+  }
 }
