@@ -34,6 +34,6 @@ Write in simple, everyday business words. Keep product and brand terms as they a
 | Sindhi · سنڌي | `sd` | RTL | 137 / 974 (14%) | beta |
 | Tamil · தமிழ் | `ta` | LTR | 137 / 974 (14%) | needs native review |
 | Telugu · తెలుగు | `te` | LTR | 137 / 974 (14%) | needs native review |
-| Urdu · اردو | `ur` | RTL | 169 / 974 (17%) | needs native review |
+| Urdu · اردو | `ur` | RTL | 173 / 974 (18%) | needs native review |
 
 Untranslated strings show in English. The menus, sign-in screen, common buttons and order/visit actions are covered first; long help texts and admin screens are mostly still English.

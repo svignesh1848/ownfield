@@ -136,7 +136,7 @@
  "Yes": "ہاں",
  "You save": "آپ کی بچت",
  "cash=Cash;*=Bank": "cash=Cash;*=Bank",
- "% of target to earn": "% ہدف پورا کریں، کمانے کے لیے",
+ "% of target to earn": "% پورا کریں اور کمائیں",
  "Apply for a day off": "چھٹی کے لیے درخواست دیں",
  "Approvals pending": "منظوری باقی",
  "Check in at an outlet": "دکان پر چیک اِن کریں",
@@ -167,5 +167,9 @@
  "Offers running now": "ابھی چل رہی آفرز",
  "You owe {0}": "آپ کو {0} دینا ہے",
  "till {0}": "{0} تک",
- "Suggested order": "تجویز کردہ آرڈر"
+ "Suggested order": "تجویز کردہ آرڈر",
+ "Reach": "ہدف کا",
+ "Not assigned": "نہیں دی گئی",
+ "My orders": "میرے آرڈر",
+ "My targets": "میرے اہداف"
 }
