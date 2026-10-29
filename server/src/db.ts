@@ -232,6 +232,10 @@ ALTER TABLE shops ADD COLUMN IF NOT EXISTS outlet_type TEXT;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS auto_ref TEXT;
 ALTER TABLE schemes ADD COLUMN IF NOT EXISTS budget NUMERIC;
 ALTER TABLE stock_moves ADD COLUMN IF NOT EXISTS reason TEXT;
+CREATE TABLE IF NOT EXISTS rep_days (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), rep_id INTEGER NOT NULL REFERENCES users(id), day TEXT NOT NULL,
+  start_at TIMESTAMPTZ, start_lat DOUBLE PRECISION, start_lng DOUBLE PRECISION, selfie_file TEXT, selfie_mime TEXT,
+  end_at TIMESTAMPTZ, end_lat DOUBLE PRECISION, end_lng DOUBLE PRECISION, UNIQUE (rep_id, day));
 CREATE TABLE IF NOT EXISTS stock_adjust_requests (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER REFERENCES users(id), body TEXT NOT NULL, reason TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending', requested_by INTEGER REFERENCES users(id), decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ, note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());

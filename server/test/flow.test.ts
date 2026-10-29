@@ -191,3 +191,35 @@ describe("8. expiry block, adjustment reasons/approval, GRN", () => {
     expect((await db.query("SELECT grn_no FROM po_dispatches WHERE id=$1", [d])).rows[0].grn_no).toBe(`GRN-PO-SAMPLE-1-${d}`);
   });
 });
+
+describe("10. start/end day and the retailer home", () => {
+  it("with the rule on, a rep starts the day with GPS (selfie optional) before visits, and ends it", async () => {
+    await request(app).post("/api/day/start").set(as("rep")).send({ lat: 13, lng: 80 }).expect(409); // rule off
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ dayStart: true, selfie: true }).expect(200);
+    for (const v of (await request(app).get("/api/visits").set(as("rep"))).body.filter((v: any) => !v.check_out_at))
+      await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ noOrderReason: "Shop closed" });
+    await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s, lat: 13, lng: 80 }).expect(409);
+    await request(app).post("/api/day/start").set(as("rep")).send({}).expect(400);
+    await request(app).post("/api/day/start").set(as("rep")).field("lat", "13.08").field("lng", "80.27").expect(201);
+    await request(app).post("/api/day/start").set(as("rep")).send({ lat: 13, lng: 80 }).expect(409);
+    const v = (await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s, lat: 13, lng: 80 }).expect(201)).body;
+    await request(app).post("/api/day/end").set(as("rep")).send({ lat: 13, lng: 80 }).expect(409); // visit still open
+    await request(app).post(`/api/visits/${v.id}/checkout`).set(as("rep")).send({ noOrderReason: "Shop closed" }).expect(200);
+    await request(app).post("/api/day/end").set(as("rep")).send({ lat: 13.1, lng: 80.2 }).expect(200);
+    const m = (await request(app).get("/api/day").set(as("mgr")).expect(200)).body;
+    expect(m.rows[0]).toMatchObject({ rep_name: "Rep", start_lat: 13.08, has_selfie: false });
+    expect(m.rows[0].end_at).toBeTruthy();
+    await request(app).post("/api/visits/checkin").set(as("rep")).send({ shopId: id.s, lat: 13, lng: 80 }).expect(409);
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ dayStart: false }).expect(200);
+  });
+  it("retailer home shows active schemes, outstanding and announcements", async () => {
+    await on({ retailerApp: true });
+    await request(app).post("/api/users").set(as("adm")).send({ email: "shop@x.com", name: "Shop", password: "pw", role: "retailer", shopId: id.s }).expect(201);
+    T.shop = await login("FL", "shop@x.com");
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ announcements: [{ text: "Sample: Diwali offers start Monday" }, { text: "old", until: "2020-01-01" }] }).expect(200);
+    const h = (await request(app).get("/api/retailer/home").set(as("shop")).expect(200)).body;
+    expect(h.announcements).toEqual([{ text: "Sample: Diwali offers start Monday" }]);
+    expect(Array.isArray(h.schemes)).toBe(true); expect(typeof h.outstanding).toBe("number");
+    await request(app).get("/api/retailer/home").set(as("rep")).expect(403);
+  });
+});

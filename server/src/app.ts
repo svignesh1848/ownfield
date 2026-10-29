@@ -22,6 +22,7 @@ import { securityHeaders, tightCors, loginGuard, audit, errorHandler } from "./s
 import { registerAccountRoutes, newDeviceCheck, totpVerify } from "./accounts.js";
 import { registerVanRoutes } from "./van.js";
 import { registerFlowRoutes } from "./flow.js";
+import { registerWorkdayRoutes } from "./workday.js";
 import { registerInventoryRoutes } from "./inventory.js";
 import { registerClaimRoutes } from "./claims.js";
 import { registerLeadRoutes } from "./leads.js";
@@ -266,6 +267,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerIncentiveRoutes({ app, db, auth, wrap, tenant });
   registerAccountRoutes({ app, db, auth, wrap, tenant, guard });
   registerFlowRoutes({ app, db, auth, wrap, tenant });
+  registerWorkdayRoutes({ app, db, auth, wrap, tenant });
   registerVanRoutes({ app, db, auth, wrap, tenant });
   registerInventoryRoutes({ app, db, auth, wrap, tenant });
   registerClaimRoutes({ app, db, auth, wrap, tenant });

@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { api, type ViewProps } from "./main";
 import { t } from "./i18n";
+import { DayCard } from "./phase3";
 import { inr0, today, Loading, Term } from "./ui";
 
 const Tile = ({ icon, title, text, badge, onClick, tone }: { icon: string; title: string; text?: string; badge?: string | number | null; onClick: () => void; tone?: "accent" | "warn" }) =>
@@ -22,6 +23,7 @@ export function RepHome({ s, cfg, go }: ViewProps) {
   return <><h2 className="hello">{hello(s.user.name)}</h2>
     <p className="muted">{d.stops ? t("{0} of {1} outlets visited today", d.done, d.stops) : t("No beat assigned yet — ask your manager to assign one.")}</p>
     {f.incentives && <button className="earn-card" onClick={() => go("incentives")}><span>{t("🏆 Earned this month")}</span><b>{inr0(d.earned)}</b>{d.next && <span className="small">{t("Reach")}{" "}{d.next.minPct}{t("% of target to earn")}{" "}{inr0(d.next.amount)}</span>}</button>}
+    <DayCard s={s} />
     {d.open && <div className="banner">{t("You are in a visit at")}{" "}<b>{d.open.shop_name}</b>. <button className="sm" onClick={() => go("beat")}>{t("Continue visit")}</button></div>}
     <div className="tiles">
       <Tile icon="🗺️" title={t("Today's beat")} text={d.stops ? t("{0} outlets left", d.stops - d.done) : t("Not assigned")} onClick={() => go("beat")} />

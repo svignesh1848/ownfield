@@ -1,6 +1,6 @@
 // Field rules: one simple settings page for the flow rules (no-order reasons, must-sell, expiry block, approvals, day start, announcements).
 import React, { useEffect, useState } from "react";
-import { api, type ViewProps } from "./main";
+import { api, Table, type ViewProps } from "./main";
 import { Field, toast, Loading } from "./ui";
 import { t } from "./i18n";
 
@@ -41,8 +41,17 @@ export function FlowSettings({ s }: ViewProps) {
       <Field label={t("Damage claims cap (% of monthly primary sales)")} help={t("0 = no cap.")}><input type="number" min={0} max={100} value={f.damageCapPct} onChange={e => set("damageCapPct", Number(e.target.value))} /></Field></div>
     <div className="card"><h3>{t("Retailer app")}</h3>
       {ta("ann", t("Announcements"), t("One per line. Optional end date after |, e.g. Diwali offer on all biscuits | 2026-11-15"))}</div>
-    <button className="block" onClick={save}>{t("Save rules")}</button></>;
+    <button className="block" onClick={save}>{t("Save rules")}</button>
+    {f.dayStart && <DayList s={s} />}</>;
 }
 // Default no-order and adjustment reasons, listed so they are translated (custom reasons show as typed).
 export const DEFAULT_REASON_WORDS = [t("Shop closed"), t("Owner not available"), t("Enough stock"), t("Payment pending"), t("Price issue"), t("Competitor scheme"), t("Other"), t("No reason given"),
   t("Damaged"), t("Expired"), t("Count correction"), t("Theft / loss"), t("Sample / free issue")];
+
+function DayList({ s }: { s: ViewProps["s"] }) {
+  const [d, setD] = useState<any>(null); useEffect(() => { api(s, "/api/day").then(setD).catch(() => setD({ rows: [] })); }, []);
+  const tm = (x: string | null) => x ? new Date(x).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "";
+  return <div className="card"><h3>{t("Who started their day today")}</h3>
+    <Table rows={d?.rows?.map((r: any) => ({ rep_name: r.rep_name, start_at: tm(r.start_at), end_at: tm(r.end_at), where: r.start_lat != null ? `${r.start_lat.toFixed(4)}, ${r.start_lng.toFixed(4)}` : "", selfie: r.has_selfie ? t("Yes") : "" })) ?? null}
+      cols={["rep_name", "start_at", "end_at", "where", "selfie"]} empty={{ title: t("Nobody has started yet") }} /></div>;
+}

@@ -1,3 +1,4 @@
+import { dayOpenCheck } from "./workday.js";
 import { emit, checkLowStock } from "./integrations/webhooks.js";
 import { logMove } from "./inventory.js";
 import { geofenceCheck } from "./tracking.js";
@@ -108,6 +109,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const [lat, lng] = coordOpt(settings.features.gps, req.body?.lat, req.body?.lng);
     if (!(await shopIn(cid, req.body?.shopId))) throw bad("shop not found", 404);
     if (await onLeave(db, cid, req.user.uid)) throw bad("You are on approved leave today, so visits are paused.", 409);
+    await dayOpenCheck(db, cid, req.user.uid);
     const open = (await db.query("SELECT id FROM visits WHERE rep_id=$1 AND check_out_at IS NULL", [req.user.uid])).rows[0];
     if (open) throw bad("check out of the current visit first", 409);
     await geofenceCheck(db, cid, Number(req.body.shopId), lat, lng);

@@ -19,6 +19,26 @@ export const uploadPhoto = async (s: Session, url: string, file: File, extra: Re
   fd.append("photo", await compressPhoto(file), "photo.jpg");
   return api(s, url, { method: "POST", body: fd });
 };
+const here = () => new Promise<{ lat: number; lng: number }>((ok, no) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => ok({ lat: p.coords.latitude, lng: p.coords.longitude }), () => no(new Error(t("Turn on location (GPS) to start or end your day"))), { enableHighAccuracy: true, timeout: 15000 }) : no(new Error(t("Turn on location (GPS) to start or end your day"))));
+/** Start/End Day card on the rep home (only when the company turns the rule on). */
+export function DayCard({ s }: { s: Session }) {
+  const [d, setD] = useState<any>(null); const [file, setFile] = useState<File | null>(null); const [busy, setBusy] = useState(false);
+  const load = () => api(s, "/api/day").then(setD).catch(() => setD({ on: false })); useEffect(() => { load(); }, []);
+  if (!d?.on) return null;
+  const go = async (end: boolean) => { setBusy(true); try { const p = await here();
+    if (end) await api(s, "/api/day/end", { method: "POST", body: JSON.stringify(p) });
+    else if (file) await uploadPhoto(s, "/api/day/start", file, { lat: String(p.lat), lng: String(p.lng) });
+    else await api(s, "/api/day/start", { method: "POST", body: JSON.stringify(p) });
+    toast(end ? t("Day ended") : t("Day started")); load(); } catch (e: any) { toast(e.message, "err"); } finally { setBusy(false); } };
+  const tm = (x: string) => new Date(x).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  const day = d.today;
+  return <div className="card"><h3>{t("My day")}</h3>
+    {!day ? <><p className="muted small">{t("Start your day before visiting outlets. Your location is saved.")}</p>
+      {d.selfie && <label className="chk"><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] ?? null)} /> {t("Selfie (optional)")}</label>}
+      <button disabled={busy} onClick={() => go(false)}>{t("Start day")}</button></>
+      : day.end_at ? <p>{t("Started {0} · Ended {1}", tm(day.start_at), tm(day.end_at))}</p>
+      : <><p>{t("Started {0}", tm(day.start_at))}</p><button className="ghost" disabled={busy} onClick={() => go(true)}>{t("End day")}</button></>}</div>;
+}
 /** Show a protected image (needs the login token). */
 export function AuthImg({ s, src, alt }: { s: Session; src: string; alt: string }) {
   const [u, setU] = useState("");
@@ -197,16 +217,19 @@ export function Incentives({ s }: ViewProps) {
 
 // ---------- 5) Retailer app ----------
 export function RetailerHome({ s, go }: ViewProps) {
-  const [me, setMe] = useState<any>(null); const [orders, setOrders] = useState<any[] | null>(null);
-  useEffect(() => { api(s, "/api/retailer/me").then(setMe).catch(e => setMe({ err: e.message })); api(s, "/api/orders").then(setOrders).catch(() => setOrders([])); }, []);
+  const [me, setMe] = useState<any>(null); const [orders, setOrders] = useState<any[] | null>(null); const [h, setH] = useState<any>(null);
+  useEffect(() => { api(s, "/api/retailer/me").then(setMe).catch(e => setMe({ err: e.message })); api(s, "/api/orders").then(setOrders).catch(() => setOrders([])); api(s, "/api/retailer/home").then(setH).catch(() => setH(null)); }, []);
   if (!me) return <Loading />;
   if (me.err) return <Empty icon="⚠️" title={t("Your shop app is not ready")} text={me.err} />;
   const open = (orders || []).filter(o => ["placed", "accepted"].includes(o.status)).length;
   return <><h2 className="hello">{t("Welcome,")}{" "}{me.name}</h2>
+    {h?.announcements?.map((a: any, i: number) => <div key={i} className="banner">📢 {a.text}</div>)}
+    {h?.outstanding > 0 && <p><b>{t("You owe {0}", inr0(h.outstanding))}</b></p>}
     <p className="muted">{me.distributor_name ? <>{t("Your orders go to")}{" "}<b>{me.distributor_name}</b>.</> : t("Your supplier will confirm your orders.")}</p>
     <div className="tiles">
       <button className="tile accent" onClick={() => go("order")}><span className="tile-ic">🛒</span><span className="tile-t">{t("Place an order")}</span><span className="tile-s">{t("Pick products and quantities")}</span></button>
       <button className="tile" onClick={() => go("orders")}><span className="tile-ic">📦</span><span className="tile-t">{t("My orders")}</span><span className="tile-s">{open ? t("{0} on the way", open) : t("See past orders")}</span></button>
       <button className="tile" onClick={() => go("catalog")}><span className="tile-ic">📚</span><span className="tile-t">{t("Products")}</span><span className="tile-s">{t("Prices and what's available")}</span></button>
-    </div></>;
+    </div>
+    {!!h?.schemes?.length && <div className="card"><h3>{t("Offers running now")}</h3>{h.schemes.map((x: any) => <div key={x.id} className="row"><b>{x.name}</b> <span className="muted small">· {x.rule}{x.ends_on ? ` · ${t("till {0}", fmtDate(x.ends_on))}` : ""}</span></div>)}</div>}</>;
 }
