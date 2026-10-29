@@ -2,7 +2,8 @@
 // approval, GRN confirmation, claim approval rules, start/end day and retailer announcements. Kept in company_kv "flow".
 import type { Db } from "./db.js";
 import { bad } from "./catalog.js";
-import { type Ctx, MGR, kvGet, kvSet } from "./common.js";
+import { type Ctx, MGR, kvGet, kvSet, requireFeature, monthOk } from "./common.js";
+import { emit } from "./integrations/webhooks.js";
 
 export type Flow = {
   requireNoOrderReason: boolean; noOrderReasons: string[];
@@ -63,6 +64,12 @@ export function registerFlowRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const shelf: Record<string, number> = {}; for (const [k, v] of Object.entries(req.body?.shelf || {})) { const n = Number(v); if (!(n >= 0)) throw bad("shelf stock must be ≥ 0"); shelf[k] = n; }
     res.json(await suggestOrder(db, cid, shop.id, shelf));
   }));
+  app.post("/api/claims/auto-schemes", auth(...MGR, "distributor"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "claims");
+    const month = String(req.body?.month || ""); if (!monthOk(month)) throw bad("pick a month (YYYY-MM)");
+    const made = await autoSchemeClaims(db, cid, month, req.user.role === "distributor" ? req.user.uid : null);
+    res.json({ created: made.length, ids: made });
+  }));
   app.put("/api/shops/:id/type", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const v = String(req.body?.outletType ?? "").trim().slice(0, 40) || null;
@@ -81,6 +88,30 @@ export async function suggestOrder(db: Db, cid: number, shopId: number, shelf: R
   const lines = [...by].map(([sku, x]) => { const avg = Math.round((x.total / last.length) * 10) / 10, sh = Math.max(0, Number(shelf[sku]) || 0);
     return { sku, name: x.name, avg, shelf: sh, suggested: Math.max(0, Math.ceil(avg - sh)) }; }).sort((a, b) => a.sku.localeCompare(b.sku));
   return { orders: last.length, lines };
+}
+/** Scheme claims from invoices: for each distributor and scheme, the discount (incl. free goods) it gave on its invoices in the month.
+ *  One claim per distributor + scheme + month (auto_ref keeps it from being created twice). */
+export async function autoSchemeClaims(db: Db, cid: number, month: string, distributorId: number | null) {
+  const lo = `${month}-01`, hi = `${month}-31`;
+  const rows = (await db.query(`SELECT i.issuer, i.number, l.scheme_id, l.gross, l.amount FROM invoices i JOIN order_lines l ON l.order_id=i.order_id
+    WHERE i.company_id=$1 AND i.kind='invoice' AND i.issuer LIKE 'd%' AND i.doc_date>=$2 AND i.doc_date<=$3 AND l.scheme_id IS NOT NULL`, [cid, lo, hi])).rows;
+  const groups = new Map<string, { dist: number; scheme: number; amount: number; invoices: Set<string> }>();
+  for (const r of rows) {
+    const dist = Number(String(r.issuer).slice(1)); if (distributorId != null && dist !== distributorId) continue;
+    const k = `${dist}:${r.scheme_id}`, g = groups.get(k) || { dist, scheme: r.scheme_id, amount: 0, invoices: new Set<string>() };
+    g.amount += Number(r.gross) - Number(r.amount); g.invoices.add(r.number); groups.set(k, g);
+  }
+  const made: number[] = [];
+  for (const g of groups.values()) {
+    const amount = Math.round(g.amount * 100) / 100; if (amount <= 0) continue;
+    const ref = `scheme:${g.dist}:${g.scheme}:${month}`;
+    if ((await db.query("SELECT id FROM claims WHERE company_id=$1 AND auto_ref=$2", [cid, ref])).rows[0]) continue;
+    const sc = (await db.query("SELECT name FROM schemes WHERE id=$1", [g.scheme])).rows[0];
+    const c = (await db.query("INSERT INTO claims (company_id,distributor_id,kind,scheme_id,description,lines,amount,auto_ref) VALUES ($1,$2,'scheme',$3,$4,$5,$6,$7) RETURNING id",
+      [cid, g.dist, g.scheme, `Scheme ${sc?.name ?? g.scheme} on invoices in ${month} (auto): ${[...g.invoices].slice(0, 20).join(", ")}${g.invoices.size > 20 ? " …" : ""}`.slice(0, 500), "[]", amount, ref])).rows[0];
+    await emit(db, cid, "claim.submitted", { id: c.id, kind: "scheme", amount, distributor_id: g.dist, auto: true }); made.push(c.id);
+  }
+  return made;
 }
 export const mustSellFor = (f: Flow, type: string | null) => [...new Set([...(f.mustSell["*"] || []), ...(type ? f.mustSell[type] || [] : [])])];
 /** Must-sell compliance: orders that contain every must-sell SKU for the outlet, per rep. */

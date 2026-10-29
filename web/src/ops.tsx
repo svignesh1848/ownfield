@@ -128,7 +128,11 @@ export function Claims({ s, cfg }: ViewProps) {
   const dist = s.user.role === "distributor";
   const [rows, reload] = useData<any[]>(s, "/api/claims");
   const [kind, setKind] = useState("damage"), [desc, setDesc] = useState(""), [amount, setAmount] = useState(""), [lines, setLines] = useState<any[]>([]);
+  const [month, setMonth] = useState(today().slice(0, 7));
   return <><h2>{t("Claims")}</h2>
+    <div className="card"><h3>{t("Scheme claims from invoices")}</h3><p className="muted small">{t("Adds up the scheme discounts and free goods on distributor invoices for the month and creates one claim per scheme.")}</p>
+      <div className="row-btns"><input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ maxWidth: 180 }} />
+        <button className="sm" onClick={async () => { const r: any = await run(() => api(s, "/api/claims/auto-schemes", { method: "POST", body: JSON.stringify({ month }) })); if (r) { toast(t("{0} scheme claims created", r.created)); reload(); } }}>{t("Create scheme claims")}</button></div></div>
     {dist && <div className="card"><h3>{t("New claim")}</h3>
       <Field label={t("Type")}><select value={kind} onChange={e => setKind(e.target.value)}><option value="damage">{t("Damaged goods")}</option><option value="expiry">{t("Expired goods")}</option><option value="scheme">{t("Scheme payout")}</option></select></Field>
       <Field label={t("What happened")}><input value={desc} onChange={e => setDesc(e.target.value)} /></Field>

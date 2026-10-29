@@ -178,7 +178,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
     const lines = pv?.lines || items.flatMap(i => i.variants.filter((v: any) => Number(qty[v.sku]) > 0).map((v: any) => ({ sku: v.sku, qty: Number(qty[v.sku]), uom: unitName(i), amount: Number(qty[v.sku]) * factor(i) * v.billing_price, name: `${i.name} ${attrText(v.attrs)}` })));
     const nameOf = (sku: string) => { for (const i of items) { const v = i.variants.find((x: any) => x.sku === sku); if (v) return `${i.name} ${attrText(v.attrs)}`.trim(); } return sku; };
     return <><Steps n={3} /><h2>{t("Review order")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>
-      <MustBanner />
+      {MustBanner()}
       <div className="review">{lines.map((l: any, k: number) => <div className="rline" key={k}><div><b>{nameOf(l.sku)}</b><div className="muted small">{l.qty} {l.uom}{l.free ? t(" · FREE") : ""}{l.scheme && !l.free ? t(" · offer: {0}", l.scheme) : ""}</div></div>
         <span>{l.free ? t("Free") : inr(l.amount)}</span></div>)}
         {pv?.savings > 0 && <div className="rline savings"><b>{t("You save")}</b><b>{inr(pv.savings)}</b></div>}
@@ -189,7 +189,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
       <div className="cartbar"><button className="ghost" onClick={() => setStep("items")}>{t("← Edit")}</button><button disabled={busy} onClick={submit}>{busy ? t("Placing…") : t("Place order · {0}", inr0(shownTotal))}</button></div></>;
   }
 
-  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p><MustBanner /><SugCard />
+  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>{MustBanner()}{SugCard()}
     <div className="searchbar"><input type="search" placeholder={t("Search products or codes")} value={q} onChange={e => setQ(e.target.value)} />
       {f.barcode && <ScanButton onCode={c => { const v = items.flatMap(i => i.variants).find((v: any) => v.barcode === c || v.sku === c); if (!v) return toast(t("No product for {0}", c), "err"); setQty({ ...qty, [v.sku]: String((Number(qty[v.sku]) || 0) + 1) }); toast(t("Added {0}", v.sku)); }} />}</div>
     {cats.length > 1 && <div className="chiprow">{["", ...cats].map(c => <button key={c || "all"} className={`chip ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>{c || t("All")}</button>)}</div>}

@@ -113,3 +113,21 @@ describe("5. suggested order", () => {
     expect(b).toMatchObject({ avg: 1, suggested: 1 });
   });
 });
+
+describe("6. scheme claims from invoices", () => {
+  it("creates one claim per distributor + scheme + month from invoice discounts, only once", async () => {
+    await on({ claims: true });
+    const sc = (await db.query("INSERT INTO schemes (company_id,name,discount_pct) VALUES ((SELECT company_id FROM users WHERE id=$1),'Sample 5% off',5) RETURNING id", [id.dist])).rows[0].id;
+    const o = (await db.query("SELECT id, company_id FROM orders ORDER BY id LIMIT 1")).rows[0];
+    await db.query("UPDATE order_lines SET scheme_id=$1, gross=100, amount=95 WHERE order_id=$2", [sc, o.id]);
+    const n = Number((await db.query("SELECT COUNT(*) AS n FROM order_lines WHERE order_id=$1", [o.id])).rows[0].n);
+    await db.query(`INSERT INTO invoices (company_id,issuer,kind,number,fy,doc_date,order_id,shop_id,seller,buyer,intra_state,taxable,cgst,sgst,igst,round_off,total)
+      VALUES ($1,$2,'invoice','D-SAMPLE-1','2026-27','2026-10-15',$3,$4,'{}','{}',TRUE,95,0,0,0,0,95)`, [o.company_id, `d${id.dist}`, o.id, id.s]);
+    await request(app).post("/api/claims/auto-schemes").set(as("adm")).send({ month: "2026-13" }).expect(400);
+    const r = (await request(app).post("/api/claims/auto-schemes").set(as("dist")).send({ month: "2026-10" }).expect(200)).body;
+    expect(r.created).toBe(1);
+    const c = (await request(app).get("/api/claims").set(as("dist"))).body.find((x: any) => x.id === r.ids[0]);
+    expect(c).toMatchObject({ kind: "scheme", amount: 5 * n, status: "submitted" }); expect(c.description).toContain("D-SAMPLE-1");
+    expect((await request(app).post("/api/claims/auto-schemes").set(as("adm")).send({ month: "2026-10" }).expect(200)).body.created).toBe(0);
+  });
+});
