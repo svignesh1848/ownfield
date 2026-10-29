@@ -26,7 +26,7 @@ app.listen(port, async () => {
   await post("/api/beats", admin, { name: "Monday – Chennai (sample)", repId: reps[0].id, shopIds: shops.map((x: any) => x.id) });
   const rep = (await post("/api/auth/login", null, { companyCode: "DEMO", email: "rep@example.com", password: "changeme123" })).token;
   const v = await post("/api/visits/checkin", rep, { shopId: shops[0].id, lat: 13.0827, lng: 80.2707 });
-  await post(`/api/visits/${v.id}/checkout`, rep, { lat: 13.0828, lng: 80.2708 });
+  await post(`/api/visits/${v.id}/checkout`, rep, { lat: 13.0828, lng: 80.2708, noOrderReason: "Owner not available" }); // sample no-order visit
   const o = await post("/api/orders", rep, { clientRef: "demo-1", shopId: shops.find((x: any) => x.distributor_id).id, lines: [{ sku: "SR01-0-3M", qty: 6 }, { sku: "ST02-2Y", qty: 4 }] });
   await post("/api/orders", rep, { clientRef: "demo-2", shopId: shops.find((x: any) => x.distributor_id).id, lines: [{ sku: "ST02-4Y", qty: 10 }] });
   void o;

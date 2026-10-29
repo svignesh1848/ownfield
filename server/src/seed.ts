@@ -5,6 +5,8 @@ import type { Db } from "./db.js";
 import { parseJson } from "./catalog.js";
 import { savePhoto, SAMPLE_PNG } from "./photos.js";
 import type { FeatureKey } from "./templates.js";
+import { cleanFlow, FLOW_DEFAULT } from "./flow.js";
+import { kvSet } from "./common.js";
 
 const one = async (db: Db, q: string, p: unknown[] = []) => (await db.query(q, p)).rows[0];
 async function enable(db: Db, cid: number, keys: FeatureKey[]) {
@@ -107,5 +109,17 @@ export async function seedDemo(db: Db, code = "DEMO") {
   }
   if (!(await one(db, "SELECT id FROM message_log WHERE company_id=$1", [cid])))
     await db.query("INSERT INTO message_log (company_id,channel,to_phone,template,body,status,provider,sent_at) VALUES ($1,'whatsapp','919000000001','order_confirmed',$2,'mock','mock',NOW())", [cid, "Hi Sample Outlet, your order #SAMPLE-1 for ₹1250.00 is received. Thank you (sample, not sent)"]);
+  });
+  // 7) Flow rules (outlet types, must-sell, retailer announcement, perfect-store target, scheme budget), all labelled sample.
+  await step("flow", async () => {
+  const shops = (await db.query("SELECT id FROM shops WHERE company_id=$1 AND outlet_type IS NULL ORDER BY id", [cid])).rows;
+  for (const [i, sh] of shops.entries()) await db.query("UPDATE shops SET outlet_type=$1 WHERE id=$2", [i % 2 ? "Medical" : "Grocery", sh.id]);
+  if (!(await one(db, "SELECT k FROM company_kv WHERE company_id=$1 AND k='flow'", [cid]))) {
+    const skus = (await db.query("SELECT v.sku FROM variants v JOIN items i ON i.id=v.item_id WHERE i.company_id=$1 ORDER BY v.id LIMIT 2", [cid])).rows.map((r: any) => r.sku);
+    await kvSet(db, cid, "flow", cleanFlow({ mustSell: skus.length ? { Grocery: skus } : {}, announcements: [{ text: "Sample announcement: new season stock arrives next week" }] }, FLOW_DEFAULT));
+  }
+  const tpl = await one(db, "SELECT id, questions FROM audit_templates WHERE company_id=$1 AND name='Shelf check (sample)'", [cid]);
+  if (tpl) { const qs = parseJson<any[]>(tpl.questions, []); const f = qs.find(q => q.key === "facings" && q.type === "number"); if (f && !f.target) { f.target = 12; await db.query("UPDATE audit_templates SET questions=$1 WHERE id=$2", [JSON.stringify(qs), tpl.id]); } }
+  await db.query("UPDATE schemes SET budget=5000 WHERE id=(SELECT MIN(id) FROM schemes WHERE company_id=$1) AND budget IS NULL", [cid]);
   });
 }

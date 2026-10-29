@@ -13,27 +13,27 @@ Write in simple, everyday business words. Keep product and brand terms as they a
 
 | Language | Code | Direction | Strings translated | Status |
 |---|---|---|---|---|
-| Assamese · অসমীয়া | `as` | LTR | 137 / 875 (16%) | beta |
-| Bengali · বাংলা | `bn` | LTR | 137 / 875 (16%) | needs native review |
-| Bodo · बड़ो | `brx` | LTR | 137 / 875 (16%) | beta |
-| Dogri · डोगरी | `doi` | LTR | 137 / 875 (16%) | beta |
-| Gujarati · ગુજરાતી | `gu` | LTR | 137 / 875 (16%) | needs native review |
-| Hindi · हिन्दी | `hi` | LTR | 444 / 875 (51%) | needs native review |
-| Kannada · ಕನ್ನಡ | `kn` | LTR | 137 / 875 (16%) | needs native review |
-| Kashmiri · کٲشُر | `ks` | RTL | 137 / 875 (16%) | beta |
-| Konkani · कोंकणी | `kok` | LTR | 137 / 875 (16%) | beta |
-| Maithili · मैथिली | `mai` | LTR | 137 / 875 (16%) | beta |
-| Malayalam · മലയാളം | `ml` | LTR | 137 / 875 (16%) | needs native review |
-| Manipuri (Meitei) · ꯃꯤꯇꯩꯂꯣꯟ | `mni` | LTR | 44 / 875 (5%) | beta (starter) |
-| Marathi · मराठी | `mr` | LTR | 137 / 875 (16%) | needs native review |
-| Nepali · नेपाली | `ne` | LTR | 137 / 875 (16%) | beta |
-| Odia · ଓଡ଼ିଆ | `or` | LTR | 137 / 875 (16%) | beta |
-| Punjabi · ਪੰਜਾਬੀ | `pa` | LTR | 137 / 875 (16%) | needs native review |
-| Sanskrit · संस्कृतम् | `sa` | LTR | 137 / 875 (16%) | beta |
-| Santali · ᱥᱟᱱᱛᱟᱲᱤ | `sat` | LTR | 43 / 875 (5%) | beta (starter) |
-| Sindhi · سنڌي | `sd` | RTL | 137 / 875 (16%) | beta |
-| Tamil · தமிழ் | `ta` | LTR | 137 / 875 (16%) | needs native review |
-| Telugu · తెలుగు | `te` | LTR | 137 / 875 (16%) | needs native review |
-| Urdu · اردو | `ur` | RTL | 137 / 875 (16%) | needs native review |
+| Assamese · অসমীয়া | `as` | LTR | 137 / 974 (14%) | beta |
+| Bengali · বাংলা | `bn` | LTR | 137 / 974 (14%) | needs native review |
+| Bodo · बड़ो | `brx` | LTR | 137 / 974 (14%) | beta |
+| Dogri · डोगरी | `doi` | LTR | 137 / 974 (14%) | beta |
+| Gujarati · ગુજરાતી | `gu` | LTR | 137 / 974 (14%) | needs native review |
+| Hindi · हिन्दी | `hi` | LTR | 476 / 974 (49%) | needs native review |
+| Kannada · ಕನ್ನಡ | `kn` | LTR | 137 / 974 (14%) | needs native review |
+| Kashmiri · کٲشُر | `ks` | RTL | 137 / 974 (14%) | beta |
+| Konkani · कोंकणी | `kok` | LTR | 137 / 974 (14%) | beta |
+| Maithili · मैथिली | `mai` | LTR | 137 / 974 (14%) | beta |
+| Malayalam · മലയാളം | `ml` | LTR | 137 / 974 (14%) | needs native review |
+| Manipuri (Meitei) · ꯃꯤꯇꯩꯂꯣꯟ | `mni` | LTR | 44 / 974 (5%) | beta (starter) |
+| Marathi · मराठी | `mr` | LTR | 137 / 974 (14%) | needs native review |
+| Nepali · नेपाली | `ne` | LTR | 137 / 974 (14%) | beta |
+| Odia · ଓଡ଼ିଆ | `or` | LTR | 137 / 974 (14%) | beta |
+| Punjabi · ਪੰਜਾਬੀ | `pa` | LTR | 137 / 974 (14%) | needs native review |
+| Sanskrit · संस्कृतम् | `sa` | LTR | 137 / 974 (14%) | beta |
+| Santali · ᱥᱟᱱᱛᱟᱲᱤ | `sat` | LTR | 43 / 974 (4%) | beta (starter) |
+| Sindhi · سنڌي | `sd` | RTL | 137 / 974 (14%) | beta |
+| Tamil · தமிழ் | `ta` | LTR | 137 / 974 (14%) | needs native review |
+| Telugu · తెలుగు | `te` | LTR | 137 / 974 (14%) | needs native review |
+| Urdu · اردو | `ur` | RTL | 169 / 974 (17%) | needs native review |
 
 Untranslated strings show in English. The menus, sign-in screen, common buttons and order/visit actions are covered first; long help texts and admin screens are mostly still English.
