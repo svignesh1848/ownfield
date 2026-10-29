@@ -27,7 +27,11 @@ function PoDetail({ s, id, onChange }: { s: Session; id: number; onChange: () =>
       <button className="ghost" onClick={() => { const r = prompt(t("Reason for rejection")); if (r) act("reject", { reason: r }); }}>{t("Reject")}</button></>}
     {mgr && ["approved", "partially_dispatched"].includes(po.status) && <button onClick={() => act("dispatch")}>{t("Dispatch all remaining")}</button>}
     {!mgr && po.status === "draft" && <button onClick={() => act("submit")}>{t("Submit PO")}</button>}
-    {!mgr && po.dispatches.filter((d: any) => !d.received_at).map((d: any) => <button key={d.id} onClick={() => act(`dispatches/${d.id}/receive`)}>{t("Receive dispatch #")}{d.id} ({d.lines.map((l: any) => `${l.qty}${l.batch_no ? ` ${l.batch_no}` : ""}`).join(", ")})</button>)}
+    {!mgr && po.dispatches.filter((d: any) => !d.received_at).map((d: any) => <button key={d.id} onClick={async () => {
+      const f: any = await api(s, "/api/flow-settings").catch(() => ({}));
+      if (!f?.grnConfirm) return act(`dispatches/${d.id}/receive`);
+      const lines = []; for (const l of d.lines) { const v = prompt(t("GRN: how many did you actually receive? ({0} sent, batch {1})", l.qty, l.batch_no || "-"), String(l.qty)); if (v === null) return; lines.push({ dispatchLineId: l.id, qty: Number(v) }); }
+      act(`dispatches/${d.id}/receive`, { lines }); }}>{t("Receive dispatch #")}{d.id} ({d.lines.map((l: any) => `${l.qty}${l.batch_no ? ` ${l.batch_no}` : ""}`).join(", ")})</button>)}
     {" "}<button className="sm ghost" onClick={() => openHtml(s, `/api/pos/${id}/print`)}>{t("Print")}</button> <button className="sm ghost" onClick={() => download(s, `/api/pos/${id}/export`, `${po.number || "draft"}.csv`)}>{t("CSV")}</button>
     <p className="err">{msg}</p></div>;
 }

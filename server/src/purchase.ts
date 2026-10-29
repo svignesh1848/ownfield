@@ -5,6 +5,7 @@ import type { Express, Response, Request, NextFunction } from "express";
 import * as XLSX from "xlsx";
 import { withTx, type Db } from "./db.js";
 import { bad, getCompany, parseJson, parseDate, today, fefoRows } from "./catalog.js";
+import { getFlow } from "./flow.js";
 import { r2, nextNumber, formatNumber, fyOf, rateFor, esc, inr } from "./billing.js";
 import type { Settings, Uom } from "./templates.js";
 
@@ -263,9 +264,17 @@ export function registerPurchaseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     const s = await enabled(cid); const po = await own(req, cid);
     const d = po.dispatches.find((x: any) => x.id === Number(req.params.did)); if (!d) throw bad("dispatch not found", 404);
+    // GRN (optional, Field rules): the distributor confirms the quantity actually received per line; only that goes into stock.
+    const grn = (await getFlow(db, cid)).grnConfirm, got = new Map<number, number>();
+    if (grn) {
+      for (const x of Array.isArray(req.body?.lines) ? req.body.lines : []) { const q = Number(x.qty); if (!Number.isInteger(q) || q < 0) throw bad("received quantities must be whole numbers ≥ 0"); got.set(Number(x.dispatchLineId), q); }
+      for (const dl of d.lines) { if (!got.has(dl.id)) throw bad("Confirm the received quantity for every line (GRN)"); if (got.get(dl.id)! > dl.qty) throw bad(`${dl.sku ?? "line"}: received more than dispatched`); }
+    }
     await withTx(db, async tx => {
-      if (!(await tx.query("UPDATE po_dispatches SET received_at=NOW(), received_by=$1 WHERE id=$2 AND received_at IS NULL RETURNING id", [req.user.uid, d.id])).rows[0]) throw bad("dispatch already received", 409);
-      for (const dl of d.lines) {
+      if (!(await tx.query("UPDATE po_dispatches SET received_at=NOW(), received_by=$1, grn_no=$3 WHERE id=$2 AND received_at IS NULL RETURNING id", [req.user.uid, d.id, grn ? `GRN-${po.number ?? po.id}-${d.id}` : null])).rows[0]) throw bad("dispatch already received", 409);
+      for (const dl0 of d.lines) {
+        const dl = grn ? { ...dl0, qty: got.get(dl0.id)! } : dl0;
+        if (grn) await tx.query("UPDATE po_dispatch_lines SET received_qty=$1 WHERE id=$2", [dl.qty, dl0.id]);
         const l = po.lines.find((x: any) => x.id === dl.po_line_id);
         if (!(await tx.query("UPDATE po_lines SET qty_received=$1 WHERE id=$2 AND qty_received=$3 RETURNING id", [l.qty_received + dl.qty, l.id, l.qty_received])).rows[0]) throw bad("PO changed — retry", 409);
         l.qty_received += dl.qty;

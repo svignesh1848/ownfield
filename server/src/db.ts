@@ -231,6 +231,12 @@ ALTER TABLE visits ADD COLUMN IF NOT EXISTS no_order_reason TEXT;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS outlet_type TEXT;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS auto_ref TEXT;
 ALTER TABLE schemes ADD COLUMN IF NOT EXISTS budget NUMERIC;
+ALTER TABLE stock_moves ADD COLUMN IF NOT EXISTS reason TEXT;
+CREATE TABLE IF NOT EXISTS stock_adjust_requests (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER REFERENCES users(id), body TEXT NOT NULL, reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', requested_by INTEGER REFERENCES users(id), decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ, note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+ALTER TABLE po_dispatches ADD COLUMN IF NOT EXISTS grn_no TEXT;
+ALTER TABLE po_dispatch_lines ADD COLUMN IF NOT EXISTS received_qty INTEGER;
 CREATE TABLE IF NOT EXISTS van_takes (
   id SERIAL PRIMARY KEY, load_id INTEGER NOT NULL REFERENCES van_loads(id), variant_id INTEGER NOT NULL REFERENCES variants(id), batch_no TEXT NOT NULL DEFAULT '', expiry TEXT, qty INTEGER NOT NULL);
 `;

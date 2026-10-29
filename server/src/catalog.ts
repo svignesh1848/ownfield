@@ -1,6 +1,7 @@
 // Step 3: industry templates, company settings & feature toggles, configurable catalogue (items + variants + units),
 // custom fields, stock with batch/expiry (FEFO), schemes, and attribute-aware Excel/CSV import.
 import type { Express, Response, Request, NextFunction } from "express";
+import { getFlow } from "./flow.js";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import type { Db } from "./db.js";
@@ -128,11 +129,13 @@ export async function getCompany(db: Db, cid: number) {
   return { industry: c.industry as string, settings: withDefaults(c.industry, parseJson<Partial<Settings>>(c.settings, {})) };
 }
 
-/** Sellable stock rows at a location in FEFO order (earliest expiry first, expired excluded). */
+/** Sellable stock rows at a location in FEFO order (earliest expiry first; expired and soon-to-expire batches excluded). */
 export async function fefoRows(db: Db, cid: number, loc: number | null, variantId: number) {
   const rows = (await db.query(`SELECT * FROM stock WHERE company_id=$1 AND variant_id=$2 AND qty>0 AND ${loc == null ? "distributor_id IS NULL" : "distributor_id=$3"}`,
     loc == null ? [cid, variantId] : [cid, variantId, loc])).rows;
-  const t = today();
+  // Batches expiring within the company's "don't sell within N days" window are not offered either.
+  const n = (await getFlow(db, cid)).expiryBlockDays || 0;
+  const t = n ? new Date(Date.parse(today() + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10) : today();
   return rows.filter(r => !r.expiry || r.expiry >= t).map(r => ({ ...r, qty: Number(r.qty) }))
     .sort((a, b) => (a.expiry || "9999").localeCompare(b.expiry || "9999") || a.id - b.id);
 }

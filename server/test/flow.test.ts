@@ -149,3 +149,45 @@ describe("7. claim approval levels, damage cap and scheme budget", () => {
     await request(app).post(`/api/claims/${sch.id}/decide`).set(as("mgr")).send({ approve: true, amount: 3 }).expect(200);
   });
 });
+
+describe("8. expiry block, adjustment reasons/approval, GRN", () => {
+  it("does not sell batches expiring within N days", async () => {
+    await request(app).post("/api/van/load").set(as("adm")).send({ repId: id.rep, lines: [{ sku, qty: 1 }] }); // a closed van earlier; make sure none is open
+    await request(app).post("/api/van/unload").set(as("adm")).send({ repId: id.rep });
+    await request(app).post("/api/van/close").set(as("adm")).send({ repId: id.rep });
+    await db.query("DELETE FROM stock WHERE variant_id=(SELECT id FROM variants WHERE sku=$1)", [sku]);
+    const soon = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
+    await request(app).post("/api/inventory/moves").set(as("adm")).send({ distributorId: "company", kind: "in", lines: [{ sku, qty: 5, batch: "SOON", expiry: soon }] }).expect(201);
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ expiryBlockDays: 30 }).expect(200);
+    expect((await request(app).post("/api/van/load").set(as("adm")).send({ repId: id.rep, lines: [{ sku, qty: 1 }] }).expect(409)).body.error).toContain("not enough stock");
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ expiryBlockDays: 0 }).expect(200);
+    await request(app).post("/api/van/load").set(as("adm")).send({ repId: id.rep, lines: [{ sku, qty: 1 }] }).expect(201);
+  });
+  it("stock adjustments need a reason and, when on, a manager's approval", async () => {
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "in", lines: [{ sku, qty: 10, batch: "D1", expiry: "2099-12-31" }] }).expect(201);
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "adjust", lines: [{ sku, qty: 7, batch_no: "D1" }] }).expect(400);
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ adjustApproval: true }).expect(200);
+    const p = (await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "adjust", reason: "Count correction", lines: [{ sku, qty: 7, batch_no: "D1" }] }).expect(202)).body;
+    expect(await stockOf(id.dist)).toBe(10);
+    await request(app).post(`/api/inventory/adjustments/${p.id}/decide`).set(as("dist")).send({ approve: true }).expect(403);
+    await request(app).post(`/api/inventory/adjustments/${p.id}/decide`).set(as("mgr")).send({ approve: true }).expect(200);
+    expect(await stockOf(id.dist)).toBe(7);
+    expect((await request(app).get("/api/inventory/moves").set(as("dist"))).body[0]).toMatchObject({ kind: "adjust", reason: "Count correction" });
+  });
+  it("GRN: with confirmation on, the distributor confirms received quantities and only those go into stock", async () => {
+    await on({ purchaseOrders: true });
+    const c = (await db.query("SELECT company_id FROM users WHERE id=$1", [id.dist])).rows[0].company_id, vid = (await db.query("SELECT id FROM variants WHERE sku=$1", [sku])).rows[0].id;
+    const po = (await db.query("INSERT INTO purchase_orders (company_id,distributor_id,number,status) VALUES ($1,$2,'PO-SAMPLE-1','dispatched') RETURNING id", [c, id.dist])).rows[0].id;
+    const pl = (await db.query(`INSERT INTO po_lines (po_id,variant_id,uom,qty_requested,qty_approved,qty_dispatched,base_price,margin_pct,product_disc_pct,dist_disc_pct,computed_rate,rate,gst_rate,taxable,tax,total)
+      VALUES ($1,$2,'PCS',6,6,6,10,0,0,0,10,10,0,60,0,60) RETURNING id`, [po, vid])).rows[0].id;
+    const d = (await db.query("INSERT INTO po_dispatches (po_id) VALUES ($1) RETURNING id", [po])).rows[0].id;
+    const dl = (await db.query("INSERT INTO po_dispatch_lines (dispatch_id,po_line_id,qty,batch_no,expiry) VALUES ($1,$2,6,'G1','2099-06-30') RETURNING id", [d, pl])).rows[0].id;
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ grnConfirm: true }).expect(200);
+    const before = await stockOf(id.dist);
+    await request(app).post(`/api/pos/${po}/dispatches/${d}/receive`).set(as("dist")).send({}).expect(400);
+    await request(app).post(`/api/pos/${po}/dispatches/${d}/receive`).set(as("dist")).send({ lines: [{ dispatchLineId: dl, qty: 9 }] }).expect(400);
+    await request(app).post(`/api/pos/${po}/dispatches/${d}/receive`).set(as("dist")).send({ lines: [{ dispatchLineId: dl, qty: 5 }] }).expect(200);
+    expect(await stockOf(id.dist)).toBe(before + 5);
+    expect((await db.query("SELECT grn_no FROM po_dispatches WHERE id=$1", [d])).rows[0].grn_no).toBe(`GRN-PO-SAMPLE-1-${d}`);
+  });
+});

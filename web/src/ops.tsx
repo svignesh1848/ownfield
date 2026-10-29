@@ -109,17 +109,23 @@ export function Inventory({ s, cfg }: ViewProps) {
   const [inv, reload] = useData<any>(s, `/api/inventory${q}`, [d]); const [moves, reloadMoves] = useData<any[]>(s, `/api/inventory/moves${q}`, [d]);
   const [kind, setKind] = useState("in"), [lines, setLines] = useState<any[]>([{ sku: "", qty: 1 }]), [batch, setBatch] = useState(""), [expiry, setExpiry] = useState(""), [note, setNote] = useState("");
   const b = cfg.settings.features.batches;
+  const [flow] = useData<any>(s, "/api/flow-settings"); const [reason, setReason] = useState("");
+  const [allPend, reloadPend] = useData<any[]>(s, "/api/inventory/adjustments"); const pend = allPend?.filter((x: any) => x.status === "pending");
+  const decide = async (pid: number, approve: boolean) => { const note = approve ? "" : prompt(t("Reason for rejection")); if (!approve && !note) return; if (await run(() => api(s, `/api/inventory/adjustments/${pid}/decide`, { method: "POST", body: JSON.stringify({ approve, note }) }))) { reloadPend(); reload(); reloadMoves(); } };
   return <><h2>{t("Inventory")}</h2>
+    {!!pend?.length && <div className="card"><h3>{t("Stock changes waiting for approval")}</h3>{pend.map((x: any) => <div key={x.id} className="line"><span>{x.distributor ?? ""} · {t(x.body?.kind === "out" ? "Goods out" : "Set counted quantity")} · {t(x.reason)} · {(x.body?.lines || []).map((l: any) => `${l.sku} ${l.qty}`).join(", ")}</span>
+      {mgr && <span className="row-btns"><button className="sm" onClick={() => decide(x.id, true)}>{t("Approve")}</button><button className="sm ghost" onClick={() => decide(x.id, false)}>{t("Reject")}</button></span>}</div>)}</div>}
     {mgr && <Field label={t("Location")}><select value={d} onChange={e => setD(e.target.value)}><option value="">{t("All")}</option><option value="company">{t("Company warehouse")}</option>{dists?.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>}
     {inv && <p className="muted">{t("Stock age:")}{" "}{Object.entries(inv.ageing).map(([k, v]) => `${k}: ${v}`).join(" · ") || t("no stock")}</p>}
     <Table rows={inv?.rows ?? null} cols={["distributor", "sku", "name", "batch_no", "expiry", "qty", "age_days"]} empty={{ title: t("No stock yet") }} />
     {(!mgr || d) && <div className="card"><h3>{t("Goods in / out")}</h3>
       <Field label={t("Type")}><select value={kind} onChange={e => setKind(e.target.value)}><option value="in">{t("Goods in (receipt / return)")}</option><option value="out">{t("Goods out (issue / damage)")}</option><option value="adjust">{t("Set counted quantity")}</option></select></Field>
       {b && <><Field label={t("Batch")}><input value={batch} onChange={e => setBatch(e.target.value)} /></Field><Field label={t("Expiry")}><input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} /></Field></>}
+      {kind !== "in" && <Field label={t("Reason")}><select value={reason} onChange={e => setReason(e.target.value)}><option value="">{t("Choose…")}</option>{(flow?.adjustReasons ?? []).map((r: string) => <option key={r} value={r}>{t(r)}</option>)}</select></Field>}
       <Lines s={s} lines={lines} setLines={setLines} scan={!!cfg.settings.features.barcode} />
       <Field label={t("Note")}><input value={note} onChange={e => setNote(e.target.value)} /></Field>
-      <button onClick={async () => { if (await run(() => api(s, "/api/inventory/moves", { method: "POST", body: JSON.stringify({ kind, distributorId: d || undefined, note, lines: lines.filter(l => l.sku).map(l => ({ ...l, batch_no: batch, expiry })) }) }))) { setLines([{ sku: "", qty: 1 }]); reload(); reloadMoves(); } }}>{t("Save")}</button></div>}
-    <h3>{t("Movements")}</h3><Table rows={moves} cols={["created_at", "kind", "sku", "batch_no", "qty", "ref", "note"]} empty={{ title: t("No movements yet") }} /></>;
+      <button onClick={async () => { if (await run(() => api(s, "/api/inventory/moves", { method: "POST", body: JSON.stringify({ kind, reason: kind === "in" ? undefined : reason, distributorId: d || undefined, note, lines: lines.filter(l => l.sku).map(l => ({ ...l, batch_no: batch, expiry })) }) }))) { setLines([{ sku: "", qty: 1 }]); reload(); reloadMoves(); reloadPend(); } }}>{t("Save")}</button></div>}
+    <h3>{t("Movements")}</h3><Table rows={moves} cols={["created_at", "kind", "sku", "batch_no", "qty", "reason", "ref", "note"]} empty={{ title: t("No movements yet") }} /></>;
 }
 
 // ---------- Claims ----------

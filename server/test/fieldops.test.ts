@@ -49,8 +49,8 @@ describe("distributor inventory", () => {
     await request(app).get("/api/inventory").set(as("dist")).expect(403);
     await on({ distInventory: true, stock: true });
     await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "in", lines: [{ sku: T.sku, qty: 30, batch_no: "B1" }] }).expect(201);
-    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "out", lines: [{ sku: T.sku, qty: 99, batch_no: "B1" }] }).expect(409);
-    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "out", lines: [{ sku: T.sku, qty: 4, batch_no: "B1" }], note: "Sample damage" }).expect(201);
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "out", reason: "Damaged", lines: [{ sku: T.sku, qty: 99, batch_no: "B1" }] }).expect(409);
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "out", reason: "Damaged", lines: [{ sku: T.sku, qty: 4, batch_no: "B1" }], note: "Sample damage" }).expect(201);
     const inv = (await request(app).get("/api/inventory").set(as("dist")).expect(200)).body;
     expect(inv.rows[0]).toMatchObject({ sku: T.sku, batch_no: "B1", qty: 26, age_band: "0-30 days" });
     // an order from a shop served by this distributor deducts stock on acceptance and logs a sale move
