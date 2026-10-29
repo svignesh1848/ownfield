@@ -202,3 +202,16 @@ export function Trail({ s }: ViewProps) {
       <button className="sm" onClick={() => { const x = shops?.find(y => String(y.id) === shop); if (x) run(() => api(s, `/api/shops/${x.id}/geofence`, { method: "PUT", body: JSON.stringify({ lat: x.lat, lng: x.lng, radiusM: radius }) })); }}>Save</button>
       <p className="muted small">An outlet is pinned at its first check-in with GPS.</p></div></>;
 }
+
+// ---------- Coverage ----------
+export function Coverage({ s }: ViewProps) {
+  const [from, setFrom] = useState(today()), [to, setTo] = useState(today());
+  const [d] = useData<any>(s, `/api/coverage?from=${from}&to=${to}`, [from, to]); const [open, setOpen] = useState<number | null>(null);
+  return <><h2>Coverage</h2>
+    <div className="row-btns"><input type="date" value={from} onChange={e => setFrom(e.target.value)} /> to <input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
+    <p className="muted small">Planned calls come from beat plans. Productive = an order was taken at the outlet that day.</p>
+    <Table rows={d?.reps.map((r: any) => ({ ...r, missed: r.missed_outlets.length, productivity: r.productivity_pct == null ? "–" : `${r.productivity_pct}%`, adherence: r.beat_adherence_pct == null ? "–" : `${r.beat_adherence_pct}%` })) ?? null}
+      cols={["rep_name", "planned_calls", "total_calls", "productive_calls", "productivity", "adherence", "unplanned_calls", "missed"]} empty={{ title: "No sales reps" }} />
+    {d?.reps.filter((r: any) => r.missed_outlets.length).map((r: any) => <details key={r.rep_id} open={open === r.rep_id} onToggle={() => setOpen(r.rep_id)}><summary>Missed outlets — {r.rep_name} ({r.missed_outlets.length})</summary>
+      <Table rows={r.missed_outlets} cols={["day", "shop_name"]} /></details>)}</>;
+}

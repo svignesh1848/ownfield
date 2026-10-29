@@ -133,3 +133,19 @@ describe("location trail and geofence", () => {
     await request(app).post(`/api/visits/${ok.id}/checkout`).set(as("rep")).send({ lat: 13.0927, lng: 80.2707 }).expect(200);
   });
 });
+
+describe("coverage report", () => {
+  it("planned vs total vs productive calls, beat adherence and missed outlets", async () => {
+    await on({ coverage: true });
+    const shops = (await request(app).get("/api/shops").set(as("adm"))).body.filter((x: any) => !String(x.code).startsWith("LEAD-")).slice(0, 3);
+    const bt = await request(app).post("/api/beats").set(as("adm")).send({ name: "Sample daily beat", repId: id.rep, shopIds: shops.map((x: any) => x.id) }); expect(bt.body.error ?? "").toBe(""); expect(bt.status).toBe(201);
+    const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const r = (await request(app).get(`/api/coverage?from=${day}&to=${day}&repId=${id.rep}`).set(as("adm")).expect(200)).body.reps[0];
+    const sunday = new Date(day + "T00:00:00Z").getUTCDay() === 0;
+    expect(r.planned_calls).toBe(sunday ? 0 : 3);
+    expect(r.total_calls).toBeGreaterThanOrEqual(1);       // the geofence test visited one outlet today
+    expect(r.productive_calls).toBeGreaterThanOrEqual(1);  // and orders were taken there earlier today
+    if (!sunday) { expect(r.missed_outlets.length).toBe(3 - (r.total_calls - r.unplanned_calls)); expect(r.beat_adherence_pct).toBeLessThan(100); }
+    await request(app).get("/api/coverage?from=2026-01-01&to=2026-03-01").set(as("adm")).expect(400);
+  });
+});
