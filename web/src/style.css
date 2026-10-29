@@ -1,7 +1,7 @@
 /* FieldForce design system — one accent colour, ≥14px text, ≥44px tap targets, mobile first. */
 :root{--accent:#0f766e;--accent-d:#115e59;--accent-l:#e6f4f1;--ink:#0f172a;--muted:#5b6474;--line:#e3e7ee;--bg:#f5f7fa;--card:#fff;--bad:#b42318;--bad-l:#fef0ee;--warn:#9a5b00;--warn-l:#fff6e5;--ok-l:#ecfdf3;--r:12px}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;font-family:Inter,"Segoe UI",Roboto,system-ui,sans-serif;font-size:16px;line-height:1.45;background:var(--bg);color:var(--ink)}
+body{margin:0;font-family:Inter,"Segoe UI",Roboto,system-ui,var(--script-font,sans-serif),sans-serif;font-size:16px;line-height:1.45;background:var(--bg);color:var(--ink)}
 h1{font-size:24px;margin:0}h2{font-size:20px;margin:4px 0 8px}h3{font-size:17px;margin:18px 0 8px}
 .muted{color:var(--muted)}.small{font-size:14px}.center{text-align:center}.err{color:var(--bad)}.warn{color:var(--warn)}
 input,select,textarea{display:block;width:100%;min-height:46px;padding:10px 12px;margin:6px 0;border:1px solid #c9d0db;border-radius:10px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit}
@@ -118,3 +118,4 @@ nav:not(.bottom){display:flex;gap:6px;margin:8px 0;overflow-x:auto}
 .qa{margin:14px 0}.seg{display:flex;gap:8px}.seg button{flex:1}.qrow{border-bottom:1px solid var(--line);padding:6px 0}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .earn{font-size:28px;font-weight:700;color:var(--accent-d)}
 .earn-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;background:var(--accent-l);color:var(--accent-d);border:1px solid #b7ddd6;margin:8px 0;text-align:left}.earn-card:hover{background:#d8eee9}.earn-card b{font-size:26px}
+.lang-pick{display:block;margin-top:12px;font-size:14px}[dir=rtl] .toast,[dir=rtl] .field{text-align:right}

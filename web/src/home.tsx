@@ -1,13 +1,14 @@
 // Role-based home screens with big task tiles, and the admin first-time setup checklist.
 import React, { useEffect, useState } from "react";
 import { api, type ViewProps } from "./main";
+import { t } from "./i18n";
 import { inr0, today, Loading, Term } from "./ui";
 
 const Tile = ({ icon, title, text, badge, onClick, tone }: { icon: string; title: string; text?: string; badge?: string | number | null; onClick: () => void; tone?: "accent" | "warn" }) =>
   <button className={`tile ${tone || ""}`} onClick={onClick}><span className="tile-ic" aria-hidden>{icon}</span><span className="tile-t">{title}</span>{text && <span className="tile-s">{text}</span>}
     {badge != null && badge !== 0 && badge !== "" && <span className="badge">{badge}</span>}</button>;
 const safe = (p: Promise<any>, d: any) => p.catch(() => d);
-const hello = (name: string) => { const h = Number(new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }).format(new Date())); return `${h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"}, ${name.split(" ")[0]}`; };
+const hello = (name: string) => { const h = Number(new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }).format(new Date())); return `${h < 12 ? t("Good morning") : h < 17 ? t("Good afternoon") : t("Good evening")}, ${name.split(" ")[0]}`; };
 
 export function RepHome({ s, cfg, go }: ViewProps) {
   const f = cfg.settings.features;
@@ -19,19 +20,19 @@ export function RepHome({ s, cfg, go }: ViewProps) {
   }); }, []);
   if (!d) return <Loading />;
   return <><h2 className="hello">{hello(s.user.name)}</h2>
-    <p className="muted">{d.stops ? `${d.done} of ${d.stops} outlets visited today` : "No beat assigned yet — ask your manager to assign one."}</p>
-    {f.incentives && <button className="earn-card" onClick={() => go("incentives")}><span>🏆 Earned this month</span><b>{inr0(d.earned)}</b>{d.next && <span className="small">Reach {d.next.minPct}% of target to earn {inr0(d.next.amount)}</span>}</button>}
-    {d.open && <div className="banner">You are in a visit at <b>{d.open.shop_name}</b>. <button className="sm" onClick={() => go("beat")}>Continue visit</button></div>}
+    <p className="muted">{d.stops ? t("{0} of {1} outlets visited today", d.done, d.stops) : t("No beat assigned yet — ask your manager to assign one.")}</p>
+    {f.incentives && <button className="earn-card" onClick={() => go("incentives")}><span>{t("🏆 Earned this month")}</span><b>{inr0(d.earned)}</b>{d.next && <span className="small">{t("Reach")}{" "}{d.next.minPct}{t("% of target to earn")}{" "}{inr0(d.next.amount)}</span>}</button>}
+    {d.open && <div className="banner">{t("You are in a visit at")}{" "}<b>{d.open.shop_name}</b>. <button className="sm" onClick={() => go("beat")}>{t("Continue visit")}</button></div>}
     <div className="tiles">
-      <Tile icon="🗺️" title="Today's beat" text={d.stops ? `${d.stops - d.done} outlets left` : "Not assigned"} onClick={() => go("beat")} />
-      <Tile icon="📍" title="Start visit" text="Check in at an outlet" onClick={() => go("beat")} tone="accent" />
-      <Tile icon="🛒" title="New order" text="Take an order" onClick={() => go("order")} tone="accent" />
-      {f.invoicing && <Tile icon="💰" title="Collect payment" text={d.due > 0 ? `${inr0(d.due)} due` : "Nothing due"} onClick={() => go("collect")} />}
-      {f.audits && d.open && <Tile icon="✅" title="Store check" text="Fill the checklist for this outlet" onClick={() => go("audit")} />}
-      <Tile icon="🎯" title="My targets" text="This month's progress" onClick={() => go("targets")} />
-      <Tile icon="📦" title="My orders" text="Orders you placed" onClick={() => go("orders")} />
-      {f.expenses && <Tile icon="🧾" title="My expenses" text="Claim travel, food and other costs" onClick={() => go("myexpenses")} />}
-      {f.leave && <Tile icon="🌴" title="My leave" text="Apply for a day off" onClick={() => go("myleave")} />}
+      <Tile icon="🗺️" title={t("Today's beat")} text={d.stops ? t("{0} outlets left", d.stops - d.done) : t("Not assigned")} onClick={() => go("beat")} />
+      <Tile icon="📍" title={t("Start visit")} text={t("Check in at an outlet")} onClick={() => go("beat")} tone="accent" />
+      <Tile icon="🛒" title={t("New order")} text={t("Take an order")} onClick={() => go("order")} tone="accent" />
+      {f.invoicing && <Tile icon="💰" title={t("Collect payment")} text={d.due > 0 ? t("{0} due", inr0(d.due)) : t("Nothing due")} onClick={() => go("collect")} />}
+      {f.audits && d.open && <Tile icon="✅" title={t("Store check")} text={t("Fill the checklist for this outlet")} onClick={() => go("audit")} />}
+      <Tile icon="🎯" title={t("My targets")} text={t("This month's progress")} onClick={() => go("targets")} />
+      <Tile icon="📦" title={t("My orders")} text={t("Orders you placed")} onClick={() => go("orders")} />
+      {f.expenses && <Tile icon="🧾" title={t("My expenses")} text={t("Claim travel, food and other costs")} onClick={() => go("myexpenses")} />}
+      {f.leave && <Tile icon="🌴" title={t("My leave")} text={t("Apply for a day off")} onClick={() => go("myleave")} />}
     </div></>;
 }
 
@@ -44,12 +45,12 @@ export function DistributorHome({ s, cfg, go }: ViewProps) {
   if (!d) return <Loading />;
   return <><h2 className="hello">{hello(s.user.name)}</h2>
     <div className="tiles">
-      <Tile icon="📥" title="New orders" text={d.placed ? `${d.placed} waiting for you` : "All caught up"} badge={d.placed} onClick={() => go("inbox")} tone={d.placed ? "warn" : undefined} />
-      {f.invoicing && f.distributorBilling && <Tile icon="🧾" title="Invoices" text={d.toBill ? `${d.toBill} orders to bill` : "Bills you issued"} badge={d.toBill} onClick={() => go(d.toBill ? "inbox" : "invoices")} />}
-      {f.stock && <Tile icon="🏬" title="Stock" text="What you have on hand" onClick={() => go("stock")} />}
-      {f.invoicing && f.distributorBilling && <Tile icon="💰" title="Collections" text={d.due > 0 ? `${inr0(d.due)} to collect` : "Nothing due"} onClick={() => go("collections")} />}
-      {f.purchaseOrders && <Tile icon="📋" title="Purchase orders" text={d.po ? `${d.po} open` : "Order stock from the company"} onClick={() => go("POs")} />}
-      <Tile icon="🪪" title="My profile" text="GST details & terms" onClick={() => go("profile")} />
+      <Tile icon="📥" title={t("New orders")} text={d.placed ? t("{0} waiting for you", d.placed) : t("All caught up")} badge={d.placed} onClick={() => go("inbox")} tone={d.placed ? "warn" : undefined} />
+      {f.invoicing && f.distributorBilling && <Tile icon="🧾" title={t("Invoices")} text={d.toBill ? t("{0} orders to bill", d.toBill) : t("Bills you issued")} badge={d.toBill} onClick={() => go(d.toBill ? "inbox" : "invoices")} />}
+      {f.stock && <Tile icon="🏬" title={t("Stock")} text={t("What you have on hand")} onClick={() => go("stock")} />}
+      {f.invoicing && f.distributorBilling && <Tile icon="💰" title={t("Collections")} text={d.due > 0 ? t("{0} to collect", inr0(d.due)) : t("Nothing due")} onClick={() => go("collections")} />}
+      {f.purchaseOrders && <Tile icon="📋" title={t("Purchase orders")} text={d.po ? t("{0} open", d.po) : t("Order stock from the company")} onClick={() => go("POs")} />}
+      <Tile icon="🪪" title={t("My profile")} text={t("GST details & terms")} onClick={() => go("profile")} />
     </div></>;
 }
 
@@ -63,20 +64,20 @@ export function ManagerHome(p: ViewProps) {
   return <>{s.user.role === "company_admin" && <SetupChecklist {...p} />}
     <h2 className="hello">{hello(s.user.name)}</h2>
     {!d ? <Loading /> : <>
-      <h3>Today</h3>
-      <div className="kpis"><button onClick={() => go("visits")}><b>{d.visits}</b>Visits</button><button onClick={() => go("orders")}><b>{d.orders}</b>Orders</button><button onClick={() => go("dashboard")}><b>{inr0(d.value)}</b>Order value</button>
-        {f.invoicing && <button onClick={() => go("collections")}><b>{inr0(d.due)}</b>Outstanding{d.overdue > 0 && <em className="err"> {inr0(d.overdue)} overdue</em>}</button>}</div>
-      <h3>Approvals pending</h3>
+      <h3>{t("Today")}</h3>
+      <div className="kpis"><button onClick={() => go("visits")}><b>{d.visits}</b>{t("Visits")}</button><button onClick={() => go("orders")}><b>{d.orders}</b>{t("Orders")}</button><button onClick={() => go("dashboard")}><b>{inr0(d.value)}</b>{t("Order value")}</button>
+        {f.invoicing && <button onClick={() => go("collections")}><b>{inr0(d.due)}</b>{t("Outstanding")}{d.overdue > 0 && <em className="err"> {inr0(d.overdue)} overdue</em>}</button>}</div>
+      <h3>{t("Approvals pending")}</h3>
       <div className="tiles">
-        <Tile icon="📦" title="Orders to accept" text={d.approve ? `${d.approve} company orders waiting` : "Nothing waiting"} badge={d.approve} tone={d.approve ? "warn" : undefined} onClick={() => go("orders")} />
-        {f.purchaseOrders && <Tile icon="📋" title={"Purchase orders"} text={d.pos ? `${d.pos} to approve or dispatch` : "Nothing waiting"} badge={d.pos} tone={d.pos ? "warn" : undefined} onClick={() => go("POs")} />}
+        <Tile icon="📦" title={t("Orders to accept")} text={d.approve ? t("{0} company orders waiting", d.approve) : t("Nothing waiting")} badge={d.approve} tone={d.approve ? "warn" : undefined} onClick={() => go("orders")} />
+        {f.purchaseOrders && <Tile icon="📋" title={t("Purchase orders")} text={d.pos ? t("{0} to approve or dispatch", d.pos) : t("Nothing waiting")} badge={d.pos} tone={d.pos ? "warn" : undefined} onClick={() => go("POs")} />}
       </div>
-      <h3>Shortcuts</h3>
+      <h3>{t("Shortcuts")}</h3>
       <div className="tiles">
-        <Tile icon="📈" title="Reports" text="Download Excel / CSV" onClick={() => go("reports")} />
-        <Tile icon="📊" title="Team activity" text="Visits & orders by rep" onClick={() => go("dashboard")} />
-        {f.invoicing && <Tile icon="🧾" title="Invoices" text="GST invoices & credit notes" onClick={() => go("invoices")} />}
-        <Tile icon="⚙️" title="Setup" text="Products, outlets, users, settings" onClick={() => go(s.user.role === "company_admin" ? "settings" : "catalog")} />
+        <Tile icon="📈" title={t("Reports")} text={t("Download Excel / CSV")} onClick={() => go("reports")} />
+        <Tile icon="📊" title={t("Team activity")} text={t("Visits & orders by rep")} onClick={() => go("dashboard")} />
+        {f.invoicing && <Tile icon="🧾" title={t("Invoices")} text={t("GST invoices & credit notes")} onClick={() => go("invoices")} />}
+        <Tile icon="⚙️" title={t("Setup")} text={t("Products, outlets, users, settings")} onClick={() => go(s.user.role === "company_admin" ? "settings" : "catalog")} />
       </div></>}</>;
 }
 
@@ -86,17 +87,17 @@ export function SetupChecklist({ s, cfg, go }: ViewProps) {
   if (!c) return null;
   const g = cfg.settings.gst || {};
   const steps = [
-    { done: !!(g.gstin && g.legalName && g.stateCode), title: "Add company GST details", text: <>Legal name, <Term k="GSTIN" />, state, address</>, tab: "settings", btn: "Open settings" },
-    { done: c.i.length > 0, title: "Upload products", text: "Excel/CSV with codes, prices, sizes or packs", tab: "import", btn: "Upload products" },
-    { done: c.sh.length > 0, title: "Upload shops / outlets", text: "The outlets your reps visit", tab: "import", btn: "Upload outlets" },
-    { done: c.u.length > 1, title: "Add users", text: "Sales reps, managers, distributors", tab: "import", btn: "Add users" },
-    { done: c.b.some((b: any) => b.rep_id), title: "Assign beats", text: <>Give each rep a <Term k="Beat">beat</Term> (route of outlets)</>, tab: "beats", btn: "Plan beats" },
+    { done: !!(g.gstin && g.legalName && g.stateCode), title: t("Add company GST details"), text: <>{t("Legal name,")}{" "}<Term k="GSTIN" />{t(", state, address")}</>, tab: "settings", btn: t("Open settings") },
+    { done: c.i.length > 0, title: t("Upload products"), text: t("Excel/CSV with codes, prices, sizes or packs"), tab: "import", btn: t("Upload products") },
+    { done: c.sh.length > 0, title: t("Upload shops / outlets"), text: t("The outlets your reps visit"), tab: "import", btn: t("Upload outlets") },
+    { done: c.u.length > 1, title: t("Add users"), text: t("Sales reps, managers, distributors"), tab: "import", btn: t("Add users") },
+    { done: c.b.some((b: any) => b.rep_id), title: t("Assign beats"), text: <>{t("Give each rep a")}{" "}<Term k="Beat">{t("beat")}</Term> {t("(route of outlets)")}</>, tab: "beats", btn: t("Plan beats") },
   ];
   const n = steps.filter(x => x.done).length, pct = Math.round(n / steps.length * 100);
   if (n === steps.length && hide) return null;
   return <div className="checklist">
-    <div className="cl-h"><b>{n === steps.length ? "Setup complete 🎉" : "Get started"}</b><span className="muted small">{n} of {steps.length} done</span>
-      {n === steps.length && <button className="ghost sm" onClick={() => { localStorage.setItem("ff-setup-hidden", "1"); setHide(true); }}>Hide</button>}</div>
+    <div className="cl-h"><b>{n === steps.length ? t("Setup complete 🎉") : t("Get started")}</b><span className="muted small">{n} of {steps.length} done</span>
+      {n === steps.length && <button className="ghost sm" onClick={() => { localStorage.setItem("ff-setup-hidden", "1"); setHide(true); }}>{t("Hide")}</button>}</div>
     <div className="bar big"><span style={{ width: `${pct}%` }} /></div>
     {steps.map((x, i) => <div key={i} className={`step ${x.done ? "done" : ""}`}><span className="dot">{x.done ? "✓" : i + 1}</span><div><b>{x.title}</b><div className="muted small">{x.text}</div></div>
       {!x.done && <button className="sm" onClick={() => go(x.tab)}>{x.btn}</button>}</div>)}</div>;

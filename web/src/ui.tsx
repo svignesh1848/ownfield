@@ -1,5 +1,6 @@
 // Design system: formatting (₹, dd-mm-yyyy), toasts, empty states, loading, tooltips for jargon, icons.
 import React, { useEffect, useState } from "react";
+import { t } from "./i18n";
 
 // ---------- Formatting ----------
 export const inr = (n: unknown, dp = 2) => `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
@@ -16,7 +17,7 @@ export function fmtDate(v: unknown, withTime = false) {
   return `${g("day")}-${g("month")}-${g("year")}${withTime ? ` ${g("hour")}:${g("minute")}` : ""}`;
 }
 export const isDateLike = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/.test(v);
-export const fmtCell = (v: unknown) => isDateLike(v) ? fmtDate(v, String(v).includes("T")) : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "");
+export const fmtCell = (v: unknown) => isDateLike(v) ? fmtDate(v, String(v).includes("T")) : typeof v === "boolean" ? (v ? t("Yes") : t("No")) : String(v ?? "");
 export const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 void two;
 
@@ -34,25 +35,25 @@ export function Toasts() {
 export function Empty({ icon = "📭", title, text, action, onAction }: { icon?: string; title: string; text?: string; action?: string; onAction?: () => void }) {
   return <div className="empty"><div className="empty-ic">{icon}</div><b>{title}</b>{text && <p>{text}</p>}{action && onAction && <button onClick={onAction}>{action}</button>}</div>;
 }
-export const Loading = ({ text = "Loading…" }: { text?: string }) => <div className="loading"><span className="spin" />{text}</div>;
+export const Loading = ({ text = t("Loading…") }: { text?: string }) => <div className="loading"><span className="spin" />{text}</div>;
 
 export const GLOSSARY: Record<string, string> = {
-  FEFO: "First Expiry, First Out — stock with the nearest expiry date is used first.",
-  IRN: "Invoice Reference Number — the unique number the GST portal gives an e-invoice.",
-  GSTIN: "15-character GST registration number of a business.",
-  HSN: "HSN/SAC — the GST product/service code printed on invoices; it decides the tax rate.",
-  PO: "Purchase order — a distributor's request to buy stock from the company.",
-  Beat: "A planned route: the list of outlets a sales rep visits on a day.",
-  Scheme: "A trade offer such as % off, buy X get Y free, or quantity slabs.",
-  "Credit note": "A document that reduces what an outlet owes, e.g. for returned goods.",
-  Ageing: "How long invoices have been unpaid, grouped as 0-30, 31-60, 61-90 and 90+ days.",
-  UQC: "Unit code used by GST (PCS, BOX, CTN …).",
+  FEFO: t("First Expiry, First Out — stock with the nearest expiry date is used first."),
+  IRN: t("Invoice Reference Number — the unique number the GST portal gives an e-invoice."),
+  GSTIN: t("15-character GST registration number of a business."),
+  HSN: t("HSN/SAC — the GST product/service code printed on invoices; it decides the tax rate."),
+  PO: t("Purchase order — a distributor's request to buy stock from the company."),
+  Beat: t("A planned route: the list of outlets a sales rep visits on a day."),
+  Scheme: t("A trade offer such as % off, buy X get Y free, or quantity slabs."),
+  "Credit note": t("A document that reduces what an outlet owes, e.g. for returned goods."),
+  Ageing: t("How long invoices have been unpaid, grouped as 0-30, 31-60, 61-90 and 90+ days."),
+  UQC: t("Unit code used by GST (PCS, BOX, CTN …)."),
 };
 /** A jargon word with a tap/hover explanation. */
 export function Term({ k, children }: { k: keyof typeof GLOSSARY | string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  return <span className="term" tabIndex={0} title={GLOSSARY[k]} onClick={e => { e.stopPropagation(); setOpen(!open); }} onBlur={() => setOpen(false)}>
-    {children ?? k}<sup>?</sup>{open && <span className="tip">{GLOSSARY[k]}</span>}</span>;
+  return <span className="term" tabIndex={0} title={t(GLOSSARY[k])} onClick={e => { e.stopPropagation(); setOpen(!open); }} onBlur={() => setOpen(false)}>
+    {children ?? t(k)}<sup>?</sup>{open && <span className="tip">{t(GLOSSARY[k])}</span>}</span>;
 }
 
 /** Labelled form field with helper text and inline error. */
