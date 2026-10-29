@@ -222,7 +222,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
       <section className="card main-card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} go={setTab} /></section>
     </div>
     <nav className="bottom">{primary.map(t => <Item key={t} t={t} />)}
-      <button className={`nav-item ${more ? "on" : ""}`} onClick={() => setMore(!more)}><span className="ic" aria-hidden>{ICONS.more}</span><span>More</span></button></nav>
+      <button className={`nav-item ${more ? "on" : ""}`} onClick={() => setMore(!more)}><span className="ic" aria-hidden>{ICONS.more}</span><span>{tr("more", "More")}</span></button></nav>
     {more && <div className="sheet-bg" onClick={() => setMore(false)}><div className="sheet" onClick={e => e.stopPropagation()}>
       {groups.map(([g, ts]) => <div key={g}><div className="group-h">{g}</div><div className="sheet-grid">{ts.map(t => <Item key={t} t={t} />)}</div></div>)}
       <div className="who"><b>{s.user.name}</b><span>{ROLE[role]} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>Sign out</button></div></div></div>}

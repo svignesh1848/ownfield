@@ -144,7 +144,7 @@ export function Leads({ s }: ViewProps) {
       <Field label="Type"><select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })}><option value="outlet">Outlet</option><option value="dealer">Dealer / distributor</option></select></Field>
       {F("name", "Business name")}{F("owner_name", "Owner")}{F("phone", "Phone", "tel")}{F("city", "Town / city")}{F("next_follow_up", "Follow up on", "date")}{F("notes", "Notes")}
       <button onClick={async () => { if (await run(() => api(s, "/api/leads", { method: "POST", body: JSON.stringify(form) }))) { setForm({ kind: "outlet" }); reload(); } }}>Save lead</button></details>
-    <label><input type="checkbox" checked={due} onChange={e => setDue(e.target.checked)} /> Only follow-ups due today</label>
+    <label className="chk"><input type="checkbox" checked={due} onChange={e => setDue(e.target.checked)} /> Only follow-ups due today</label>
     {!rows ? <Loading /> : !rows.length ? <p className="muted">No leads yet.</p> : rows.map(l => <div key={l.id} className="card" onClick={() => setOpen(l)}>
       <b>{l.name}</b> <span className="muted">· {l.kind} · {l.city || ""} · {l.status}{l.next_follow_up ? ` · next ${l.next_follow_up}` : ""}</span>
       {open?.id === l.id && <div onClick={e => e.stopPropagation()}>
@@ -196,7 +196,7 @@ export function Trail({ s }: ViewProps) {
       <h3>Settings</h3><div className="row-btns"><Field label="Working hours from"><input type="time" value={cfg.start} onChange={e => setCfg({ ...cfg, start: e.target.value })} /></Field><Field label="to"><input type="time" value={cfg.end} onChange={e => setCfg({ ...cfg, end: e.target.value })} /></Field></div>
       <Field label="Ping every (seconds)"><input type="number" min={60} max={900} value={cfg.intervalSec} onChange={e => setCfg({ ...cfg, intervalSec: Number(e.target.value) })} /></Field>
       <Field label="Check-in radius (metres)"><input type="number" min={25} value={cfg.radiusM} onChange={e => setCfg({ ...cfg, radiusM: Number(e.target.value) })} /></Field>
-      <label><input type="checkbox" checked={cfg.enforceRadius} onChange={e => setCfg({ ...cfg, enforceRadius: e.target.checked })} /> Refuse check-ins outside the radius</label><button>Save</button></form>}
+      <label className="chk"><input type="checkbox" checked={cfg.enforceRadius} onChange={e => setCfg({ ...cfg, enforceRadius: e.target.checked })} /> Refuse check-ins outside the radius</label><button>Save</button></form>}
     <div className="card"><h3>Radius for one outlet</h3><select value={shop} onChange={e => setShop(e.target.value)}><option value="">Pick outlet</option>{shops?.map(x => <option key={x.id} value={x.id}>{x.name}{x.lat ? "" : " (not pinned yet)"}</option>)}</select>
       <input type="number" placeholder="metres" value={radius} onChange={e => setRadius(e.target.value)} />
       <button className="sm" onClick={() => { const x = shops?.find(y => String(y.id) === shop); if (x) run(() => api(s, `/api/shops/${x.id}/geofence`, { method: "PUT", body: JSON.stringify({ lat: x.lat, lng: x.lng, radiusM: radius }) })); }}>Save</button>
@@ -240,7 +240,8 @@ export function Surveys({ s }: ViewProps) {
         <button onClick={async () => { const r: any = await run(() => api(s, "/api/surveys/responses", { method: "POST", body: JSON.stringify({ formId: f.id, shopId: shop ? Number(shop) : undefined, answers: ans, clientRef: ref() }) }));
           if (r) { toast(r.queued ? "Saved offline — will send when online" : "Survey saved"); setAns({}); reloadResp(); } }}>Submit</button></div>}
     </>}
-    {prices && prices.length > 0 && <><h3>Competitor prices</h3><Table cols={["item", "reports", "outlets", "min", "avg", "max"]} rows={prices.map(p => ({ item: `${p.brand}${p.brand !== p.question ? ` — ${p.question}` : ""}`, reports: p.reports, outlets: p.outlets, min: inr0(p.min), avg: inr0(p.avg), max: inr0(p.max) }))} /></>}
+    {prices && prices.length > 0 && <><h3>Competitor prices</h3>{prices.map(p => <div key={p.brand + p.question} className="card small"><b>{p.brand}</b>{p.brand !== p.question && <span className="muted"> · {p.question}</span>}
+      <div>Avg <b>{inr0(p.avg)}</b> · min {inr0(p.min)} · max {inr0(p.max)} <span className="muted">· {p.reports} reports, {p.outlets} outlets</span></div></div>)}</>}
     <h3>{rep ? "My recent responses" : "Recent responses"}</h3>
     {!resp ? <Loading /> : !resp.length ? <p className="muted">No responses yet.</p> : resp.slice(0, 30).map(r => <div key={r.id} className="card small"><b>{r.form_name}</b> <span className="muted">· {r.shop_name || "no outlet"} · {r.user_name} · {String(r.created_at).slice(0, 10)}</span>
       <div className="muted">{Object.entries(r.answers).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v === true ? "yes" : v === false ? "no" : v}`).join(" · ")}</div></div>)}
@@ -251,7 +252,7 @@ export function Surveys({ s }: ViewProps) {
         <select value={q.type} onChange={e => setQ(i, { type: e.target.value })}>{Object.entries(QT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         {q.type === "select" && <input placeholder="Choices, comma separated" value={q.options || ""} onChange={e => setQ(i, { options: e.target.value })} />}
         {q.type === "price" && <input placeholder="Competitor brand" value={q.brand || ""} onChange={e => setQ(i, { brand: e.target.value })} />}
-        <label className="small"><input type="checkbox" checked={!!q.required} onChange={e => setQ(i, { required: e.target.checked })} /> required</label></div>)}
+        <label className="chk"><input type="checkbox" checked={!!q.required} onChange={e => setQ(i, { required: e.target.checked })} /> required</label></div>)}
       <div className="row-btns"><button className="sm ghost" onClick={() => setDraft({ ...draft, questions: [...draft.questions, { label: "", type: "text" }] })}>+ Question</button>
         <button className="sm" onClick={async () => { if (await run(() => api(s, "/api/surveys/forms", { method: "POST", body: JSON.stringify(draft) }))) { setDraft({ name: "", questions: [{ label: "", type: "price", brand: "" }] }); reload(); } }}>Save survey</button></div>
       {forms?.map(x => <div key={x.id} className="muted small">{x.name} · {x.questions.length} questions · <a href="#" onClick={async e => { e.preventDefault(); await run(() => api(s, `/api/surveys/forms/${x.id}`, { method: "PUT", body: JSON.stringify({ active: !x.active }) })); reload(); }}>{x.active ? "turn off" : "turn on"}</a></div>)}
@@ -277,7 +278,7 @@ export function Messages({ s }: ViewProps) {
         <Field label="Key"><input type="password" value={c.http.authValue} onChange={e => setC({ ...c, http: { ...c.http, authValue: e.target.value } })} /></Field>
         <Field label="Body ({to}, {text}, {channel})"><textarea rows={2} value={c.http.body} onChange={e => setC({ ...c, http: { ...c.http, body: e.target.value } })} /></Field></>}
       {Object.keys(c.defaults).map(k => <div key={k}>
-        {k !== "payment_reminder" && <label className="small"><input type="checkbox" checked={!!c.auto[k]} onChange={e => setC({ ...c, auto: { ...c.auto, [k]: e.target.checked } })} /> Send automatically</label>}
+        {k !== "payment_reminder" && <label className="chk"><input type="checkbox" checked={!!c.auto[k]} onChange={e => setC({ ...c, auto: { ...c.auto, [k]: e.target.checked } })} /> Send automatically</label>}
         <Field label={TPL_NAME[k]}><textarea rows={2} value={c.templates[k] ?? c.defaults[k]} onChange={e => setC({ ...c, templates: { ...c.templates, [k]: e.target.value } })} /></Field></div>)}
       <div className="row-btns"><button onClick={async () => { if (await run(() => api(s, "/api/messages/settings", { method: "PUT", body: JSON.stringify(c) }))) { toast("Saved"); reloadCfg(); } }}>Save</button>
         <input placeholder="Test phone" value={to} onChange={e => setTo(e.target.value)} style={{ maxWidth: 140 }} />
