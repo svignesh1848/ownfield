@@ -9,31 +9,31 @@ Write in simple, everyday business words. Keep product and brand terms as they a
 
 ## Status
 
-**Native speakers: please review.** Every translation below was written without native-speaker review. Languages marked **beta** are the least reviewed (and *starter* ones cover only the main menu and sign-in words) — corrections and missing strings are very welcome; open a pull request editing the JSON file.
+**Native speakers: please review.** No translation below has had native-speaker review yet; most strings were machine-assisted (brand and terms like GST kept as they are), so some wording may be stiff. Bodo and Kashmiri cover only the main screens so far. Corrections are very welcome — open a pull request editing the JSON file.
 
 | Language | Code | Direction | Strings translated | Status |
 |---|---|---|---|---|
-| Assamese · অসমীয়া | `as` | LTR | 137 / 974 (14%) | beta |
-| Bengali · বাংলা | `bn` | LTR | 137 / 974 (14%) | needs native review |
-| Bodo · बड़ो | `brx` | LTR | 137 / 974 (14%) | beta |
-| Dogri · डोगरी | `doi` | LTR | 137 / 974 (14%) | beta |
-| Gujarati · ગુજરાતી | `gu` | LTR | 137 / 974 (14%) | needs native review |
-| Hindi · हिन्दी | `hi` | LTR | 476 / 974 (49%) | needs native review |
-| Kannada · ಕನ್ನಡ | `kn` | LTR | 137 / 974 (14%) | needs native review |
-| Kashmiri · کٲشُر | `ks` | RTL | 137 / 974 (14%) | beta |
-| Konkani · कोंकणी | `kok` | LTR | 137 / 974 (14%) | beta |
-| Maithili · मैथिली | `mai` | LTR | 137 / 974 (14%) | beta |
-| Malayalam · മലയാളം | `ml` | LTR | 137 / 974 (14%) | needs native review |
-| Manipuri (Meitei) · ꯃꯤꯇꯩꯂꯣꯟ | `mni` | LTR | 44 / 974 (5%) | beta (starter) |
-| Marathi · मराठी | `mr` | LTR | 137 / 974 (14%) | needs native review |
-| Nepali · नेपाली | `ne` | LTR | 137 / 974 (14%) | beta |
-| Odia · ଓଡ଼ିଆ | `or` | LTR | 137 / 974 (14%) | beta |
-| Punjabi · ਪੰਜਾਬੀ | `pa` | LTR | 137 / 974 (14%) | needs native review |
-| Sanskrit · संस्कृतम् | `sa` | LTR | 137 / 974 (14%) | beta |
-| Santali · ᱥᱟᱱᱛᱟᱲᱤ | `sat` | LTR | 43 / 974 (4%) | beta (starter) |
-| Sindhi · سنڌي | `sd` | RTL | 137 / 974 (14%) | beta |
-| Tamil · தமிழ் | `ta` | LTR | 137 / 974 (14%) | needs native review |
-| Telugu · తెలుగు | `te` | LTR | 137 / 974 (14%) | needs native review |
-| Urdu · اردو | `ur` | RTL | 173 / 974 (18%) | needs native review |
+| Assamese · অসমীয়া | `as` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Bengali · বাংলা | `bn` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Bodo · बड़ो | `brx` | LTR | 137 / 978 (14%) | in progress — help wanted |
+| Dogri · डोगरी | `doi` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Gujarati · ગુજરાતી | `gu` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Hindi · हिन्दी | `hi` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Kannada · ಕನ್ನಡ | `kn` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Kashmiri · کٲشُر | `ks` | RTL | 137 / 978 (14%) | in progress — help wanted |
+| Konkani · कोंकणी | `kok` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Maithili · मैथिली | `mai` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Malayalam · മലയാളം | `ml` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Manipuri (Meitei) · ꯃꯤꯇꯩꯂꯣꯟ | `mni` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Marathi · मराठी | `mr` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Nepali · नेपाली | `ne` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Odia · ଓଡ଼ିଆ | `or` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Punjabi · ਪੰਜਾਬੀ | `pa` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Sanskrit · संस्कृतम् | `sa` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Santali · ᱥᱟᱱᱛᱟᱲᱤ | `sat` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Sindhi · سنڌي | `sd` | RTL | 978 / 978 (100%) | complete, needs native review |
+| Tamil · தமிழ் | `ta` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Telugu · తెలుగు | `te` | LTR | 978 / 978 (100%) | complete, needs native review |
+| Urdu · اردو | `ur` | RTL | 978 / 978 (100%) | complete, needs native review |
 
-Untranslated strings show in English. The menus, sign-in screen, common buttons and order/visit actions are covered first; long help texts and admin screens are mostly still English.
+Untranslated strings show in English. A test checks that every language has every key (Bodo and Kashmiri are listed as in progress).

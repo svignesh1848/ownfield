@@ -25,6 +25,21 @@ describe("i18n", () => {
     for (const k of Object.keys(en)) expect(translateWith(d, k).length, `${l}: "${k}"`).toBeGreaterThan(0);
     expect(translateWith(d, "__missing__ {0}", 5)).toBe("__missing__ 5");
   });
+  // Every UI key must be translated in every language. Bodo and Kashmiri are still in progress (no reliable
+  // translation source yet) — they must not lose keys, and should be removed from this list once complete.
+  const PENDING: Record<string, number> = { brx: 137, ks: 137 };
+  for (const l of Object.keys(LANGS).filter(l => l !== "en")) it(`${l}: has every key`, () => {
+    const d: Record<string, string> = JSON.parse(fs.readFileSync(path.join(dir, `${l}.json`), "utf8"));
+    const missing = Object.keys(en).filter(k => !(k in d));
+    if (l in PENDING) expect(Object.keys(en).length - missing.length, `${l}: lost translations`).toBeGreaterThanOrEqual(PENDING[l]);
+    else expect(missing, `${l}: missing keys`).toEqual([]);
+  });
+  it("brand stays OwnField in every language", () => {
+    for (const l of Object.keys(LANGS).filter(l => l !== "en")) {
+      const d: Record<string, string> = JSON.parse(fs.readFileSync(path.join(dir, `${l}.json`), "utf8"));
+      for (const [k, v] of Object.entries(d)) if (k.includes("OwnField")) expect(v, `${l}: "${k}"`).toContain("OwnField");
+    }
+  });
   it("every t(\"…\") string in the web app is in en.json", () => {
     const src = path.resolve(__dirname, "../../web/src");
     const missing: string[] = [];
