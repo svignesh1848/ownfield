@@ -21,6 +21,7 @@ import { INDUSTRIES, templateSettings } from "./templates.js";
 import { securityHeaders, tightCors, loginGuard, audit, errorHandler } from "./security.js";
 import { registerAccountRoutes, newDeviceCheck, totpVerify } from "./accounts.js";
 import { registerVanRoutes } from "./van.js";
+import { registerInventoryRoutes } from "./inventory.js";
 import { registerApiV1 } from "./integrations/api.js";
 import { registerIntegrationRoutes, registerInbound } from "./integrations/admin.js";
 import "./connectors/service.js";
@@ -258,6 +259,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerIncentiveRoutes({ app, db, auth, wrap, tenant });
   registerAccountRoutes({ app, db, auth, wrap, tenant, guard });
   registerVanRoutes({ app, db, auth, wrap, tenant });
+  registerInventoryRoutes({ app, db, auth, wrap, tenant });
   registerIntegrationRoutes({ app, db, auth, wrap, tenant });
   registerInbound(app, db);
   registerApiV1(app, db);

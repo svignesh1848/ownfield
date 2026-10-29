@@ -182,6 +182,11 @@ CREATE TABLE IF NOT EXISTS van_lines (
   loaded INTEGER NOT NULL DEFAULT 0, sold INTEGER NOT NULL DEFAULT 0, counted INTEGER, UNIQUE (load_id, variant_id));
 ALTER TABLE variants ADD COLUMN IF NOT EXISTS barcode TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS van_load_id INTEGER REFERENCES van_loads(id);
+ALTER TABLE stock ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE TABLE IF NOT EXISTS stock_moves (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER REFERENCES users(id), variant_id INTEGER NOT NULL REFERENCES variants(id),
+  batch_no TEXT NOT NULL DEFAULT '', qty INTEGER NOT NULL, kind TEXT NOT NULL, ref TEXT, note TEXT, user_id INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS stock_moves_loc ON stock_moves (company_id, distributor_id, id);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

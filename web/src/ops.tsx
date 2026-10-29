@@ -88,3 +88,24 @@ export function VanAdmin({ s }: ViewProps) {
       <Table rows={l.lines} cols={["sku", "loaded", "sold", "expected", "counted", "variance"]} /></div>)}
     {loads && !loads.length && <p className="muted">No vans loaded on this day.</p>}</>;
 }
+
+// ---------- Distributor inventory ----------
+export function Inventory({ s, cfg }: ViewProps) {
+  const mgr = s.user.role !== "distributor";
+  const [dists] = useData<any[]>(s, mgr ? "/api/distributors" : null);
+  const [d, setD] = useState(""); const q = mgr && d ? `?distributorId=${d}` : "";
+  const [inv, reload] = useData<any>(s, `/api/inventory${q}`, [d]); const [moves, reloadMoves] = useData<any[]>(s, `/api/inventory/moves${q}`, [d]);
+  const [kind, setKind] = useState("in"), [lines, setLines] = useState<any[]>([{ sku: "", qty: 1 }]), [batch, setBatch] = useState(""), [expiry, setExpiry] = useState(""), [note, setNote] = useState("");
+  const b = cfg.settings.features.batches;
+  return <><h2>Inventory</h2>
+    {mgr && <Field label="Location"><select value={d} onChange={e => setD(e.target.value)}><option value="">All</option><option value="company">Company warehouse</option>{dists?.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>}
+    {inv && <p className="muted">Stock age: {Object.entries(inv.ageing).map(([k, v]) => `${k}: ${v}`).join(" · ") || "no stock"}</p>}
+    <Table rows={inv?.rows ?? null} cols={["distributor", "sku", "name", "batch_no", "expiry", "qty", "age_days"]} empty={{ title: "No stock yet" }} />
+    {(!mgr || d) && <div className="card"><h3>Goods in / out</h3>
+      <Field label="Type"><select value={kind} onChange={e => setKind(e.target.value)}><option value="in">Goods in (receipt / return)</option><option value="out">Goods out (issue / damage)</option><option value="adjust">Set counted quantity</option></select></Field>
+      {b && <><Field label="Batch"><input value={batch} onChange={e => setBatch(e.target.value)} /></Field><Field label="Expiry"><input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} /></Field></>}
+      <Lines s={s} lines={lines} setLines={setLines} scan={!!cfg.settings.features.barcode} />
+      <Field label="Note"><input value={note} onChange={e => setNote(e.target.value)} /></Field>
+      <button onClick={async () => { if (await run(() => api(s, "/api/inventory/moves", { method: "POST", body: JSON.stringify({ kind, distributorId: d || undefined, note, lines: lines.filter(l => l.sku).map(l => ({ ...l, batch_no: batch, expiry })) }) }))) { setLines([{ sku: "", qty: 1 }]); reload(); reloadMoves(); } }}>Save</button></div>}
+    <h3>Movements</h3><Table rows={moves} cols={["created_at", "kind", "sku", "batch_no", "qty", "ref", "note"]} empty={{ title: "No movements yet" }} /></>;
+}

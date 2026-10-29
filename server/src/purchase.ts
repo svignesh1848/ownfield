@@ -1,3 +1,4 @@
+import { logMove } from "./inventory.js";
 // Step 5a: purchase orders distributor → company. Draft → submit → approve (editable qty, audited price override) / reject,
 // partial dispatches (FEFO from company stock when tracked) and receipt into distributor stock. Numbered PO/<FY>/<seq> per distributor.
 import type { Express, Response, Request, NextFunction } from "express";
@@ -272,6 +273,7 @@ export function registerPurchaseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         const ex = (await tx.query("SELECT id, qty FROM stock WHERE company_id=$1 AND distributor_id=$2 AND variant_id=$3 AND batch_no=$4", [cid, po.distributor_id, l.variant_id, dl.batch_no])).rows[0];
         if (ex) { if (!(await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(ex.qty) + dl.qty, ex.id, ex.qty])).rows[0]) throw bad("stock changed — retry", 409); }
         else await tx.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, po.distributor_id, l.variant_id, dl.batch_no, dl.expiry, dl.qty]);
+        await logMove(tx, cid, po.distributor_id, l.variant_id, dl.batch_no, dl.qty, "in", `po:${po.number ?? po.id}`, req.user.uid);
       }
       const ls = (await tx.query("SELECT qty_approved, qty_received FROM po_lines WHERE po_id=$1", [po.id])).rows;
       if (ls.every(l => Number(l.qty_received) >= Number(l.qty_approved ?? 0))) await tx.query("UPDATE purchase_orders SET status='received' WHERE id=$1", [po.id]);

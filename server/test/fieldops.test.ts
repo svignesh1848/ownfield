@@ -43,3 +43,22 @@ describe("van sales", () => {
     expect((await request(app).get("/api/van/loads").set(as("adm")).expect(200)).body.length).toBe(1);
   });
 });
+
+describe("distributor inventory", () => {
+  it("goods in/out per distributor with batch and age, moves ledger, auto-moves on order acceptance", async () => {
+    await request(app).get("/api/inventory").set(as("dist")).expect(403);
+    await on({ distInventory: true, stock: true });
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "in", lines: [{ sku: T.sku, qty: 30, batch_no: "B1" }] }).expect(201);
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "out", lines: [{ sku: T.sku, qty: 99, batch_no: "B1" }] }).expect(409);
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "out", lines: [{ sku: T.sku, qty: 4, batch_no: "B1" }], note: "Sample damage" }).expect(201);
+    const inv = (await request(app).get("/api/inventory").set(as("dist")).expect(200)).body;
+    expect(inv.rows[0]).toMatchObject({ sku: T.sku, batch_no: "B1", qty: 26, age_band: "0-30 days" });
+    // an order from a shop served by this distributor deducts stock on acceptance and logs a sale move
+    await await request(app).post(`/api/shops/${id.s2}/distributor`).set(as("adm")).send({ distributorId: id.dist }).expect(200);
+    const o = (await request(app).post("/api/orders").set(as("rep")).send({ clientRef: "inv1", shopId: id.s2, lines: [{ sku: T.sku, qty: 5 }] }).expect(201)).body;
+    await request(app).post(`/api/orders/${o.id}/status`).set(as("dist")).send({ status: "accepted" }).expect(200);
+    const moves = (await request(app).get("/api/inventory/moves").set(as("dist")).expect(200)).body;
+    expect(moves.map((m: any) => [m.kind, m.qty])).toEqual([["sale", -5], ["out", -4], ["in", 30]]);
+    expect((await request(app).get(`/api/inventory?distributorId=${id.dist}`).set(as("adm")).expect(200)).body.rows[0].qty).toBe(21);
+  });
+});

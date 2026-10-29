@@ -1,3 +1,4 @@
+import { logMove } from "./inventory.js";
 import { emit } from "./integrations/webhooks.js";
 // Step 4: GST invoices & credit notes (returns). HSN/SAC-based rates, CGST+SGST (intra-state) vs IGST (inter-state),
 // numbering per Indian financial year (April–March), printable HTML. Every write runs in one DB transaction.
@@ -183,6 +184,8 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
           const put = Math.min(cap, left); if (put <= 0) continue;
           const st = (await tx.query("SELECT qty FROM stock WHERE id=$1", [a.stock_id])).rows[0];
           if (!(await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(st.qty) + put, a.stock_id, st.qty])).rows[0]) throw bad("stock changed — retry", 409);
+          const sr = (await tx.query("SELECT distributor_id, variant_id, batch_no FROM stock WHERE id=$1", [a.stock_id])).rows[0];
+          await logMove(tx, cid, sr.distributor_id, sr.variant_id, sr.batch_no, put, "return", `credit_note:${doc.number}`, req.user.uid);
           left -= put;
         }
       }

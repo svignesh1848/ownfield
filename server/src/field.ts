@@ -1,4 +1,5 @@
 import { emit, checkLowStock } from "./integrations/webhooks.js";
+import { logMove } from "./inventory.js";
 // Step 2: beats, visits (GPS check-in/out), orders, distributor inbox, manager dashboard.
 import type { Express, Request, Response, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
@@ -263,6 +264,10 @@ export async function allocateStock(db: Db, cid: number, o: any, hooks: { afterF
         const ok = (await db.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [q, id, orig.get(id)])).rows[0];
         if (!ok) throw bad("stock changed while allocating — please retry", 409);
         if (hooks.afterFirstUpdate) { const h = hooks.afterFirstUpdate; hooks.afterFirstUpdate = undefined; await h(); }
+      }
+      for (const p of plan) {
+        const vid = lines.find(l => l.id === p.line)!.variant_id;
+        await logMove(db, cid, o.distributor_id ?? null, vid, p.row.batch_no || "", -p.take, "sale", `order:${o.client_ref}`, null);
       }
       for (const p of plan) {
         await db.query("INSERT INTO order_allocations (order_line_id,stock_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5)", [p.line, p.row.id, p.row.batch_no, p.row.expiry, p.take]);
