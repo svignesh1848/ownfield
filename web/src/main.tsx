@@ -3,20 +3,33 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import { Toasts, toast, Empty, Loading, Field, fmtCell, ICONS } from "./ui";
 import { SetupChecklist, RepHome, DistributorHome, ManagerHome } from "./home";
-import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge } from "./field";
+import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge, queue } from "./field";
 import { Collections } from "./collect";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 import { Invoices, Targets, Reports, Visits } from "./step4";
 import { PurchaseOrders, DistributorTerms } from "./po";
 import { Integrations } from "./integrations";
+import { t as tr, LANGS, lang, setLang } from "./i18n";
 import { VanRep, VanAdmin, Inventory, Claims, Leads, Trail, useTracking, Coverage } from "./ops";
 import { UsersAdmin, SecurityPage, MyAccount, ResetPassword, useIdleLogout, deviceId } from "./security";
 import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives, RetailerHome } from "./phase3";
 
 export type Session = { token: string; idleMinutes?: number; enrollTotp?: boolean; user: { id: number; name: string; role: string; companyCode: string | null } };
 const SAVED: Record<string, string> = { POST: "Saved", PUT: "Changes saved", PATCH: "Changes saved", DELETE: "Deleted" };
-export const api = async (s: Session | null, url: string, opts: RequestInit = {}) => {
-  const r = await fetch(url, { ...opts, headers: { ...(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(s ? { Authorization: `Bearer ${s.token}` } : {}) } });
+// Offline: these lists are cached on the phone and served when there is no network.
+const CACHE_GET = /^\/api\/(shops|items|products|company\/settings|beats|schemes|outstanding|van\/today|leads|visits|audit-templates|surveys\/templates)(\?|$)/;
+// Offline: these writes are queued (server dedupes by clientRef) and sent when the network returns.
+const QUEUE_POST = /^\/api\/(orders|payments|van\/sale|visits\/offline|surveys\/responses)$/;
+export const api = async (s: Session | null, url: string, opts: RequestInit = {}): Promise<any> => {
+  const m0 = (opts.method || "GET").toUpperCase();
+  if (s && m0 === "POST" && QUEUE_POST.test(url) && typeof opts.body === "string" && !navigator.onLine) {
+    const body = JSON.parse(opts.body); body.clientRef = body.clientRef || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    queue.set([...queue.get(), { ...body, _url: url }]); toast("Saved offline — will sync when online"); return { queued: true, ...body };
+  }
+  let r: Response;
+  try { r = await fetch(url, { ...opts, headers: { ...(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(s ? { Authorization: `Bearer ${s.token}` } : {}) } }); }
+  catch (e) { const c = m0 === "GET" && CACHE_GET.test(url) && localStorage.getItem("ff-c:" + url); if (c) return JSON.parse(c); throw e; }
+  if (r.ok && m0 === "GET" && CACHE_GET.test(url)) { const c = r.clone(); c.text().then(t => { try { if (t.length < 500_000) localStorage.setItem("ff-c:" + url, t); } catch { /* storage full */ } }); }
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && s) { localStorage.removeItem("ff"); setTimeout(() => location.reload(), 1500); }
   if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { body: j });
@@ -196,9 +209,9 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   const cur = s.enrollTotp ? "account" : tabs.includes(tab) ? tab : "home";
   const views: Record<string, any> = { home: mgr ? ManagerHome : role === "retailer" ? RetailerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
-    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, inventory: Inventory, claims: Claims, leads: Leads, trail: Trail, coverage: Coverage, account: (p: ViewProps) => <MyAccount s={p.s} onSignedOut={onLogout} />, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
+    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, inventory: Inventory, claims: Claims, leads: Leads, trail: Trail, coverage: Coverage, account: (p: ViewProps) => <><div className="card"><label>{tr("language", "Language")} <select value={lang()} onChange={e => setLang(e.target.value)}>{Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label></div><MyAccount s={p.s} onSignedOut={onLogout} /></>, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
   const C = views[cur];
-  const Item = ({ t }: { t: string }) => <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{TAB_LABEL[t] || t}</span></button>;
+  const Item = ({ t }: { t: string }) => <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{tr(t, TAB_LABEL[t] || t)}</span></button>;
   return <div className="shell">
     <aside className="sidebar"><div className="brand sm"><span className="logo">FF</span><b>FieldForce</b></div>
       {groups.map(([g, ts]) => <div key={g} className="group"><div className="group-h">{g}</div>{ts.map(t => <Item key={t} t={t} />)}</div>)}

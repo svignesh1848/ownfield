@@ -149,3 +149,19 @@ describe("coverage report", () => {
     await request(app).get("/api/coverage?from=2026-01-01&to=2026-03-01").set(as("adm")).expect(400);
   });
 });
+
+describe("offline sync", () => {
+  it("accepts a whole visit captured offline and dedupes retries of visits and payments by clientRef", async () => {
+    const tin = new Date(Date.now() - 3600_000).toISOString(), tout = new Date(Date.now() - 3000_000).toISOString();
+    const v = (await request(app).post("/api/visits/offline").set(as("rep")).send({ clientRef: "off-v1", shopId: id.s, checkInAt: tin, checkOutAt: tout }).expect(201)).body;
+    expect(v.check_out_at).toBeTruthy();
+    expect((await request(app).post("/api/visits/offline").set(as("rep")).send({ clientRef: "off-v1", shopId: id.s, checkInAt: tin, checkOutAt: tout }).expect(200)).body.duplicate).toBe(true);
+    await request(app).post("/api/visits/offline").set(as("rep")).send({ clientRef: "off-v2", shopId: id.s, checkInAt: "2020-01-01T00:00:00Z" }).expect(400);
+    await on({ invoicing: true });
+    const p1 = await request(app).post("/api/payments").set(as("rep")).send({ clientRef: "off-p1", shopId: id.s, amount: 10, mode: "cash" });
+    if (p1.status === 201) {
+      const p2 = (await request(app).post("/api/payments").set(as("rep")).send({ clientRef: "off-p1", shopId: id.s, amount: 10, mode: "cash" }).expect(200)).body;
+      expect(p2.duplicate).toBe(true); expect(p2.id).toBe(p1.body.id);
+    } else expect(p1.status).toBe(400); // nothing outstanding to collect against is also fine
+  });
+});

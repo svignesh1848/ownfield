@@ -1,4 +1,5 @@
 import { ScanButton } from "./ops";
+import { t } from "./i18n";
 import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { CustomInputs, attrText } from "./config";
@@ -10,7 +11,7 @@ const QKEY = "ff-order-queue";
 export const queue = { get: (): any[] => JSON.parse(localStorage.getItem(QKEY) || "[]"), set: (q: any[]) => localStorage.setItem(QKEY, JSON.stringify(q)) };
 export async function flushQueue(s: Session) {
   for (const o of queue.get()) {
-    try { await api(s, "/api/orders", { method: "POST", body: JSON.stringify(o) }); queue.set(queue.get().filter(x => x.clientRef !== o.clientRef)); }
+    try { const { _url, error, ...body } = o; await api(s, _url || "/api/orders", { method: "POST", body: JSON.stringify(body) }); queue.set(queue.get().filter(x => x.clientRef !== o.clientRef)); }
     catch (e: any) { if (/fetch|network/i.test(e.message)) break; queue.set(queue.get().map(x => x.clientRef === o.clientRef ? { ...x, error: e.message } : x)); }
   }
 }
@@ -22,7 +23,7 @@ export function OfflineBadge({ s }: { s: Session }) {
     return () => { clearInterval(t); window.removeEventListener("online", tick); };
   }, []);
   if (!n && on) return null;
-  return <div className="usage warn">{on ? "Online" : "Offline"} · {n} order(s) waiting to sync</div>;
+  return <div className="usage warn">{on ? t("online", "Online") : t("offline", "Offline")} · {n} {t("waiting", "waiting to sync")}</div>;
 }
 
 const gps = () => new Promise<{ lat: number; lng: number }>((ok, no) =>
@@ -65,20 +66,31 @@ export function ShopsMap({ s, cfg }: { s: Session; cfg: Cfg }) {
 
 export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
   const [beats, setBeats] = useState<any[]>([]); const [visits, setVisits] = useState<any[]>([]); const [msg, setMsg] = useState(""); const [vc, setVc] = useState<Record<string, any>>({});
-  const load = () => { api(s, "/api/beats").then(setBeats); api(s, "/api/visits").then(setVisits); };
+  const OV = "ff-open-visit", local = () => JSON.parse(localStorage.getItem(OV) || "null");
+  const load = () => { api(s, "/api/beats").then(setBeats).catch(() => {}); api(s, "/api/visits").then(v => setVisits([...(local() ? [local()] : []), ...v])).catch(() => setVisits(local() ? [local()] : [])); };
   useEffect(load, []);
+  // Offline visits: check-in is kept on the phone; check-out sends the whole visit (queued until online).
+  const checkin = async (x: any, p: any) => {
+    if (navigator.onLine) return api(s, "/api/visits/checkin", { method: "POST", body: JSON.stringify({ shopId: x.id, ...p }) });
+    localStorage.setItem(OV, JSON.stringify({ id: "offline", offline: true, shop_id: x.id, shop_name: x.name, check_in_at: new Date().toISOString(), ...p, clientRef: `v${Date.now().toString(36)}` }));
+  };
+  const checkout = async (o: any, p: any) => {
+    if (!o.offline) return api(s, `/api/visits/${o.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc }) });
+    await api(s, "/api/visits/offline", { method: "POST", body: JSON.stringify({ clientRef: o.clientRef, shopId: o.shop_id, checkInAt: o.check_in_at, checkOutAt: new Date().toISOString(), lat: o.lat, lng: o.lng, custom: vc }) });
+    localStorage.removeItem(OV);
+  };
   const open = visits.find(v => !v.check_out_at), gpsOn = cfg.settings.features.gps, vdefs = cfg.settings.customFields.visit;
   const act = async (fn: (p: { lat?: number; lng?: number }) => Promise<unknown>) => {
     try { let p = {}; if (gpsOn) { setMsg("Getting GPS…"); p = await gps(); } else p = await gps().catch(() => ({})); await fn(p); setMsg(""); setVc({}); load(); } catch (e: any) { setMsg(e.message); } };
   return <><h2>My beat</h2>{beats.some(b => b.onLeaveToday) && <div className="banner">🌴 You are on approved leave today. Visits are paused — enjoy your day off.</div>}{open && <div className="usage warn">In visit: <b>{open.shop_name}</b> since {fmtDate(open.check_in_at, true).slice(11)}
-      {cfg.settings.features.photos && <VisitPhotos s={s} visitId={open.id} canAdd />}
+      {cfg.settings.features.photos && !open.offline && <VisitPhotos s={s} visitId={open.id} canAdd />}
       {vdefs.length > 0 && <CustomInputs defs={vdefs} value={vc} onChange={setVc} />}
-      <button className="sm" onClick={() => act(p => api(s, `/api/visits/${open.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc }) }))}>Check out</button></div>}
+      <button className="sm" onClick={() => act(p => checkout(open, p))}>Check out</button></div>}
     {!beats.length && <Empty icon="🗺️" title="No beat assigned yet" text="A beat is your list of outlets to visit. Ask your manager to assign one." />}
     {beats.map(b => <div key={b.id}><h3>{b.name}</h3>{b.shops.map((x: any) => {
       const done = visits.some(v => v.shop_id === x.id && v.check_out_at && new Date(v.check_in_at).toDateString() === new Date().toDateString());
       return <div className="row" key={x.id}>{x.seq}. <b>{x.name}</b> <span className="muted">{x.city}</span> {done ? <span className="pill">visited</span>
-        : !open && <button className="sm" onClick={() => act(p => api(s, "/api/visits/checkin", { method: "POST", body: JSON.stringify({ shopId: x.id, ...p }) }))}>Check in{gpsOn ? " 📍" : ""}</button>}</div>;
+        : !open && <button className="sm" onClick={() => act(p => checkin(x, p))}>Check in{gpsOn ? " 📍" : ""}</button>}</div>;
     })}</div>)}<p className="err">{msg}</p></>;
 }
 

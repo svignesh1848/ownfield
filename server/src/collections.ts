@@ -126,6 +126,10 @@ export function registerCollectionRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     const settings = await ready(cid);
     const b = req.body || {};
+    if (b.clientRef) { // offline retries: the same clientRef returns the payment already saved
+      const dup = (await db.query("SELECT id FROM payments WHERE company_id=$1 AND client_ref=$2", [cid, String(b.clientRef).slice(0, 60)])).rows[0];
+      if (dup) return res.status(200).json({ ...(await loadPayment(cid, dup.id, req)), duplicate: true });
+    }
     const shop = (await db.query("SELECT * FROM shops WHERE id=$1 AND company_id=$2", [Number(b.shopId), cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
     const issuer = own(req) || String(b.issuer || (settings.features.distributorBilling && shop.distributor_id ? `d${shop.distributor_id}` : "company"));
     if (issuer !== "company" && !/^d\d+$/.test(issuer)) throw bad("issuer must be company or d<distributorId>");
@@ -155,6 +159,7 @@ export function registerCollectionRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       const number = `RCPT/${fy}/${String(await nextNumber(tx as Db, cid, issuer === "company" ? "receipt" : `receipt:${issuer}`, fy)).padStart(4, "0")}`;
       const p = (await tx.query(`INSERT INTO payments (company_id,issuer,number,fy,shop_id,pay_date,mode,reference,cheque_date,amount,collected_by)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [cid, issuer, number, fy, shop.id, payDate, mode, b.reference ? String(b.reference) : null, chequeDate, amount, req.user.uid])).rows[0];
+      if (b.clientRef) await tx.query("UPDATE payments SET client_ref=$1 WHERE id=$2", [String(b.clientRef).slice(0, 60), p.id]);
       for (const a of plan) await tx.query("INSERT INTO payment_allocations (payment_id,invoice_id,amount) VALUES ($1,$2,$3)", [p.id, a.id, a.amount]);
       await emit(tx as Db, cid, "collection.created", { id: p.id, number: p.number, shop_id: p.shop_id, amount: Number(p.amount), mode: p.mode, pay_date: p.pay_date });
       return p;

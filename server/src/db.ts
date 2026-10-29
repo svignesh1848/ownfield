@@ -204,6 +204,8 @@ CREATE INDEX IF NOT EXISTS location_pings_user ON location_pings (company_id, us
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS lat NUMERIC;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS lng NUMERIC;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS geofence_m INTEGER;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS client_ref TEXT;
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS client_ref TEXT;
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

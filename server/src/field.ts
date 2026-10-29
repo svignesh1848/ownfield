@@ -113,6 +113,21 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     res.status(201).json((await db.query("INSERT INTO visits (company_id,rep_id,shop_id,in_lat,in_lng) VALUES ($1,$2,$3,$4,$5) RETURNING *",
       [cid, req.user.uid, Number(req.body.shopId), lat, lng])).rows[0]);
   }));
+  // A whole visit captured offline (check-in and check-out times from the phone), sent when back online. Deduped by clientRef.
+  app.post("/api/visits/offline", auth("sales_rep"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const b = req.body || {}; if (!b.clientRef) throw bad("clientRef required");
+    const dup = (await db.query("SELECT * FROM visits WHERE company_id=$1 AND client_ref=$2", [cid, String(b.clientRef).slice(0, 60)])).rows[0];
+    if (dup) return res.json({ ...dup, duplicate: true });
+    if (!(await shopIn(cid, b.shopId))) throw bad("shop not found", 404);
+    const tin = new Date(b.checkInAt), tout = b.checkOutAt ? new Date(b.checkOutAt) : null, now = Date.now();
+    if (isNaN(+tin) || +tin > now + 60_000 || +tin < now - 3 * 864e5 || (tout && (isNaN(+tout) || tout < tin || +tout > now + 60_000))) throw bad("visit times look wrong");
+    const { settings } = await getCompany(db, cid);
+    const [lat, lng] = coordOpt(false, b.lat, b.lng);
+    await geofenceCheck(db, cid, Number(b.shopId), lat, lng);
+    res.status(201).json((await db.query("INSERT INTO visits (company_id,rep_id,shop_id,check_in_at,in_lat,in_lng,check_out_at,out_lat,out_lng,notes,custom,client_ref) VALUES ($1,$2,$3,$4,$5,$6,$7,$5,$6,$8,$9,$10) RETURNING *",
+      [cid, req.user.uid, Number(b.shopId), tin.toISOString(), lat, lng, tout ? tout.toISOString() : tin.toISOString(), b.notes ?? null, JSON.stringify(cleanCustom(settings.customFields.visit, b.custom || {}, false)), String(b.clientRef).slice(0, 60)])).rows[0]);
+  }));
   app.post("/api/visits/:id/checkout", auth("sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const { settings } = await getCompany(db, cid);
