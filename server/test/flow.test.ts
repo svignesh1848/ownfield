@@ -131,3 +131,21 @@ describe("6. scheme claims from invoices", () => {
     expect((await request(app).post("/api/claims/auto-schemes").set(as("adm")).send({ month: "2026-10" }).expect(200)).body.created).toBe(0);
   });
 });
+
+describe("7. claim approval levels, damage cap and scheme budget", () => {
+  it("enforces who may approve, the damage cap and the scheme budget", async () => {
+    const mk = async (amount: number) => (await request(app).post("/api/claims").set(as("dist")).send({ kind: "damage", description: "Sample damaged cartons", amount }).expect(201)).body.id;
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ claimLevels: [{ kind: "damage", upTo: 100, role: "manager" }], damageCapPct: 0 }).expect(200);
+    const small = await mk(80), big = await mk(150);
+    await request(app).post(`/api/claims/${small}/decide`).set(as("mgr")).send({ approve: true }).expect(200);
+    await request(app).post(`/api/claims/${big}/decide`).set(as("mgr")).send({ approve: true }).expect(403);
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ damageCapPct: 10 }).expect(200); // no primary sales this month → cap ₹0
+    expect((await request(app).post(`/api/claims/${big}/decide`).set(as("adm")).send({ approve: true }).expect(409)).body.error).toContain("capped");
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ damageCapPct: 0 }).expect(200);
+    await request(app).post(`/api/claims/${big}/decide`).set(as("adm")).send({ approve: true }).expect(200);
+    const sch = (await request(app).get("/api/claims").set(as("adm"))).body.find((x: any) => x.kind === "scheme");
+    await request(app).put(`/api/schemes/${sch.scheme_id}/budget`).set(as("mgr")).send({ budget: 3 }).expect(200);
+    expect((await request(app).post(`/api/claims/${sch.id}/decide`).set(as("mgr")).send({ approve: true }).expect(409)).body.error).toContain("budget");
+    await request(app).post(`/api/claims/${sch.id}/decide`).set(as("mgr")).send({ approve: true, amount: 3 }).expect(200);
+  });
+});

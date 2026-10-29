@@ -8,6 +8,7 @@ import { nextNumber, fyOf, esc, inr, r2 } from "./billing.js";
 import { emit } from "./integrations/webhooks.js";
 import { logMove } from "./inventory.js";
 import { audit } from "./security.js";
+import { checkClaimApproval } from "./flow.js";
 import { type Ctx, MGR, requireFeature } from "./common.js";
 
 export const CLAIM_KINDS = ["scheme", "damage", "expiry"];
@@ -50,6 +51,7 @@ export function registerClaimRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const approve = req.body?.approve === true, amt = req.body?.amount != null ? Number(req.body.amount) : c.amount;
     if (approve && (!(amt > 0) || amt > c.amount)) throw bad("approved amount must be more than 0 and not above the claim");
     if (!approve && !String(req.body?.reason || "").trim()) throw bad("give a reason for rejecting");
+    if (approve) await checkClaimApproval(db, cid, req.user.role, c, amt);
     await db.query("UPDATE claims SET status=$1, approved_amount=$2, reason=$3, decided_by=$4, decided_at=NOW() WHERE id=$5 AND status='submitted'",
       [approve ? "approved" : "rejected", approve ? r2(amt) : null, String(req.body?.reason || "").slice(0, 300) || null, req.user.uid, c.id]);
     await audit(db, { companyId: cid, userId: req.user.uid, action: approve ? "claim.approve" : "claim.reject", target: `claim:${c.id}`, detail: { amount: amt }, ip: req.ip });

@@ -70,6 +70,12 @@ export function registerFlowRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const made = await autoSchemeClaims(db, cid, month, req.user.role === "distributor" ? req.user.uid : null);
     res.json({ created: made.length, ids: made });
   }));
+  app.put("/api/schemes/:id/budget", auth(...MGR), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const v = req.body?.budget == null || req.body.budget === "" ? null : Number(req.body.budget); if (v != null && !(v >= 0)) throw bad("budget must be ≥ 0");
+    const r = await db.query("UPDATE schemes SET budget=$1 WHERE id=$2 AND company_id=$3 RETURNING id, budget", [v, Number(req.params.id), cid]);
+    if (!r.rows[0]) throw bad("scheme not found", 404); res.json(r.rows[0]);
+  }));
   app.put("/api/shops/:id/type", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const v = String(req.body?.outletType ?? "").trim().slice(0, 40) || null;
@@ -112,6 +118,36 @@ export async function autoSchemeClaims(db: Db, cid: number, month: string, distr
     await emit(db, cid, "claim.submitted", { id: c.id, kind: "scheme", amount, distributor_id: g.dist, auto: true }); made.push(c.id);
   }
   return made;
+}
+/** Primary sales = value the company dispatched to a distributor in a month (PO dispatches × line rate, before tax). */
+export async function primarySales(db: Db, cid: number, dist: number, month: string) {
+  const lo = new Date(`${month}-01T00:00:00+05:30`), hi = new Date(lo); hi.setMonth(hi.getMonth() + 1);
+  const rows = (await db.query(`SELECT dl.qty, l.rate FROM po_dispatch_lines dl JOIN po_dispatches d ON d.id=dl.dispatch_id JOIN po_lines l ON l.id=dl.po_line_id JOIN purchase_orders p ON p.id=d.po_id
+    WHERE p.company_id=$1 AND p.distributor_id=$2 AND d.created_at>=$3 AND d.created_at<$4`, [cid, dist, lo.toISOString(), hi.toISOString()])).rows;
+  return Math.round(rows.reduce((a, r) => a + Number(r.qty) * Number(r.rate), 0) * 100) / 100;
+}
+/** Approval rules for a claim: level by type and amount, damage cap (% of monthly primary sales), scheme budget. Throws if not allowed. */
+export async function checkClaimApproval(db: Db, cid: number, role: string, c: any, amt: number) {
+  const f = await getFlow(db, cid);
+  const levels = f.claimLevels.filter(l => l.kind === c.kind || l.kind === "*");
+  if (levels.length && role !== "company_admin") {
+    const lvl = levels.filter(l => amt <= l.upTo).sort((a, b) => a.upTo - b.upTo)[0];
+    if (!lvl || lvl.role !== role) throw bad("This claim needs administrator approval", 403);
+  }
+  const month = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
+  if (c.kind === "damage" && f.damageCapPct > 0) {
+    const primary = await primarySales(db, cid, c.distributor_id, month), cap = Math.round(primary * f.damageCapPct) / 100;
+    const used = Number((await db.query(`SELECT COALESCE(SUM(approved_amount),0) AS s FROM claims WHERE company_id=$1 AND distributor_id=$2 AND kind='damage' AND status IN ('approved','settled') AND decided_at>=$3`,
+      [cid, c.distributor_id, new Date(`${month}-01T00:00:00+05:30`).toISOString()])).rows[0].s);
+    if (used + amt > cap + 0.004) throw bad(`Damage claims are capped at ${f.damageCapPct}% of this month's primary sales (₹${cap}); ₹${Math.max(0, Math.round((cap - used) * 100) / 100)} is left`, 409);
+  }
+  if (c.kind === "scheme" && c.scheme_id) {
+    const sc = (await db.query("SELECT budget FROM schemes WHERE id=$1", [c.scheme_id])).rows[0];
+    if (sc?.budget != null) {
+      const used = Number((await db.query("SELECT COALESCE(SUM(approved_amount),0) AS s FROM claims WHERE company_id=$1 AND scheme_id=$2 AND status IN ('approved','settled')", [cid, c.scheme_id])).rows[0].s);
+      if (used + amt > Number(sc.budget) + 0.004) throw bad(`Over the scheme budget: ₹${Math.max(0, Math.round((Number(sc.budget) - used) * 100) / 100)} of ₹${Number(sc.budget)} is left`, 409);
+    }
+  }
 }
 export const mustSellFor = (f: Flow, type: string | null) => [...new Set([...(f.mustSell["*"] || []), ...(type ? f.mustSell[type] || [] : [])])];
 /** Must-sell compliance: orders that contain every must-sell SKU for the outlet, per rep. */
