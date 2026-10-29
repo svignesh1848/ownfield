@@ -1,4 +1,4 @@
-Code,Name,Owner Name,Phone,City,Chemist type,Drug Licence
-SAMPLE-OUT-1,Sample Outlet 1,Sample Owner,9000000010,Chennai,Retail,SAMPLE-DL-1001
-SAMPLE-OUT-2,Sample Outlet 2,Sample Owner,9000000011,Coimbatore,Hospital,SAMPLE-DL-1002
-SAMPLE-OUT-3,Sample Outlet 3,Sample Owner,9000000012,Madurai,Wholesale,SAMPLE-DL-1003
+Code,Name,Owner Name,Phone,City,State Code,Chemist type,Drug Licence
+SAMPLE-OUT-1,Sample Outlet 1,Sample Owner,9000000010,Chennai,33,Retail,SAMPLE-DL-1001
+SAMPLE-OUT-2,Sample Outlet 2,Sample Owner,9000000011,Coimbatore,33,Hospital,SAMPLE-DL-1002
+SAMPLE-OUT-3,Sample Outlet 3,Sample Owner,9000000012,Madurai,33,Wholesale,SAMPLE-DL-1003

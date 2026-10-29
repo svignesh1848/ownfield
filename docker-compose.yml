@@ -12,4 +12,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:-please-change-me}
       OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
       OWNER_PASSWORD: ${OWNER_PASSWORD:-change-me-now}
-volumes: { dbdata: {} }
+      UPLOAD_DIR: /data/uploads
+    volumes: [uploads:/data/uploads]
+volumes: { dbdata: {}, uploads: {} }

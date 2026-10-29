@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { CustomInputs, attrText } from "./config";
+import { VisitPhotos, openPrint } from "./step4";
 
 // ---------- Offline order queue (localStorage; retried on reconnect; server dedupes by clientRef) ----------
 const QKEY = "ff-order-queue";
@@ -68,6 +69,7 @@ export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
   const act = async (fn: (p: { lat?: number; lng?: number }) => Promise<unknown>) => {
     try { let p = {}; if (gpsOn) { setMsg("Getting GPS…"); p = await gps(); } else p = await gps().catch(() => ({})); await fn(p); setMsg(""); setVc({}); load(); } catch (e: any) { setMsg(e.message); } };
   return <><h2>My beat</h2>{open && <div className="usage warn">In visit: <b>{open.shop_name}</b> since {new Date(open.check_in_at).toLocaleTimeString()}
+      {cfg.settings.features.photos && <VisitPhotos s={s} visitId={open.id} canAdd />}
       {vdefs.length > 0 && <CustomInputs defs={vdefs} value={vc} onChange={setVc} />}
       <button className="sm" onClick={() => act(p => api(s, `/api/visits/${open.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc }) }))}>Check out</button></div>}
     {!beats.length && <p className="muted">No beat assigned yet.</p>}
@@ -125,9 +127,17 @@ const OrderCard = ({ o, children }: { o: any; children?: any }) => <div classNam
   {o.lines.map((l: any) => <div className="muted small" key={l.id}>{l.item_name} {attrText(l.attrs)} — {l.qty} {l.uom}{l.discount_pct > 0 ? ` (−${l.discount_pct}%)` : ""} = ₹{Number(l.amount).toLocaleString("en-IN")}
     {l.allocations?.length > 0 && <span className="batches"> {l.allocations.map((a: any) => `${a.batch_no || "stock"}${a.expiry ? ` exp ${a.expiry}` : ""} ×${a.qty}`).join("; ")}</span>}</div>)}{children}</div>;
 
-export function Orders({ s }: { s: Session }) {
-  const [rows, setRows] = useState<any[]>([]); useEffect(() => { api(s, "/api/orders").then(setRows); }, []);
-  return <><h2>Orders</h2>{!rows.length && <p className="muted">No orders yet.</p>}{rows.map(o => <OrderCard key={o.id} o={o} />)}</>;
+export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {
+  const [rows, setRows] = useState<any[]>([]); const [msg, setMsg] = useState("");
+  const load = () => api(s, "/api/orders").then(setRows); useEffect(() => { load(); }, []);
+  const mgr = ["company_admin", "manager"].includes(s.user.role), admin = s.user.role === "company_admin";
+  const go = async (fn: () => Promise<any>) => { try { await fn(); setMsg(""); load(); } catch (e: any) { setMsg(e.message); } };
+  return <><h2>Orders</h2>{!rows.length && <p className="muted">No orders yet.</p>}{rows.map(o => <OrderCard key={o.id} o={o}>
+    {admin && o.status === "placed" && <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/status`, { method: "POST", body: JSON.stringify({ status: "accepted" }) }))}>Accept</button>}
+    {mgr && cfg.settings.features.invoicing && ["accepted", "fulfilled"].includes(o.status) && (o.invoice
+      ? <button className="sm ghost" onClick={() => openPrint(s, o.invoice.id).catch(e => setMsg(e.message))}>Print {o.invoice.number}</button>
+      : <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/invoice`, { method: "POST", body: "{}" }))}>Create GST invoice</button>)}
+  </OrderCard>)}<p className="err">{msg}</p></>;
 }
 
 export function Inbox({ s }: { s: Session }) {

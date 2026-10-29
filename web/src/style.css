@@ -24,3 +24,8 @@ button.ghost{background:#e2e8f0;color:#0f172a}
 .gh{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.gh select.unit{width:auto;margin:0 0 0 auto;padding:4px 6px;font-size:13px}
 table.sg th,table.sg td{padding:3px;text-align:center}table.sg input{width:56px;text-align:center;padding:6px 2px;margin:0}
 .batches{color:#0f766e;font-weight:600}
+.chips{display:inline-flex;gap:4px;margin:2px}.card.sub{border:1px solid #e2e8f0;margin-top:10px}
+.tgt{display:grid;grid-template-columns:70px 1fr 1fr 50px auto;gap:6px;align-items:center;font-size:13px;margin:4px 0}.tgt .bar{margin:0}
+.dates{display:flex;gap:8px}.dates label{flex:1;font-size:13px}
+.photos{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;align-items:center}.thumb{width:64px;height:64px;object-fit:cover;border-radius:6px;background:#e2e8f0;display:inline-block}
+.addphoto{width:64px;height:64px;border:2px dashed #94a3b8;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer}.addphoto input{display:none}

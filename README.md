@@ -32,6 +32,21 @@ Open-source, **industry-agnostic** field sales and distributor management for FM
 - **Excel/CSV import adapts** to each company's attributes, units and custom fields. Each import has a downloadable template. Stock upload sets the quantity per SKU/batch/location.
 - **A sample dataset per template** (Settings → Load sample data). Every record is fictitious and named "Sample …".
 
+## Step 4 features
+- **GST invoices** from accepted or fulfilled orders:
+  - Each line's GST rate comes from its HSN/SAC code: the company sets a default rate plus a rate per code prefix, and the longest matching prefix wins.
+  - **CGST + SGST** apply when the outlet's state (state code or GSTIN) matches the company's; otherwise **IGST** applies.
+  - Totals are rounded to the rupee and the round-off is shown.
+  - Numbers are gapless and **restart every financial year (April–March)**. The format is configurable (`{prefix}/{fy}/{seq:4}`, at most 16 characters).
+  - Invoices print as a tax invoice with an HSN summary.
+- **Returns / credit notes** against an invoice line: tax is reduced in proportion, you can't return more than was invoiced, and you can optionally **put the goods back into the same batches** they were allocated from.
+- **Targets vs achievement:** monthly targets per rep for order value, order count and visits. Set them in the UI or import them from Excel/CSV. Managers see the whole team; reps see their own progress.
+- **Visit photos:** reps take photos during a visit. Photos are shrunk on the phone to at most 1280 px, only JPEG/PNG/WebP is accepted (the file content is checked), and there's a limit of 10 per visit. They're stored on disk (`UPLOAD_DIR`, a Docker volume) and visible only to the rep who took them and to managers.
+- **Excel/CSV report exports:** orders (line level), visits (with custom fields and photo counts), GST register (invoices and negative credit notes), stock, and targets vs achievement.
+- **Database transactions:** placing an order, accepting it (with first-expiry-first-out stock allocation), invoicing, and credit notes with restocking each commit as one transaction or roll back completely. Stock and document numbers are also protected by compare-and-set updates.
+
+> GST rates in the industry templates are **samples**. Verify the rate for every HSN/SAC code with your tax advisor. E-invoicing (IRN/QR) and e-way bills are not included yet.
+
 ## Stack
 Node 20 + TypeScript + Express + PostgreSQL. React + Vite on the front end. Tests use Vitest + Supertest against in-memory Postgres (pg-mem).
 
@@ -55,4 +70,4 @@ Demo logins: `PLATFORM / owner@example.com / demo`, `DEMO / admin@example.com / 
 Upload templates are in `sample-data/`. All sample data there is made up.
 
 ## Roadmap
-Step 4 (proposed): invoices/GST tax lines and returns, targets vs achievement, photo capture on visits, report exports, and wrapping stock allocation in DB transactions.
+Step 5 (proposed): payments & outstanding/collections, distributor-billed invoices (distributor GSTIN), e-invoice (IRN) export JSON, purchase orders from distributors to the company, and offline photo queue.

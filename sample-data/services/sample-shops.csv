@@ -1,4 +1,4 @@
-Code,Name,Owner Name,Phone,City,Contract end
-SAMPLE-OUT-1,Sample Outlet 1,Sample Owner,9000000010,Chennai,2027-03-31
-SAMPLE-OUT-2,Sample Outlet 2,Sample Owner,9000000011,Coimbatore,2027-06-30
-SAMPLE-OUT-3,Sample Outlet 3,Sample Owner,9000000012,Madurai,2026-12-31
+Code,Name,Owner Name,Phone,City,State Code,Contract end
+SAMPLE-OUT-1,Sample Outlet 1,Sample Owner,9000000010,Chennai,33,2027-03-31
+SAMPLE-OUT-2,Sample Outlet 2,Sample Owner,9000000011,Coimbatore,33,2027-06-30
+SAMPLE-OUT-3,Sample Outlet 3,Sample Owner,9000000012,Madurai,33,2026-12-31

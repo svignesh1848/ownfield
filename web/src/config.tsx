@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
+import { GstSettings } from "./step4";
 
 type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void };
 const FEATURES: [string, string][] = [["stock", "Stock tracking"], ["batches", "Batch & expiry (FEFO)"], ["sizeGrid", "Size-grid ordering"], ["gps", "GPS check-in required"],
-  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"]];
+  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"], ["photos", "Visit photos"], ["invoicing", "GST invoicing & credit notes"]];
 export const attrText = (a: Record<string, string>) => Object.values(a || {}).join(" / ");
 const unitsText = (u: { code: string; factor: number }[]) => u.map(x => `${x.code}=${x.factor}`).join(", ");
 
@@ -54,9 +55,9 @@ export function SettingsPage({ s, cfg, reload }: P) {
   const [industry, setIndustry] = useState(cfg.industry); const [tpl, setTpl] = useState<any[]>([]);
   const [features, setFeatures] = useState({ ...st.features }); const [attrs, setAttrs] = useState(st.attributes.join(", ")); const [units, setUnits] = useState(unitsText(st.uoms));
   const [cf, setCf] = useState<Record<string, string>>({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) });
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(""); const [gst, setGst] = useState<any>({ ...(st as any).gst });
   useEffect(() => { api(null, "/api/templates").then(setTpl); }, []);
-  useEffect(() => { setFeatures({ ...st.features }); setAttrs(st.attributes.join(", ")); setUnits(unitsText(st.uoms)); setCf({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) }); }, [cfg]);
+  useEffect(() => { setFeatures({ ...st.features }); setAttrs(st.attributes.join(", ")); setUnits(unitsText(st.uoms)); setCf({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) }); setGst({ ...(st as any).gst }); }, [cfg]);
   const put = async (body: any, ok: string) => { try { await api(s, "/api/company/settings", { method: "PUT", body: JSON.stringify(body) }); setMsg(ok); reload(); } catch (x: any) { setMsg(x.message); } };
   return <><h2>Company settings</h2>
     <label>Industry template</label>
@@ -71,7 +72,8 @@ export function SettingsPage({ s, cfg, reload }: P) {
     <label className="fld"><span>Units with conversion to base unit (base = 1), e.g. PCS=1, BOX=12, CASE=144</span><input value={units} onChange={e => setUnits(e.target.value)} /></label>
     <h3>Custom fields</h3><p className="muted">One per line: <code>Label | text/number/date/select | options,comma,separated | required</code></p>
     {(["outlet", "product", "visit"] as const).map(e => <label key={e} className="fld"><span>{label(e)} fields</span><textarea rows={3} value={cf[e]} onChange={x => setCf({ ...cf, [e]: x.target.value })} /></label>)}
-    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, "Settings saved")}>Save settings</button>
+    {features.invoicing && <GstSettings g={gst} onChange={setGst} />}
+    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, ...(features.invoicing ? { gst: { ...gst, defaultRate: Number(gst.defaultRate) } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, "Settings saved")}>Save settings</button>
     <p>{msg}</p></>;
 }
 
@@ -79,8 +81,9 @@ export function ImportPage({ s, cfg, onUsage }: P) {
   const st = cfg.settings, f = st.features; const [msg, setMsg] = useState("");
   const cols: Record<string, string[]> = {
     products: ["Item Code", "Item Name", "Category", ...(f.services ? ["Type"] : []), "HSN", "SKU", ...st.attributes.map(label), "MRP", "Billing Price", "Units", ...st.customFields.product.map(x => x.label)],
-    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", ...st.customFields.outlet.map(x => x.label)],
+    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "State Code", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", ...st.customFields.outlet.map(x => x.label)],
     users: ["Name", "Email", "Phone", "Role", "Password", ...(f.drugLicence ? ["Drug Licence"] : [])],
+    targets: ["Rep Email", "Month", "Metric", "Target"],
     ...(f.stock ? { stock: ["SKU", "Qty", "Unit", ...(f.batches ? ["Batch", "Expiry"] : []), "Distributor Email"] } : {}),
   };
   const dl = (k: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([cols[k].join(",") + "\n"], { type: "text/csv" })); a.download = `${k}-template.csv`; a.click(); };

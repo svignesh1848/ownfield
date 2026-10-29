@@ -4,7 +4,7 @@ import type { Express, Response, Request, NextFunction } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import type { Db } from "./db.js";
-import { TEMPLATES, INDUSTRIES, FEATURE_KEYS, FIELD_TYPES, ENTITIES, templateSettings, type Settings, type CustomField, type Uom } from "./templates.js";
+import { TEMPLATES, INDUSTRIES, FEATURE_KEYS, FIELD_TYPES, ENTITIES, templateSettings, withDefaults, type Settings, type CustomField, type Uom } from "./templates.js";
 
 export const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
 export const norm = (k: unknown) => String(k ?? "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -79,13 +79,27 @@ export function validateSettings(input: any, base: Settings): Settings {
     });
     if (new Set(s.customFields[e].map(f => f.key)).size !== s.customFields[e].length) throw bad(`duplicate ${e} custom field`);
   }
+  if (input.gst) {
+    const g = { ...s.gst, ...input.gst };
+    g.gstin = String(g.gstin || "").toUpperCase().trim(); g.stateCode = String(g.stateCode || "").trim();
+    if (g.gstin && !/^\d{2}[A-Z0-9]{13}$/.test(g.gstin)) throw bad("GSTIN must be 15 characters starting with the 2-digit state code");
+    if (g.stateCode && !/^\d{2}$/.test(g.stateCode)) throw bad("state code must be 2 digits");
+    if (g.gstin && g.stateCode && g.gstin.slice(0, 2) !== g.stateCode) throw bad("GSTIN does not match state code");
+    const rate = (r: unknown) => { const n = Number(r); if (!(n >= 0 && n <= 100)) throw bad(`invalid GST rate ${r}`); return n; };
+    g.defaultRate = rate(g.defaultRate);
+    g.hsnRates = (Array.isArray(g.hsnRates) ? g.hsnRates : String(g.hsnRates || "").split(",").map(p => p.trim()).filter(Boolean).map(p => { const [prefix, r] = p.split("="); return { prefix, rate: r }; }))
+      .map((h: any) => { const prefix = String(h.prefix).trim(); if (!/^\d{2,8}$/.test(prefix)) throw bad(`invalid HSN/SAC prefix ${prefix}`); return { prefix, rate: rate(h.rate) }; });
+    if (!String(g.numberFormat).includes("{seq")) throw bad("number format must contain {seq}");
+    for (const k of ["invoicePrefix", "creditPrefix"] as const) if (!/^[A-Z0-9-]{1,6}$/i.test(String(g[k]))) throw bad(`${k} must be 1–6 letters/digits`);
+    s.gst = g;
+  }
   return s;
 }
 
 export async function getCompany(db: Db, cid: number) {
   const c = (await db.query("SELECT industry, settings FROM companies WHERE id=$1", [cid])).rows[0];
   if (!c) throw bad("company not found", 404);
-  return { industry: c.industry as string, settings: parseJson<Settings>(c.settings, templateSettings(c.industry)) };
+  return { industry: c.industry as string, settings: withDefaults(c.industry, parseJson<Partial<Settings>>(c.settings, {})) };
 }
 
 /** Sellable stock rows at a location in FEFO order (earliest expiry first, expired excluded). */
@@ -111,13 +125,17 @@ async function importShop({ db, cid, s }: Imp, r: any) {
     dist = (await db.query("SELECT id FROM users WHERE company_id=$1 AND email=$2 AND role='distributor'", [cid, String(r.distributor_email).toLowerCase().trim()])).rows[0]?.id;
     if (!dist) throw bad(`distributor ${r.distributor_email} not found`);
   }
-  const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, r.gstin || null, dl, custom];
+  const gstin = String(r.gstin ?? "").toUpperCase().trim() || null;
+  if (gstin && !/^\d{2}[A-Z0-9]{13}$/.test(gstin)) throw bad("invalid GSTIN");
+  const state = String(r.state_code ?? "").trim().padStart(empty(r.state_code) ? 0 : 2, "0") || gstin?.slice(0, 2) || null;
+  if (state && !/^\d{2}$/.test(state)) throw bad("state code must be 2 digits");
+  const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, gstin, dl, custom, state];
   const ex = (await db.query("SELECT id, distributor_id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
   if (ex) {
-    await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,distributor_id=$9 WHERE id=$10", [...vals, dist ?? ex.distributor_id, ex.id]);
+    await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,distributor_id=$10 WHERE id=$11", [...vals, dist ?? ex.distributor_id, ex.id]);
     return "updated";
   }
-  await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", [...vals, dist, cid, String(r.code)]);
+  await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", [...vals, dist, cid, String(r.code)]);
   return "inserted";
 }
 
@@ -172,6 +190,7 @@ async function importStock({ db, cid, s, role, uid }: Imp, r: any) {
 const IMPORTERS: Record<string, (c: Imp, r: any) => Promise<string>> = {
   shops: importShop, products: importProduct, stock: importStock,
   users: async (c, r) => { await c.addUser(c.cid, r); return "inserted"; },
+  targets: async (c, r) => (await import("./insights.js")).setTarget(c.db, c.cid, { repEmail: String(r.rep_email ?? r.email ?? ""), month: String(r.month ?? ""), metric: String(r.metric ?? "").toLowerCase().trim(), target: Number(r.target) }),
 };
 const normRow = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [norm(k), typeof v === "string" ? v.trim() : v]));
 

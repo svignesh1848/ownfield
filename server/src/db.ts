@@ -1,5 +1,15 @@
 import pg from "pg";
-export type Db = { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> };
+export type Db = { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }>; connect?: () => Promise<any> };
+
+/** Run fn inside a database transaction (BEGIN/COMMIT, ROLLBACK on any error). Nested calls reuse the outer transaction. */
+export async function withTx<T>(db: Db, fn: (tx: Db) => Promise<T>): Promise<T> {
+  if (!db.connect) return fn(db); // already a transaction client
+  const c = await db.connect();
+  const tx: Db = { query: (t, p) => c.query(t, p) };
+  try { await c.query("BEGIN"); const r = await fn(tx); await c.query("COMMIT"); return r; }
+  catch (e) { await c.query("ROLLBACK").catch(() => {}); throw e; }
+  finally { c.release(); }
+}
 
 // JSON payloads (settings, attributes, units, custom fields) are stored as TEXT holding JSON for portability.
 export const SCHEMA = `
@@ -12,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (company_id, email));
 CREATE TABLE IF NOT EXISTS shops (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), code TEXT NOT NULL,
-  name TEXT NOT NULL, owner_name TEXT, phone TEXT, address TEXT, city TEXT, gstin TEXT, drug_licence TEXT, custom TEXT,
+  name TEXT NOT NULL, owner_name TEXT, phone TEXT, address TEXT, city TEXT, state_code TEXT, gstin TEXT, drug_licence TEXT, custom TEXT,
   distributor_id INTEGER REFERENCES users(id), UNIQUE (company_id, code));
 CREATE TABLE IF NOT EXISTS items (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), code TEXT NOT NULL, name TEXT NOT NULL,
@@ -48,10 +58,30 @@ CREATE TABLE IF NOT EXISTS order_lines (
 CREATE TABLE IF NOT EXISTS order_allocations (
   id SERIAL PRIMARY KEY, order_line_id INTEGER NOT NULL REFERENCES order_lines(id), stock_id INTEGER NOT NULL REFERENCES stock(id),
   batch_no TEXT, expiry TEXT, qty INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS doc_series (
+  company_id INTEGER NOT NULL REFERENCES companies(id), kind TEXT NOT NULL, fy TEXT NOT NULL, next_no INTEGER NOT NULL,
+  PRIMARY KEY (company_id, kind, fy));
+CREATE TABLE IF NOT EXISTS invoices (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), kind TEXT NOT NULL, number TEXT NOT NULL, fy TEXT NOT NULL,
+  doc_date TEXT NOT NULL, order_id INTEGER REFERENCES orders(id), ref_invoice_id INTEGER REFERENCES invoices(id), shop_id INTEGER NOT NULL REFERENCES shops(id),
+  seller TEXT NOT NULL, buyer TEXT NOT NULL, place_of_supply TEXT, intra_state BOOLEAN NOT NULL, reason TEXT,
+  taxable NUMERIC NOT NULL, cgst NUMERIC NOT NULL, sgst NUMERIC NOT NULL, igst NUMERIC NOT NULL, round_off NUMERIC NOT NULL, total NUMERIC NOT NULL,
+  created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, number));
+CREATE TABLE IF NOT EXISTS invoice_lines (
+  id SERIAL PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), order_line_id INTEGER REFERENCES order_lines(id),
+  ref_line_id INTEGER REFERENCES invoice_lines(id), variant_id INTEGER NOT NULL REFERENCES variants(id), description TEXT NOT NULL, hsn TEXT,
+  base_qty INTEGER NOT NULL, uom TEXT NOT NULL, rate NUMERIC NOT NULL, taxable NUMERIC NOT NULL, gst_rate NUMERIC NOT NULL,
+  cgst NUMERIC NOT NULL, sgst NUMERIC NOT NULL, igst NUMERIC NOT NULL, total NUMERIC NOT NULL);
+CREATE TABLE IF NOT EXISTS targets (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), rep_id INTEGER NOT NULL REFERENCES users(id),
+  month TEXT NOT NULL, metric TEXT NOT NULL, target NUMERIC NOT NULL, UNIQUE (company_id, rep_id, month, metric));
+CREATE TABLE IF NOT EXISTS visit_photos (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), visit_id INTEGER NOT NULL REFERENCES visits(id),
+  file TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, caption TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {
-  return new pg.Pool({ connectionString: url });
+  return new pg.Pool({ connectionString: url }) as unknown as Db;
 }
 export async function migrate(db: Db) {
   for (const stmt of SCHEMA.split(";").map(s => s.trim()).filter(Boolean)) await db.query(stmt);

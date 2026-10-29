@@ -6,6 +6,8 @@ import fs from "node:fs";
 import type { Db } from "./db.js";
 import { registerFieldRoutes } from "./field.js";
 import { registerCatalogRoutes, parseJson } from "./catalog.js";
+import { registerBillingRoutes } from "./billing.js";
+import { registerInsightRoutes } from "./insights.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor"] as const;
@@ -116,6 +118,8 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   }));
   registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, companyUsage });
   registerFieldRoutes({ app, db, auth, wrap, tenant });
+  registerBillingRoutes({ app, db, auth, wrap, tenant });
+  registerInsightRoutes({ app, db, auth, wrap, tenant });
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {

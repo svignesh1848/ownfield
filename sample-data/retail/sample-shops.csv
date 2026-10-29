@@ -1,4 +1,4 @@
-Code,Name,Owner Name,Phone,City,Showroom sqft
-SAMPLE-OUT-1,Sample Outlet 1,Sample Owner,9000000010,Chennai,800
-SAMPLE-OUT-2,Sample Outlet 2,Sample Owner,9000000011,Coimbatore,1500
-SAMPLE-OUT-3,Sample Outlet 3,Sample Owner,9000000012,Madurai,2500
+Code,Name,Owner Name,Phone,City,State Code,Showroom sqft
+SAMPLE-OUT-1,Sample Outlet 1,Sample Owner,9000000010,Chennai,33,800
+SAMPLE-OUT-2,Sample Outlet 2,Sample Owner,9000000011,Coimbatore,33,1500
+SAMPLE-OUT-3,Sample Outlet 3,Sample Owner,9000000012,Madurai,33,2500

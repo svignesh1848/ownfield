@@ -1,6 +1,6 @@
 // Step 2: beats, visits (GPS check-in/out), orders, distributor inbox, manager dashboard.
 import type { Express, Request, Response, NextFunction } from "express";
-import type { Db } from "./db.js";
+import { withTx, type Db } from "./db.js";
 import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
 import type { Uom } from "./templates.js";
 
@@ -122,10 +122,13 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
     }
     const total = Math.round(priced.reduce((a, l) => a + l.amount, 0) * 100) / 100;
-    const o = (await db.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
-      [cid, String(clientRef), req.user.uid, shop.id, loc, total])).rows[0];
-    for (const l of priced) await db.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount]);
+    const o = await withTx(db, async tx => {
+      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
+        [cid, String(clientRef), req.user.uid, shop.id, loc, total])).rows[0];
+      for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount]);
+      return o;
+    });
     res.status(201).json(o);
   }));
   app.get("/api/orders", auth("company_admin", "manager", "sales_rep", "distributor"), wrap(async (req, res) => {
@@ -136,6 +139,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     for (const o of orders) {
       o.lines = (await db.query(`SELECT l.id,l.qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
         JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows.map(l => ({ ...l, attrs: parseJson(l.attrs, {}) }));
+      o.invoice = (await db.query("SELECT id, number FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0] ?? null;
       for (const l of o.lines) l.allocations = (await db.query("SELECT batch_no, expiry, qty FROM order_allocations WHERE order_line_id=$1 ORDER BY id", [l.id])).rows;
     }
     res.json(orders);
@@ -147,32 +151,14 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const to = String(req.body?.status || "");
     if (!(TRANSITIONS[o.status] || []).includes(to)) throw bad(`cannot move ${o.status} -> ${to}`, 409);
     const { settings } = await getCompany(db, cid);
-    if (to === "accepted" && settings.features.stock) {
-      // FEFO allocation: plan everything first so a shortfall changes nothing, then apply.
-      const lines = (await db.query(`SELECT l.id, l.variant_id, l.base_qty, v.sku, i.kind FROM order_lines l JOIN variants v ON v.id=l.variant_id
-        JOIN items i ON i.id=v.item_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
-      const pools = new Map<number, any[]>(), plan: { line: number; row: any; take: number }[] = [], orig = new Map<number, number>();
-      for (const l of lines.filter(l => l.kind === "goods")) {
-        if (!pools.has(l.variant_id)) {
-          const rows = await fefoRows(db, cid, o.distributor_id ?? null, l.variant_id);
-          rows.forEach(r => orig.set(r.id, r.qty)); pools.set(l.variant_id, rows);
-        }
-        let left = Number(l.base_qty);
-        for (const r of pools.get(l.variant_id)!) { const take = Math.min(r.qty, left); if (take > 0) { plan.push({ line: l.id, row: r, take }); r.qty -= take; left -= take; } }
-        if (left > 0) throw bad(`insufficient stock for ${l.sku}: short by ${left}`, 409);
-      }
-      // Compare-and-set on the quantity we read, so a concurrent change is detected instead of overselling.
-      const after = new Map<number, number>();
-      for (const p of plan) after.set(p.row.id, (after.get(p.row.id) ?? orig.get(p.row.id)!) - p.take);
-      for (const [id, q] of after) {
-        const ok = (await db.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [q, id, orig.get(id)])).rows[0];
-        if (!ok) throw bad("stock changed while allocating — please retry", 409);
-      }
-      for (const p of plan) {
-        await db.query("INSERT INTO order_allocations (order_line_id,stock_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5)", [p.line, p.row.id, p.row.batch_no, p.row.expiry, p.take]);
-      }
-    }
-    res.json((await db.query("UPDATE orders SET status=$1 WHERE id=$2 RETURNING *", [to, o.id])).rows[0]);
+    const updated = await withTx(db, async tx => {
+      // Status compare-and-set + stock allocation commit together or not at all.
+      const u = (await tx.query("UPDATE orders SET status=$1 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status])).rows[0];
+      if (!u) throw bad("order changed meanwhile — reload", 409);
+      if (to === "accepted" && settings.features.stock) await allocateStock(tx, cid, o);
+      return u;
+    });
+    res.json(updated);
   }));
 
   // ---- Manager dashboard: visits & orders by rep/day ----
@@ -193,3 +179,31 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     res.json([...m.values()].sort((a, b) => b.day.localeCompare(a.day) || a.rep.localeCompare(b.rep)));
   }));
 }
+
+/** FEFO allocation for an accepted order: plan first (a shortfall changes nothing), then apply with compare-and-set. Call inside withTx. */
+export async function allocateStock(db: Db, cid: number, o: any, hooks: { afterFirstUpdate?: () => Promise<void> } = {}) {
+      // FEFO allocation: plan everything first so a shortfall changes nothing, then apply.
+      const lines = (await db.query(`SELECT l.id, l.variant_id, l.base_qty, v.sku, i.kind FROM order_lines l JOIN variants v ON v.id=l.variant_id
+        JOIN items i ON i.id=v.item_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
+      const pools = new Map<number, any[]>(), plan: { line: number; row: any; take: number }[] = [], orig = new Map<number, number>();
+      for (const l of lines.filter(l => l.kind === "goods")) {
+        if (!pools.has(l.variant_id)) {
+          const rows = await fefoRows(db, cid, o.distributor_id ?? null, l.variant_id);
+          rows.forEach(r => orig.set(r.id, r.qty)); pools.set(l.variant_id, rows);
+        }
+        let left = Number(l.base_qty);
+        for (const r of pools.get(l.variant_id)!) { const take = Math.min(r.qty, left); if (take > 0) { plan.push({ line: l.id, row: r, take }); r.qty -= take; left -= take; } }
+        if (left > 0) throw bad(`insufficient stock for ${l.sku}: short by ${left}`, 409);
+      }
+      // Compare-and-set on the quantity we read, so a concurrent change is detected instead of overselling.
+      const after = new Map<number, number>();
+      for (const p of plan) after.set(p.row.id, (after.get(p.row.id) ?? orig.get(p.row.id)!) - p.take);
+      for (const [id, q] of after) {
+        const ok = (await db.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [q, id, orig.get(id)])).rows[0];
+        if (!ok) throw bad("stock changed while allocating — please retry", 409);
+        if (hooks.afterFirstUpdate) { const h = hooks.afterFirstUpdate; hooks.afterFirstUpdate = undefined; await h(); }
+      }
+      for (const p of plan) {
+        await db.query("INSERT INTO order_allocations (order_line_id,stock_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5)", [p.line, p.row.id, p.row.batch_no, p.row.expiry, p.take]);
+      }
+    }
