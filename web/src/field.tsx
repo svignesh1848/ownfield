@@ -91,6 +91,13 @@ export function OrderForm({ s, cfg }: { s: Session; cfg: Cfg }) {
   const st = cfg.settings, f = st.features;
   const factor = (i: any) => (i.uoms.find((u: any) => u.code === unit[i.id]) ?? i.uoms.find((u: any) => u.factor === 1) ?? { factor: 1 }).factor;
   const total = items.reduce((a, i) => a + i.variants.reduce((b: number, v: any) => b + (Number(qty[v.sku]) || 0) * factor(i) * v.billing_price, 0), 0);
+  const [pv, setPv] = useState<any>(null);
+  const cartLines = () => items.flatMap(i => i.variants.filter((v: any) => Number(qty[v.sku]) > 0).map((v: any) => ({ sku: v.sku, qty: Number(qty[v.sku]), ...(unit[i.id] ? { uom: unit[i.id] } : {}) })));
+  useEffect(() => { // live scheme preview (online only; offline falls back to list prices)
+    const lines = cartLines(); if (!f.schemes || !shopId || !lines.length || !navigator.onLine) return setPv(null);
+    const t = setTimeout(() => api(s, "/api/orders/preview", { method: "POST", body: JSON.stringify({ shopId: Number(shopId), lines }) }).then(setPv).catch(() => setPv(null)), 400);
+    return () => clearTimeout(t);
+  }, [qty, unit, shopId]);
   const submit = async () => {
     const lines = items.flatMap(i => i.variants.filter((v: any) => Number(qty[v.sku]) > 0).map((v: any) => ({ sku: v.sku, qty: Number(qty[v.sku]), ...(unit[i.id] ? { uom: unit[i.id] } : {}) })));
     if (!shopId || !lines.length) return setMsg("Pick an outlet and enter quantities");
@@ -118,13 +125,15 @@ export function OrderForm({ s, cfg }: { s: Session; cfg: Cfg }) {
             {rowVals.map(r => <tr key={r}><th>{r}</th>{colVals.map(c => { const v = i.variants.find((x: any) => x.attrs[colsA] === c && (!rowsA || x.attrs[rowsA] === r)); return <td key={c}>{v ? cell(v) : ""}</td>; })}</tr>)}</tbody></table></div>
           : i.variants.map((v: any) => <div className="line" key={v.sku}><span>{attrText(v.attrs) || v.sku} <span className="muted">₹{v.billing_price}</span></span>{cell(v)}</div>)}
       </div>; })}
-    <div className="total">Total ₹{total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}<button onClick={submit}>Place order</button></div>
+    {pv?.savings > 0 && <div className="row savings"><b>Scheme savings ₹{pv.savings.toLocaleString("en-IN")}</b>
+      {pv.lines.filter((l: any) => l.scheme).map((l: any, k: number) => <div className="small" key={k}>{l.sku}: {l.free ? `${l.qty} free` : `−₹${l.saving.toLocaleString("en-IN")}`} ({l.scheme})</div>)}</div>}
+    <div className="total">Total ₹{(pv ? pv.total : total).toLocaleString("en-IN", { maximumFractionDigits: 2 })}<button onClick={submit}>Place order</button></div>
     <p className="muted small">{f.schemes && "Schemes are applied on the server. "}{f.stock && "Stock is checked when the order syncs."}</p><p>{msg}</p></>;
 }
 
 const OrderCard = ({ o, children }: { o: any; children?: any }) => <div className="row"><b>#{o.id} {o.shop_name}</b> <span className={`pill ${o.status}`}>{o.status}</span>
-  <div className="muted">{o.rep_name} · {new Date(o.created_at).toLocaleString()} · ₹{Number(o.total).toLocaleString("en-IN")}</div>
-  {o.lines.map((l: any) => <div className="muted small" key={l.id}>{l.item_name} {attrText(l.attrs)} — {l.qty} {l.uom}{l.discount_pct > 0 ? ` (−${l.discount_pct}%)` : ""} = ₹{Number(l.amount).toLocaleString("en-IN")}
+  <div className="muted">{o.rep_name} · {new Date(o.created_at).toLocaleString()} · ₹{Number(o.total).toLocaleString("en-IN")}{Number(o.savings) > 0 ? ` · saved ₹${Number(o.savings).toLocaleString("en-IN")}` : ""}</div>
+  {o.lines.map((l: any) => <div className="muted small" key={l.id}>{l.item_name} {attrText(l.attrs)} — {l.qty} {l.uom}{l.free ? ` FREE (${l.scheme})` : l.discount_pct > 0 ? ` (−${l.discount_pct}%${l.scheme ? ` ${l.scheme}` : ""})` : ""} = ₹{Number(l.amount).toLocaleString("en-IN")}
     {l.allocations?.length > 0 && <span className="batches"> {l.allocations.map((a: any) => `${a.batch_no || "stock"}${a.expiry ? ` exp ${a.expiry}` : ""} ×${a.qty}`).join("; ")}</span>}</div>)}{children}</div>;
 
 export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {

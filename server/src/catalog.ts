@@ -284,19 +284,7 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
       .sort((a, b) => a.sku.localeCompare(b.sku) || (a.expiry || "9999").localeCompare(b.expiry || "9999")));
   }));
 
-  app.get("/api/schemes", auth(...ANY), wrap(async (req, res) => {
-    const cid = tenant(req, res); if (cid == null) return;
-    res.json((await db.query("SELECT s.*, i.name AS item_name FROM schemes s LEFT JOIN items i ON i.id=s.item_id WHERE s.company_id=$1 ORDER BY s.id", [cid])).rows);
-  }));
-  app.post("/api/schemes", auth("company_admin", "manager"), wrap(async (req, res) => {
-    const cid = tenant(req, res); if (cid == null) return;
-    const { name, itemId = null, minQty = 1, discountPct } = req.body || {};
-    const d = Number(discountPct), mq = Number(minQty);
-    if (!name || !(d > 0 && d <= 100) || !Number.isInteger(mq) || mq < 1) throw bad("name, minQty ≥ 1 and discountPct 0–100 required");
-    if (itemId != null && !(await db.query("SELECT id FROM items WHERE id=$1 AND company_id=$2", [Number(itemId), cid])).rows[0]) throw bad("item not found", 404);
-    res.status(201).json((await db.query("INSERT INTO schemes (company_id,name,item_id,min_qty,discount_pct) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-      [cid, name, itemId == null ? null : Number(itemId), mq, d])).rows[0]);
-  }));
+
 
   app.post("/api/import/:kind", auth("company_admin", "distributor"), upload.single("file"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;

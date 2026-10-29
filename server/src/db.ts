@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS stock (
   variant_id INTEGER NOT NULL REFERENCES variants(id), batch_no TEXT NOT NULL DEFAULT '', expiry TEXT, qty INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS schemes (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL, item_id INTEGER REFERENCES items(id),
-  min_qty INTEGER NOT NULL DEFAULT 1, discount_pct NUMERIC NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE);
+  min_qty INTEGER NOT NULL DEFAULT 1, discount_pct NUMERIC NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE,
+  type TEXT NOT NULL DEFAULT 'percent', category TEXT, distributor_id INTEGER REFERENCES users(id), starts_on TEXT, ends_on TEXT, config TEXT);
 CREATE TABLE IF NOT EXISTS beats (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL,
   rep_id INTEGER REFERENCES users(id), weekday INTEGER);
@@ -49,12 +50,12 @@ CREATE TABLE IF NOT EXISTS visits (
 CREATE TABLE IF NOT EXISTS orders (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), client_ref TEXT NOT NULL,
   rep_id INTEGER NOT NULL REFERENCES users(id), shop_id INTEGER NOT NULL REFERENCES shops(id),
-  distributor_id INTEGER REFERENCES users(id), status TEXT NOT NULL DEFAULT 'placed', total NUMERIC NOT NULL,
+  distributor_id INTEGER REFERENCES users(id), status TEXT NOT NULL DEFAULT 'placed', total NUMERIC NOT NULL, savings NUMERIC NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, client_ref));
 CREATE TABLE IF NOT EXISTS order_lines (
   id SERIAL PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), variant_id INTEGER NOT NULL REFERENCES variants(id),
   uom TEXT NOT NULL, qty INTEGER NOT NULL, base_qty INTEGER NOT NULL, price NUMERIC NOT NULL,
-  discount_pct NUMERIC NOT NULL DEFAULT 0, amount NUMERIC NOT NULL);
+  discount_pct NUMERIC NOT NULL DEFAULT 0, amount NUMERIC NOT NULL, gross NUMERIC, scheme_id INTEGER REFERENCES schemes(id), free BOOLEAN NOT NULL DEFAULT FALSE);
 CREATE TABLE IF NOT EXISTS order_allocations (
   id SERIAL PRIMARY KEY, order_line_id INTEGER NOT NULL REFERENCES order_lines(id), stock_id INTEGER NOT NULL REFERENCES stock(id),
   batch_no TEXT, expiry TEXT, qty INTEGER NOT NULL);

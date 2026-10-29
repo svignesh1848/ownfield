@@ -1,4 +1,5 @@
 // Step 4: targets vs achievement, visit photos, Excel/CSV report exports.
+import { schemeCost } from "./schemes.js";
 import type { Express, Response, Request, NextFunction } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -98,11 +99,11 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     let rows: Record<string, unknown>[];
     switch (req.params.kind) {
       case "orders": rows = (await db.query(`SELECT o.id, o.created_at, o.status, u.name AS rep, s.code AS outlet_code, s.name AS outlet, d.name AS distributor, v.sku, i.name AS item, v.attrs,
-          l.qty, l.uom, l.base_qty, l.price, l.discount_pct, l.amount FROM orders o JOIN order_lines l ON l.order_id=o.id JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
-          JOIN users u ON u.id=o.rep_id JOIN shops s ON s.id=o.shop_id LEFT JOIN users d ON d.id=o.distributor_id WHERE o.company_id=$1 ORDER BY o.id, l.id`, [cid])).rows
+          l.qty, l.uom, l.base_qty, l.price, l.discount_pct, l.amount, l.free, sc.name AS scheme FROM orders o JOIN order_lines l ON l.order_id=o.id JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
+          JOIN users u ON u.id=o.rep_id JOIN shops s ON s.id=o.shop_id LEFT JOIN users d ON d.id=o.distributor_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE o.company_id=$1 ORDER BY o.id, l.id`, [cid])).rows
         .filter(r => inRange(dayKey(r.created_at))).map(r => ({ order_id: r.id, date: dayKey(r.created_at), status: r.status, rep: r.rep, outlet_code: r.outlet_code, outlet: r.outlet,
           distributor: r.distributor || "Company", sku: r.sku, item: r.item, variant: Object.values(parseJson(r.attrs, {})).join(" / "), qty: Number(r.qty), unit: r.uom,
-          base_qty: Number(r.base_qty), price: Number(r.price), discount_pct: Number(r.discount_pct), amount: Number(r.amount) })); break;
+          base_qty: Number(r.base_qty), price: Number(r.price), discount_pct: Number(r.discount_pct), amount: Number(r.amount), scheme: r.scheme || "", free: r.free ? "yes" : "" })); break;
       case "visits": {
         const vs = (await db.query(`SELECT v.*, u.name AS rep, s.code, s.name AS outlet FROM visits v JOIN users u ON u.id=v.rep_id JOIN shops s ON s.id=v.shop_id
           WHERE v.company_id=$1 ORDER BY v.id`, [cid])).rows.filter(r => inRange(dayKey(r.check_in_at)));
@@ -123,7 +124,8 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
           LEFT JOIN users u ON u.id=st.distributor_id WHERE st.company_id=$1 ORDER BY v.sku, st.expiry`, [cid])).rows.map(r => ({ location: r.location || "Company stock", sku: r.sku, item: r.name,
           batch: r.batch_no, expiry: r.expiry || "", qty_base: Number(r.qty), expired: r.expiry && r.expiry < today() ? "yes" : "" })); break;
       case "targets": rows = (await achievement(db, cid, String(req.query.month || to.slice(0, 7)))).flatMap(r => r.metrics.map(m => ({ month: r.month, rep: r.rep, metric: m.metric, target: m.target ?? "", actual: m.actual, pct: m.pct ?? "" }))); break;
-      default: throw bad("unknown report — use orders, visits, gst, stock or targets", 404);
+      case "schemes": rows = await schemeCost(db, cid, inRange, dayKey); break;
+      default: throw bad("unknown report — use orders, visits, gst, stock, targets or schemes", 404);
     }
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: "no rows for this period" }]);
     const name = `${req.params.kind}-${from}-to-${to}`;

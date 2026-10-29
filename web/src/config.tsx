@@ -38,13 +38,31 @@ export function Stock({ s, cfg }: P) {
 }
 
 export function Schemes({ s }: P) {
-  const [rows, setRows] = useState<any[]>([]); const [items, setItems] = useState<any[]>([]); const [f, setF] = useState({ name: "", itemId: "", minQty: "1", discountPct: "" }); const [msg, setMsg] = useState("");
-  const load = () => api(s, "/api/schemes").then(setRows); useEffect(() => { load(); api(s, "/api/items").then(setItems); }, []);
-  return <><h2>Schemes</h2><Table rows={rows.map(r => ({ ...r, applies_to: r.item_name || "All items", discount: `${r.discount_pct}%` }))} cols={["name", "applies_to", "min_qty", "discount"]} />
-    <form onSubmit={async e => { e.preventDefault(); try { await api(s, "/api/schemes", { method: "POST", body: JSON.stringify({ name: f.name, itemId: f.itemId ? Number(f.itemId) : null, minQty: Number(f.minQty), discountPct: Number(f.discountPct) }) }); setMsg("Scheme added"); load(); } catch (x: any) { setMsg(x.message); } }}>
-      <h3>New scheme</h3><input placeholder="Name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />
-      <select value={f.itemId} onChange={e => setF({ ...f, itemId: e.target.value })}><option value="">All items</option>{items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
-      <input placeholder="Min qty (base units)" value={f.minQty} onChange={e => setF({ ...f, minQty: e.target.value })} /><input placeholder="Discount %" value={f.discountPct} onChange={e => setF({ ...f, discountPct: e.target.value })} />
+  const blank = { name: "", type: "percent", itemId: "", category: "", distributorId: "", startsOn: "", endsOn: "", minQty: "1", discountPct: "", amount: "", buy: "", get: "", basis: "qty", slabs: "" };
+  const [rows, setRows] = useState<any[]>([]); const [items, setItems] = useState<any[]>([]); const [dists, setDists] = useState<any[]>([]); const [f, setF] = useState(blank); const [msg, setMsg] = useState("");
+  const load = () => api(s, "/api/schemes").then(setRows);
+  useEffect(() => { load(); api(s, "/api/items").then(setItems); api(s, "/api/distributors").then(setDists).catch(() => {}); }, []);
+  const cats = [...new Set(items.map(i => i.category).filter(Boolean))];
+  const inp = (k: keyof typeof blank, ph: string) => <input placeholder={ph} value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} />;
+  const save = async (e: any) => { e.preventDefault(); try {
+    const slabs = f.slabs.split(",").map(x => x.trim()).filter(Boolean).map(x => { const [min, pct] = x.split(":"); return { min: Number(min), pct: Number(pct) }; });
+    await api(s, "/api/schemes", { method: "POST", body: JSON.stringify({ ...f, minQty: Number(f.minQty), discountPct: Number(f.discountPct), amount: Number(f.amount), buy: Number(f.buy), get: Number(f.get), slabs,
+      itemId: f.itemId || null, distributorId: f.distributorId || null, category: f.category || null, startsOn: f.startsOn || null, endsOn: f.endsOn || null }) });
+    setMsg("Scheme added"); setF(blank); load(); } catch (x: any) { setMsg(x.message); } };
+  return <><h2>Schemes</h2>
+    <Table rows={rows.map(r => ({ ...r, applies_to: [r.item_name || (r.category ? `Category ${r.category}` : "All items"), r.distributor_name && `via ${r.distributor_name}`].filter(Boolean).join(" "),
+      valid: `${r.starts_on || "…"} → ${r.ends_on || "…"}`, status: r.live ? "live" : r.active ? "not in date range" : "off" }))} cols={["name", "rule", "applies_to", "min_qty", "valid", "status"]} />
+    {rows.map(r => <button key={r.id} className="sm ghost" onClick={() => api(s, `/api/schemes/${r.id}/active`, { method: "POST", body: JSON.stringify({ active: !r.active }) }).then(load)}>{r.active ? "Turn off" : "Turn on"} {r.name}</button>)}
+    <form onSubmit={save}><h3>New scheme</h3>{inp("name", "Name")}
+      <select value={f.type} onChange={e => setF({ ...f, type: e.target.value })}><option value="percent">Percent off</option><option value="flat">Flat ₹ off per unit</option><option value="bxgy">Buy X get Y free</option><option value="slab">Quantity / value slabs</option></select>
+      {f.type === "percent" && inp("discountPct", "Discount %")}{f.type === "flat" && inp("amount", "₹ off per base unit")}
+      {f.type === "bxgy" && <>{inp("buy", "Buy (base units)")}{inp("get", "Get free")}</>}
+      {f.type === "slab" && <><select value={f.basis} onChange={e => setF({ ...f, basis: e.target.value })}><option value="qty">By quantity</option><option value="value">By line value ₹</option></select>{inp("slabs", "Slabs min:pct, e.g. 12:5, 24:8")}</>}
+      <select value={f.itemId} onChange={e => setF({ ...f, itemId: e.target.value })}><option value="">Any product</option>{items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
+      <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })}><option value="">Any category</option>{cats.map(c => <option key={c}>{c}</option>)}</select>
+      <select value={f.distributorId} onChange={e => setF({ ...f, distributorId: e.target.value })}><option value="">All distributors</option>{dists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+      {inp("minQty", "Min qty (base units)")}<label className="small">From <input type="date" value={f.startsOn} onChange={e => setF({ ...f, startsOn: e.target.value })} /></label>
+      <label className="small">To <input type="date" value={f.endsOn} onChange={e => setF({ ...f, endsOn: e.target.value })} /></label>
       <button>Add</button><p>{msg}</p></form></>;
 }
 

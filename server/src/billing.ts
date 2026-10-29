@@ -130,10 +130,10 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       if (!["accepted", "fulfilled"].includes(o.status)) throw bad("only accepted or fulfilled orders can be invoiced", 409);
       if ((await tx.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order already invoiced", 409);
       const shop = (await tx.query("SELECT * FROM shops WHERE id=$1", [o.shop_id])).rows[0];
-      const lines = (await tx.query(`SELECT l.*, v.sku, v.attrs, i.name, i.hsn FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
-        WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
+      const lines = (await tx.query(`SELECT l.*, v.sku, v.attrs, i.name, i.hsn, sc.name AS scheme FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
+        LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
       return createDoc(tx, cid, req.user.uid, { kind: "invoice", issuer: issuer.key, date, g: issuer.g, shop, orderId: o.id, refId: null, lines: lines.map(l => ({
-        orderLineId: l.id, variantId: l.variant_id, description: `${l.name} ${Object.values(parseJson<Record<string, string>>(l.attrs, {})).join(" / ")} (${l.sku})`.replace(/\s+/g, " "),
+        orderLineId: l.id, variantId: l.variant_id, description: `${l.name} ${Object.values(parseJson<Record<string, string>>(l.attrs, {})).join(" / ")} (${l.sku})${l.free ? ` — FREE under scheme: ${l.scheme}` : l.scheme ? ` — scheme: ${l.scheme} (${Number(l.discount_pct)}% off ₹${r2(Number(l.gross))})` : ""}`.replace(/\s+/g, " "),
         hsn: l.hsn, baseQty: Number(l.base_qty), uom: l.uom, rate: Number(l.base_qty) ? r2(Number(l.amount) / Number(l.base_qty)) : 0,
         taxable: Number(l.amount), gstRate: rateFor(settings.gst, l.hsn) })) });
     });

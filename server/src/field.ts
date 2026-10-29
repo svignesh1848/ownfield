@@ -3,6 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
 import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
 import type { Uom } from "./templates.js";
+import { activeSchemes, applySchemes } from "./schemes.js";
 
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void; tenant: (req: any, res: Response) => number | null };
 const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
@@ -12,6 +13,36 @@ const coord = (lat: unknown, lng: unknown) => {
   return [a, b];
 };
 const coordOpt = (on: boolean, lat: unknown, lng: unknown) => on || (lat != null && lng != null) ? coord(lat, lng) : [null, null];
+type Priced = { vid: number; sku: string; uom: string; qty: number; base: number; price: number; disc: number; gross: number; amount: number; saving: number; schemeId: number | null; scheme: string | null; free: boolean };
+/** Price order lines: unit conversion, schemes (best discount + buy-X-get-Y free lines at ₹0), and base-unit stock demand. */
+export async function priceLines(db: any, cid: number, settings: any, items: any[], dist: number | null) {
+  const f = settings.features;
+  const schemes = f.schemes ? await activeSchemes(db, cid) : [];
+  const priced: Priced[] = [], need = new Map<number, { sku: string; n: number }>();
+  for (const l of items) {
+    const qty = Number(l.qty);
+    if (!Number.isInteger(qty)) throw bad("qty must be an integer");
+    const v = (await db.query(`SELECT v.id, v.sku, v.billing_price, i.id AS item_id, i.category, i.kind, i.uoms FROM variants v JOIN items i ON i.id=v.item_id
+      WHERE v.company_id=$1 AND (v.id=$2 OR v.sku=$3)`, [cid, Number(l.productId ?? l.variantId) || 0, String(l.sku ?? "")])).rows[0];
+    if (!v) throw bad(`product ${l.sku ?? l.productId} not found`, 404);
+    const uoms = parseJson<Uom[]>(v.uoms, settings.uoms);
+    const u = l.uom ? uoms.find(x => x.code === String(l.uom).toUpperCase()) : uoms.find(x => x.factor === 1);
+    if (!u) throw bad(`unit ${l.uom} not defined for ${v.sku}`);
+    const base = qty * u.factor, price = Number(v.billing_price);
+    const a = applySchemes(schemes, { vid: v.id, itemId: v.item_id, category: v.category, base, price }, dist);
+    priced.push({ vid: v.id, sku: v.sku, uom: u.code, qty, base, price, disc: a.disc, gross: a.gross, amount: a.amount, saving: Math.round((a.gross - a.amount) * 100) / 100, schemeId: a.schemeId, scheme: a.scheme, free: false });
+    let n = base;
+    if (a.free) {
+      const bu = uoms.find(x => x.factor === 1)?.code || u.code;
+      const fv = Math.round(a.free.base * price * 100) / 100;
+      priced.push({ vid: v.id, sku: v.sku, uom: bu, qty: a.free.base, base: a.free.base, price, disc: 100, gross: fv, amount: 0, saving: fv, schemeId: a.free.schemeId, scheme: a.free.scheme, free: true });
+      n += a.free.base;
+    }
+    if (f.stock && v.kind === "goods") need.set(v.id, { sku: v.sku, n: (need.get(v.id)?.n ?? 0) + n });
+  }
+  return { priced, need };
+}
+
 export const TRANSITIONS: Record<string, string[]> = { placed: ["accepted", "rejected"], accepted: ["fulfilled"] };
 export const dayKey = (d: Date | string, tz = process.env.REPORT_TZ || "Asia/Kolkata") => new Date(d).toLocaleDateString("en-CA", { timeZone: tz });
 
@@ -100,36 +131,31 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!items.length) throw bad("at least one line with qty > 0");
     const { settings } = await getCompany(db, cid);
     const f = settings.features, loc: number | null = shop.distributor_id ?? null;
-    const schemes = f.schemes ? (await db.query("SELECT * FROM schemes WHERE company_id=$1 AND active=TRUE", [cid])).rows : [];
-    const priced = [] as { vid: number; uom: string; qty: number; base: number; price: number; disc: number; amount: number }[];
-    const need = new Map<number, { sku: string; n: number }>();
-    for (const l of items) {
-      const qty = Number(l.qty);
-      if (!Number.isInteger(qty)) throw bad("qty must be an integer");
-      const v = (await db.query(`SELECT v.id, v.sku, v.billing_price, i.id AS item_id, i.kind, i.uoms FROM variants v JOIN items i ON i.id=v.item_id
-        WHERE v.company_id=$1 AND (v.id=$2 OR v.sku=$3)`, [cid, Number(l.productId ?? l.variantId) || 0, String(l.sku ?? "")])).rows[0];
-      if (!v) throw bad(`product ${l.sku ?? l.productId} not found`, 404);
-      const uoms = parseJson<Uom[]>(v.uoms, settings.uoms);
-      const u = l.uom ? uoms.find(x => x.code === String(l.uom).toUpperCase()) : uoms.find(x => x.factor === 1);
-      if (!u) throw bad(`unit ${l.uom} not defined for ${v.sku}`);
-      const base = qty * u.factor, price = Number(v.billing_price);
-      const disc = Math.max(0, ...schemes.filter(sc => (sc.item_id == null || sc.item_id === v.item_id) && base >= Number(sc.min_qty)).map(sc => Number(sc.discount_pct)));
-      priced.push({ vid: v.id, uom: u.code, qty, base, price, disc, amount: Math.round(base * price * (100 - disc)) / 100 });
-      if (f.stock && v.kind === "goods") need.set(v.id, { sku: v.sku, n: (need.get(v.id)?.n ?? 0) + base });
-    }
+    const { priced, need } = await priceLines(db, cid, settings, items, loc);
     for (const [vid, { sku, n }] of need) {
       const avail = (await fefoRows(db, cid, loc, vid)).reduce((a, r) => a + r.qty, 0);
       if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
     }
     const total = Math.round(priced.reduce((a, l) => a + l.amount, 0) * 100) / 100;
+    const savings = Math.round(priced.reduce((a, l) => a + l.saving, 0) * 100) / 100;
     const o = await withTx(db, async tx => {
-      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
-        [cid, String(clientRef), req.user.uid, shop.id, loc, total])).rows[0];
-      for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-        [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount]);
+      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        [cid, String(clientRef), req.user.uid, shop.id, loc, total, savings])).rows[0];
+      for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount,gross,scheme_id,free) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+        [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
       return o;
     });
     res.status(201).json(o);
+  }));
+  // Preview: price a cart (schemes applied) without placing it — the rep app shows savings before submitting.
+  app.post("/api/orders/preview", auth("sales_rep", "company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const shop = await shopIn(cid, req.body?.shopId); if (!shop) throw bad("shop not found", 404);
+    const items = (Array.isArray(req.body?.lines) ? req.body.lines : []).filter((l: any) => Number(l.qty) > 0);
+    const { settings } = await getCompany(db, cid);
+    const { priced } = await priceLines(db, cid, settings, items, shop.distributor_id ?? null);
+    const r = (n: number) => Math.round(n * 100) / 100;
+    res.json({ lines: priced, gross: r(priced.reduce((a, l) => a + l.gross, 0)), savings: r(priced.reduce((a, l) => a + l.saving, 0)), total: r(priced.reduce((a, l) => a + l.amount, 0)) });
   }));
   app.get("/api/orders", auth("company_admin", "manager", "sales_rep", "distributor"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
@@ -137,8 +163,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
       WHERE o.company_id=$1 ${scope} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
     for (const o of orders) {
-      o.lines = (await db.query(`SELECT l.id,l.qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
-        JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows.map(l => ({ ...l, attrs: parseJson(l.attrs, {}) }));
+      o.lines = (await db.query(`SELECT l.id,l.qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,l.gross,l.free,l.scheme_id,sc.name AS scheme,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
+        JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows.map(l => ({ ...l, attrs: parseJson(l.attrs, {}) }));
       o.invoice = (await db.query("SELECT id, number FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0] ?? null;
       for (const l of o.lines) l.allocations = (await db.query("SELECT batch_no, expiry, qty FROM order_allocations WHERE order_line_id=$1 ORDER BY id", [l.id])).rows;
     }

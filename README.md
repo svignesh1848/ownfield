@@ -55,6 +55,8 @@ Open-source, **industry-agnostic** field sales and distributor management for FM
 
 - **(b) Distributor billing** (a toggle per company). Distributors invoice their own orders under their own GSTIN, legal name and address, with their own invoice and credit-note numbering. Every document belongs to one issuer: the company or a single distributor. Each issuer sees and credits only its own documents, while the company can view all of them. When the toggle is on, the company can't invoice orders that belong to a distributor.
 
+- **(c) Schemes.** Four types: percent off, flat ₹ off per unit, buy X get Y free, and quantity or value slabs. Each can be limited to a product, category, distributor or date range. The best price scheme is applied to each order line automatically, and buy-X-get-Y adds free lines at ₹0. Invoices carry the same scheme pricing and free goods. The rep app previews savings before the order is placed (`POST /api/orders/preview`). The scheme-cost report (`/api/reports/schemes`) shows the discount given plus the value of free goods for each scheme.
+
 > GST rates in the industry templates are **samples**. Verify the rate for every HSN/SAC code with your tax advisor. E-invoicing (IRN/QR) and e-way bills are not included yet.
 
 ## Stack
