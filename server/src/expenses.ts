@@ -44,6 +44,7 @@ export function registerExpenseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const rep = req.user.role === "sales_rep";
     const e = (await db.query(`SELECT receipt_file, receipt_mime FROM expenses WHERE id=$1 AND company_id=$2 ${rep ? "AND rep_id=$3" : ""}`, rep ? [Number(req.params.id), cid, req.user.uid] : [Number(req.params.id), cid])).rows[0];
     if (!e) throw bad("claim not found", 404);
+    if (!e.receipt_file) throw bad("no bill photo for this sample claim", 404);
     res.type(e.receipt_mime).set("Cache-Control", "private, max-age=86400").send(readPhoto(e.receipt_file));
   }));
   // Monthly report: per rep, approved / pending / rejected totals and approved amount by category.

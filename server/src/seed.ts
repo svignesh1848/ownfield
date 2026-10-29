@@ -14,13 +14,17 @@ async function enable(db: Db, cid: number, keys: FeatureKey[]) {
   for (const k of keys) s.features[k] = true;
   await db.query("UPDATE companies SET settings=$1 WHERE id=$2", [JSON.stringify(s), cid]);
 }
-const photo = (cid: number) => savePhoto(cid, { buffer: SAMPLE_PNG, size: SAMPLE_PNG.length } as any)!;
+/** Sample photo; if the upload folder isn't writable the sample simply has no photo. */
+const photo = (cid: number) => { try { return savePhoto(cid, { buffer: SAMPLE_PNG, size: SAMPLE_PNG.length } as any)!; } catch (e: any) { console.error("sample photo skipped:", e.message); return null; } };
+/** Run one seeding step; a failure is logged and does not stop the other steps. */
+const step = async (name: string, fn: () => Promise<void>) => { try { await fn(); } catch (e: any) { console.error(`demo seed (${name}) skipped:`, e.message); } };
 
 export async function seedDemo(db: Db, code = "DEMO") {
   const c = await one(db, "SELECT id FROM companies WHERE code=$1", [code]); if (!c) return;
   const cid = c.id;
   const rep = await one(db, "SELECT id FROM users WHERE company_id=$1 AND role='sales_rep' ORDER BY id", [cid]);
   // 1) Store audits
+  await step("audits", async () => {
   await enable(db, cid, ["audits"]);
   if (!(await one(db, "SELECT id FROM audit_templates WHERE company_id=$1", [cid]))) {
     const qs = [{ key: "shelf_clean", label: "Is our shelf clean and tidy?", type: "yes_no", required: true }, { key: "facings", label: "How many of our products are on the shelf?", type: "number" },
@@ -31,25 +35,31 @@ export async function seedDemo(db: Db, code = "DEMO") {
       const a = await one(db, "INSERT INTO audits (company_id,visit_id,template_id,rep_id,shop_id,answers) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
         [cid, v.id, t.id, rep.id, v.shop_id, JSON.stringify({ shelf_clean: true, facings: 8, poster: false, notes: "Sample audit — poster missing" })]);
       const p = photo(cid);
-      await db.query("INSERT INTO audit_photos (company_id,audit_id,question,file,mime,size) VALUES ($1,$2,$3,$4,$5,$6)", [cid, a.id, "shelf_photo", p.file, p.mime, p.size]);
+      if (p) await db.query("INSERT INTO audit_photos (company_id,audit_id,question,file,mime,size) VALUES ($1,$2,$3,$4,$5,$6)", [cid, a.id, "shelf_photo", p.file, p.mime, p.size]);
     }
   }
+  });
   // 2) Expenses
+  await step("expenses", async () => {
   await enable(db, cid, ["expenses"]);
   if (rep && !(await one(db, "SELECT id FROM expenses WHERE company_id=$1", [cid]))) {
     const d = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     for (const [amt, cat, note, st] of [[240, "Travel", "Sample — bus fare to outlets", "approved"], [150, "Food", "Sample — lunch on beat", "pending"]] as const) {
       const p = photo(cid);
-      await db.query("INSERT INTO expenses (company_id,rep_id,spent_on,amount,category,note,receipt_file,receipt_mime,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [cid, rep.id, d, amt, cat, note, p.file, p.mime, st]);
+      await db.query("INSERT INTO expenses (company_id,rep_id,spent_on,amount,category,note,receipt_file,receipt_mime,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [cid, rep.id, d, amt, cat, note, p?.file ?? null, p?.mime ?? null, st]);
     }
   }
+  });
   // 3) Leave
+  await step("leave", async () => {
   await enable(db, cid, ["leave"]);
   if (rep && !(await one(db, "SELECT id FROM leaves WHERE company_id=$1", [cid]))) {
     const d = new Date(Date.now() + 7 * 864e5).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     await db.query("INSERT INTO leaves (company_id,rep_id,from_date,to_date,kind,reason) VALUES ($1,$2,$3,$3,'Casual',$4)", [cid, rep.id, d, "Sample leave request"]);
   }
+  });
   // 4) Incentives
+  await step("incentives", async () => {
   await enable(db, cid, ["incentives"]);
   if (!(await one(db, "SELECT id FROM incentive_rules WHERE company_id=$1", [cid]))) {
     await db.query("INSERT INTO incentive_rules (company_id,name,metric,slabs) VALUES ($1,$2,'value',$3)", [cid, "Monthly sales bonus (sample)", JSON.stringify([{ minPct: 80, amount: 1000 }, { minPct: 100, amount: 2500 }, { minPct: 120, amount: 4000 }])]);
@@ -57,10 +67,13 @@ export async function seedDemo(db: Db, code = "DEMO") {
     if (rep && !(await one(db, "SELECT id FROM targets WHERE company_id=$1 AND rep_id=$2 AND month=$3 AND metric='value'", [cid, rep.id, month])))
       await db.query("INSERT INTO targets (company_id,rep_id,month,metric,target) VALUES ($1,$2,$3,'value',$4)", [cid, rep.id, month, 5000]);
   }
+  });
   // 5) Retailer app: retailer@example.com / Demo@2026 linked to a sample outlet that has a distributor
+  await step("retailer", async () => {
   await enable(db, cid, ["retailerApp"]);
   if (!(await one(db, "SELECT id FROM users WHERE company_id=$1 AND email='retailer@example.com'", [cid]))) {
     const shop = await one(db, "SELECT id FROM shops WHERE company_id=$1 AND distributor_id IS NOT NULL ORDER BY id", [cid]) || await one(db, "SELECT id FROM shops WHERE company_id=$1 ORDER BY id", [cid]);
     if (shop) await db.query("INSERT INTO users (company_id,email,name,role,password_hash,shop_id) VALUES ($1,'retailer@example.com','Sample Retailer','retailer',$2,$3)", [cid, await bcrypt.hash("Demo@2026", 10), shop.id]);
   }
+  });
 }
