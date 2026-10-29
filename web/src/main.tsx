@@ -61,7 +61,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
   };
   const fe = (k: string) => err?.field === k ? err.text : undefined;
   return <div className="login-wrap"><form className="card login" onSubmit={submit} noValidate>
-    <div className="brand"><span className="logo">{t("OF")}</span><div><h1>{t("OwnField")}</h1><p className="muted">{t("Own your sales.")}</p><p className="muted small">{t("Sales & distributor app")}</p></div></div>
+    <div className="brand"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><div><h1>{t("OwnField")}</h1><p className="muted">{t("Own your sales.")}</p><p className="muted small">{t("Sales & distributor app")}</p></div></div>
     <Field label={t("Company code")} help={t("The short code your company uses, e.g. DEMO. Ask your administrator if you don't know it.")} error={fe("companyCode")}>
       <input autoCapitalize="characters" autoComplete="organization" value={f.companyCode} onChange={e => setF({ ...f, companyCode: e.target.value })} /></Field>
     {demo && <div className="hint"><b>{t("Sample logins for the DEMO company")}</b><br />{t("Admin: admin@example.com / Demo@2026")}<br />{t("Sales rep: rep@example.com / Demo@2026")}<br />{t("Distributor: distributor@example.com / Demo@2026")}<br />{t("Shop (retailer): retailer@example.com / Demo@2026")}<br /><span className="muted">{t("All DEMO data is sample data.")}</span>
@@ -122,7 +122,7 @@ function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
   };
   const fe = (k: string) => err?.field === k ? err.text : undefined;
   return <div className="login-wrap"><form className="card login" onSubmit={submit} noValidate>
-    <div className="brand"><span className="logo">{t("OF")}</span><div><h1>{t("Create your company")}</h1><p className="muted">{t("Free plan · up to 5 users · no card needed")}</p></div></div>
+    <div className="brand"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><div><h1>{t("Create your company")}</h1><p className="muted">{t("Free plan · up to 5 users · no card needed")}</p></div></div>
     <Field label={t("Company name")} error={fe("companyName")}>
       <input autoComplete="organization" value={f.companyName} onChange={e => set("companyName", e.target.value)} /></Field>
     <Field label={t("Company code")} help={codeOk && !codeOk.available ? t("Taken. Try {0}.", codeOk.suggestion) : t("Your team types this to sign in. You can change it.")} error={fe("companyCode")}>
@@ -221,12 +221,12 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   const C = views[cur];
   const Item = ({ t }: { t: string }) => /* t is a tab id here */ <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{i18n(TAB_LABEL[t] || t)}</span></button>;
   return <div className="shell">
-    <aside className="sidebar"><div className="brand sm"><span className="logo">{t("OF")}</span><b>{t("OwnField")}</b></div>
+    <aside className="sidebar"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{t("OwnField")}</b></div>
       {groups.map(([g, ts]) => <div key={g} className="group"><div className="group-h">{t(g)}</div>{ts.map(t => <Item key={t} t={t} />)}</div>)}
       <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div>
       <p className="muted small copy">{t("OwnField — Own your sales.")}<br />© 2026 Vignesh S. OwnField is a trademark of Vignesh S. AGPL-3.0.</p></aside>
     <div className="content">
-      <header className="top"><div className="brand sm"><span className="logo">{t("OF")}</span><b>{s.user.companyCode}</b></div><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
+      <header className="top"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{s.user.companyCode}</b></div><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
       {mgr && cur === "home" && <Usage u={usage} />}<OfflineBadge s={s} />
       <section className="card main-card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} go={setTab} /></section>
     </div>
