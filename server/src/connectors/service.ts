@@ -76,7 +76,7 @@ export function dropDir(c: ConnRow) {
 }
 
 /** Scheduled runs: push changed records (REST) or write files to the drop folder. Called once a minute by the worker. */
-export async function scheduleTick(db: Db, now = Date.now()) {
+export async function scheduleTick(db: Db, now = Date.now(), f: typeof fetch = fetch) {
   const list: ConnRow[] = (await db.query("SELECT * FROM connectors WHERE enabled=TRUE")).rows;
   for (const c of list) {
     const every = Number(conf(c).scheduleMinutes) || 0; if (every <= 0) continue;
@@ -86,6 +86,9 @@ export async function scheduleTick(db: Db, now = Date.now()) {
     try {
       const p = await plugin(c.type), m = maps(c);
       const ents = (Object.keys(m).filter(k => (p.out as string[]).includes(k)) as OutEntity[]);
+      // Two-way: pull the listed inbound records (config.pull, e.g. "products,stock") on the same schedule.
+      if (p.pull) for (const e of String(conf(c).pull || "").split(",").map(x => x.trim()).filter(x => (p.in as string[]).includes(x)))
+        await pull(db, c, e as InEntity, f).catch((x: any) => console.error(`connector ${c.id} pull ${e}:`, x.message));
       if (p.send) {
         for (const e of ents) for (const id of e === "stock" ? [] : await changedIds(db, c.company_id, e, since))
           await db.query("INSERT INTO webhook_deliveries (company_id,connector_id,event,payload) VALUES ($1,$2,$3,$4)", [c.company_id, c.id, `${e.replace(/s$/, "")}.sync`, JSON.stringify({ event: `${e.replace(/s$/, "")}.sync`, data: { id } })]);

@@ -179,3 +179,36 @@ describe("connectors", () => {
     await request(app).post("/api/v1/inbound/wrong-token/stock").send([{}]).expect(404);
   });
 });
+
+describe("two-way sync through a live Custom REST connector", () => {
+  it("pulls products and stock on schedule, pushes orders and invoices on events", async () => {
+    await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "IN Sample Co", gstin: "33AAAAA0000A1Z5", stateCode: "33" } }).expect(200);
+    const c = (await request(app).post("/api/integrations/connectors").set(as("adm")).send({ type: "custom-rest", name: "Sample ERP" }).expect(201)).body;
+    const endpoints = { orders: { method: "POST", path: "/so", template: { order: "{{$mapped}}" } }, invoices: { method: "POST", path: "/inv" },
+      products: { method: "GET", path: "/items", itemsPath: "items" }, stock: { method: "GET", path: "/stock" } };
+    await request(app).patch(`/api/integrations/connectors/${c.id}`).set(as("adm")).send({ enabled: true, mode: "live",
+      config: { baseUrl: "https://erp.example.com/api", authType: "bearer", token: "sample-token", endpoints, events: "order.created,invoice.created", scheduleMinutes: 5, pull: "products,stock" },
+      mapping: { products: [{ to: "external_id", from: "code" }, { to: "sku", from: "code" }, { to: "name", from: "title" }, { to: "mrp", from: "mrp" }, { to: "price", from: "rate" }],
+        stock: [{ to: "product_external_id", from: "code" }, { to: "qty", from: "on_hand" }], orders: [{ to: "ref", from: "client_ref" }, { to: "party", from: "customer.code" }, { to: "items", from: "lines", each: [{ to: "item", from: "sku" }, { to: "q", from: "base_qty" }] }] } }).expect(200);
+    const calls: any[] = [];
+    const fake: any = async (url: string, init: any) => {
+      calls.push({ url, method: init?.method, auth: init?.headers?.Authorization, body: init?.body ? JSON.parse(init.body) : null });
+      const json = url.endsWith("/items") ? { items: [{ code: "SAMPLE-SYNC-1", title: "Sample synced item", mrp: 90, rate: 75 }] } : url.endsWith("/stock") ? [{ code: "SAMPLE-SYNC-1", on_hand: 12 }] : { ok: true };
+      return { ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) };
+    };
+    const { scheduleTick } = await import("../src/connectors/service.js");
+    await scheduleTick(db, Date.now(), fake);
+    expect((await request(app).get("/api/v1/products?limit=500").set("X-API-Key", key)).body.data.find((p: any) => p.external_id === "SAMPLE-SYNC-1")).toMatchObject({ name: "Sample synced item", price: 75 });
+    expect((await request(app).get("/api/v1/stock?limit=500").set("X-API-Key", key)).body.data.find((x: any) => x.product_external_id === "SAMPLE-SYNC-1").qty).toBe(12);
+    const o = (await request(app).post("/api/orders").set(as("rep")).send({ clientRef: "sync1", shopId, lines: [{ sku: "SAMPLE-SYNC-1", qty: 2 }] }).expect(201)).body;
+    await request(app).post(`/api/orders/${o.id}/status`).set(as("adm")).send({ status: "accepted" }).expect(200);
+    await request(app).post(`/api/orders/${o.id}/invoice`).set(as("adm")).send({}).expect(201);
+    await db.query("UPDATE webhook_deliveries SET next_at=NOW() WHERE connector_id=$1", [c.id]);
+    await drain(db, { fetchImpl: fake, limit: 50 });
+    const so = calls.find(x => x.url.endsWith("/so") && x.body.order.ref === "sync1"), inv = calls.find(x => x.url.endsWith("/inv"));
+    expect(so.auth).toBe("Bearer sample-token"); expect(so.body.order).toMatchObject({ ref: "sync1", items: [{ item: "SAMPLE-SYNC-1", q: 2 }] });
+    expect(inv.body.number).toBeTruthy();
+    const st = (await db.query("SELECT status FROM webhook_deliveries WHERE connector_id=$1", [c.id])).rows.map((r: any) => r.status);
+    expect(st.every((x: string) => x === "delivered")).toBe(true);
+  });
+});

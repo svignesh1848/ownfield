@@ -92,6 +92,7 @@ Drop one file in `server/src/connectors/plugins/`. See `server/src/connectors/RE
 ## 4. Typical two-way setup
 
 1. Create an API key with the write scopes. The ERP pushes products, customers, distributors and stock with the upserts
-   (or FieldForce pulls them with a Custom REST connector on a schedule).
+   **or** FieldForce pulls them: in a Custom REST connector set *Sync every N minutes* and *Pull on schedule* to
+   `products,stock` (and/or `customers,distributors`) with one endpoint per record type and a mapping.
 2. Add a webhook or a connector for `order.created` / `invoice.created` / `collection.created` so documents go to the ERP.
 3. The ERP writes its document number back with `PUT /orders/{id}/external-id`.
