@@ -94,7 +94,7 @@ export function registerAuditRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (qk !== "shelf" && !qs.some(q => q.key === qk && q.type === "photo")) throw bad("not a photo question");
     const n = Number((await db.query("SELECT COUNT(*) AS n FROM audit_photos WHERE audit_id=$1", [a.id])).rows[0].n);
     if (n >= 6) throw bad("max 6 photos per audit", 409);
-    const p = savePhoto(cid, req.file)!;
+    const p = (await savePhoto(cid, req.file))!;
     res.status(201).json((await db.query("INSERT INTO audit_photos (company_id,audit_id,question,file,mime,size) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,audit_id,question,mime,size",
       [cid, a.id, qk, p.file, p.mime, p.size])).rows[0]);
   }));
@@ -104,7 +104,7 @@ export function registerAuditRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const p = (await db.query(`SELECT p.* FROM audit_photos p JOIN audits a ON a.id=p.audit_id WHERE p.id=$1 AND p.company_id=$2 ${rep ? "AND a.rep_id=$3" : ""}`,
       rep ? [Number(req.params.id), cid, req.user.uid] : [Number(req.params.id), cid])).rows[0];
     if (!p) throw bad("photo not found", 404);
-    res.type(p.mime).set("Cache-Control", "private, max-age=86400").send(readPhoto(p.file));
+    res.type(p.mime).set("Cache-Control", "private, max-age=86400").send(await readPhoto(p.file));
   }));
   // Manager report: one row per audit with plain-language answers and photo ids.
   app.get("/api/audits", auth(...MGR, "sales_rep"), wrap(async (req, res) => {

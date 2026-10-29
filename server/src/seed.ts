@@ -17,7 +17,7 @@ async function enable(db: Db, cid: number, keys: FeatureKey[]) {
   await db.query("UPDATE companies SET settings=$1 WHERE id=$2", [JSON.stringify(s), cid]);
 }
 /** Sample photo; if the upload folder isn't writable the sample simply has no photo. */
-const photo = (cid: number) => { try { return savePhoto(cid, { buffer: SAMPLE_PNG, size: SAMPLE_PNG.length } as any)!; } catch (e: any) { console.error("sample photo skipped:", e.message); return null; } };
+const photo = async (cid: number) => { try { return await savePhoto(cid, { buffer: SAMPLE_PNG, size: SAMPLE_PNG.length } as any)!; } catch (e: any) { console.error("sample photo skipped:", e.message); return null; } };
 /** Run one seeding step; a failure is logged and does not stop the other steps. */
 const step = async (name: string, fn: () => Promise<void>) => { try { await fn(); } catch (e: any) { console.error(`demo seed (${name}) skipped:`, e.message); } };
 
@@ -36,7 +36,7 @@ export async function seedDemo(db: Db, code = "DEMO") {
     if (v) {
       const a = await one(db, "INSERT INTO audits (company_id,visit_id,template_id,rep_id,shop_id,answers) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
         [cid, v.id, t.id, rep.id, v.shop_id, JSON.stringify({ shelf_clean: true, facings: 8, poster: false, notes: "Sample audit — poster missing" })]);
-      const p = photo(cid);
+      const p = await photo(cid);
       if (p) await db.query("INSERT INTO audit_photos (company_id,audit_id,question,file,mime,size) VALUES ($1,$2,$3,$4,$5,$6)", [cid, a.id, "shelf_photo", p.file, p.mime, p.size]);
     }
   }
@@ -47,7 +47,7 @@ export async function seedDemo(db: Db, code = "DEMO") {
   if (rep && !(await one(db, "SELECT id FROM expenses WHERE company_id=$1", [cid]))) {
     const d = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     for (const [amt, cat, note, st] of [[240, "Travel", "Sample — bus fare to outlets", "approved"], [150, "Food", "Sample — lunch on beat", "pending"]] as const) {
-      const p = photo(cid);
+      const p = await photo(cid);
       await db.query("INSERT INTO expenses (company_id,rep_id,spent_on,amount,category,note,receipt_file,receipt_mime,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [cid, rep.id, d, amt, cat, note, p?.file ?? null, p?.mime ?? null, st]);
     }
   }

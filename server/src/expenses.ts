@@ -16,7 +16,7 @@ export function registerExpenseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!category) throw bad(`pick a category: ${EXPENSE_CATEGORIES.join(", ")}`);
     const spentOn = b.spentOn ? String(b.spentOn) : today();
     if (!dateOk(spentOn) || spentOn > today()) throw bad("date can't be in the future");
-    const p = savePhoto(cid, req.file, true)!; // receipt photo required
+    const p = (await savePhoto(cid, req.file, true))!; // receipt photo required
     res.status(201).json((await db.query(`INSERT INTO expenses (company_id,rep_id,spent_on,amount,category,note,receipt_file,receipt_mime) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING id,rep_id,spent_on,amount,category,note,status,created_at`, [cid, req.user.uid, spentOn, amount, category, String(b.note || "").slice(0, 300) || null, p.file, p.mime])).rows[0]);
   }));
@@ -45,7 +45,7 @@ export function registerExpenseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const e = (await db.query(`SELECT receipt_file, receipt_mime FROM expenses WHERE id=$1 AND company_id=$2 ${rep ? "AND rep_id=$3" : ""}`, rep ? [Number(req.params.id), cid, req.user.uid] : [Number(req.params.id), cid])).rows[0];
     if (!e) throw bad("claim not found", 404);
     if (!e.receipt_file) throw bad("no bill photo for this sample claim", 404);
-    res.type(e.receipt_mime).set("Cache-Control", "private, max-age=86400").send(readPhoto(e.receipt_file));
+    res.type(e.receipt_mime).set("Cache-Control", "private, max-age=86400").send(await readPhoto(e.receipt_file));
   }));
   // Monthly report: per rep, approved / pending / rejected totals and approved amount by category.
   app.get("/api/expenses/report", auth(...MGR, "sales_rep"), wrap(async (req, res) => {

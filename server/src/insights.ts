@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import type { Db } from "./db.js";
 import { bad, parseJson, parseDate, today } from "./catalog.js";
 import { dayKey } from "./field.js";
+import { photoStore } from "./storage.js";
 
 export const METRICS = ["value", "orders", "visits"] as const;
 const monthOk = (m: unknown) => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m));
@@ -48,7 +49,6 @@ const MAGIC: [string, (b: Buffer) => boolean][] = [["image/jpeg", b => b[0] === 
 
 export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   const MGR = ["company_admin", "manager"];
-  const dir = process.env.UPLOAD_DIR || path.resolve(process.cwd(), "uploads");
 
   // ---- Targets ----
   app.put("/api/targets", auth(...MGR), wrap(async (req, res) => {
@@ -73,7 +73,7 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const n = (await db.query("SELECT COUNT(*) AS n FROM visit_photos WHERE visit_id=$1", [v.id])).rows[0].n;
     if (Number(n) >= 10) throw bad("max 10 photos per visit", 409);
     const rel = path.join(String(cid), `${crypto.randomUUID()}.${mime.split("/")[1]}`);
-    fs.mkdirSync(path.join(dir, String(cid)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), req.file.buffer);
+    await photoStore().put(rel, req.file.buffer, mime);
     res.status(201).json((await db.query("INSERT INTO visit_photos (company_id,visit_id,file,mime,size,caption) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,visit_id,mime,size,caption,created_at",
       [cid, v.id, rel, mime, req.file.size, String(req.body?.caption || "").slice(0, 200) || null])).rows[0]);
   }));
@@ -88,7 +88,7 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const p = [Number(req.params.id), cid, ...(req.user.role === "sales_rep" ? [req.user.uid] : [])];
     const ph = (await db.query(`SELECT p.* FROM visit_photos p JOIN visits v ON v.id=p.visit_id WHERE p.id=$1 AND p.company_id=$2 ${photoScope(req)}`, p)).rows[0];
     if (!ph) throw bad("photo not found", 404);
-    res.type(ph.mime).set("Cache-Control", "private, max-age=86400").send(fs.readFileSync(path.join(dir, ph.file)));
+    res.type(ph.mime).set("Cache-Control", "private, max-age=86400").send(await photoStore().get(ph.file));
   }));
 
   // ---- Reports (Excel / CSV) ----

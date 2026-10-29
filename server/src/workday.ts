@@ -35,7 +35,7 @@ export function registerWorkdayRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const f = await getFlow(db, cid); if (!f.dayStart) throw bad("Start/End Day is turned off", 409);
     const [lat, lng] = gps(req.body?.lat, req.body?.lng);
     if ((await db.query("SELECT id FROM rep_days WHERE rep_id=$1 AND day=$2", [req.user.uid, today()])).rows[0]) throw bad("You already started today", 409);
-    const p = f.selfie && req.file ? savePhoto(cid, req.file) : null;
+    const p = f.selfie && req.file ? await savePhoto(cid, req.file) : null;
     res.status(201).json((await db.query(`INSERT INTO rep_days (company_id,rep_id,day,start_at,start_lat,start_lng,selfie_file,selfie_mime) VALUES ($1,$2,$3,NOW(),$4,$5,$6,$7)
       RETURNING id, day, start_at, start_lat, start_lng`, [cid, req.user.uid, today(), lat, lng, p?.file ?? null, p?.mime ?? null])).rows[0]);
   }));
@@ -52,7 +52,7 @@ export function registerWorkdayRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const rep = req.user.role === "sales_rep";
     const d = (await db.query(`SELECT * FROM rep_days WHERE id=$1 AND company_id=$2 ${rep ? "AND rep_id=$3" : ""}`, rep ? [Number(req.params.id), cid, req.user.uid] : [Number(req.params.id), cid])).rows[0];
     if (!d?.selfie_file) throw bad("photo not found", 404);
-    res.type(d.selfie_mime).set("Cache-Control", "private, max-age=86400").send(readPhoto(d.selfie_file));
+    res.type(d.selfie_mime).set("Cache-Control", "private, max-age=86400").send(await readPhoto(d.selfie_file));
   }));
 
   // Retailer home: what's on offer, what they owe, and company announcements.
