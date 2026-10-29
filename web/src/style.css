@@ -112,3 +112,8 @@ table.sg th,table.sg td{padding:4px;text-align:center;border:0}table.sg input{wi
 .addphoto{width:72px;height:72px;border:2px dashed #94a3b8;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;cursor:pointer}.addphoto input{display:none}
 .total{position:sticky;bottom:64px;background:#fff;display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-weight:600}
 nav:not(.bottom){display:flex;gap:6px;margin:8px 0;overflow-x:auto}
+/* phase 3 */
+.photo-btn{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:10px 16px;border-radius:10px;background:var(--accent-l);color:var(--accent-d);font-weight:600;cursor:pointer}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;background:#eef1f5;display:inline-block}
+.qa{margin:14px 0}.seg{display:flex;gap:8px}.seg button{flex:1}.qrow{border-bottom:1px solid var(--line);padding:6px 0}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.earn{font-size:28px;font-weight:700;color:var(--accent-d)}

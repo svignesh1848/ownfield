@@ -26,6 +26,7 @@ export function RepHome({ s, cfg, go }: ViewProps) {
       <Tile icon="📍" title="Start visit" text="Check in at an outlet" onClick={() => go("beat")} tone="accent" />
       <Tile icon="🛒" title="New order" text="Take an order" onClick={() => go("order")} tone="accent" />
       {f.invoicing && <Tile icon="💰" title="Collect payment" text={d.due > 0 ? `${inr0(d.due)} due` : "Nothing due"} onClick={() => go("collect")} />}
+      {f.audits && d.open && <Tile icon="✅" title="Store check" text="Fill the checklist for this outlet" onClick={() => go("audit")} />}
       <Tile icon="🎯" title="My targets" text="This month's progress" onClick={() => go("targets")} />
       <Tile icon="📦" title="My orders" text="Orders you placed" onClick={() => go("orders")} />
     </div></>;

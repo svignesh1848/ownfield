@@ -12,6 +12,7 @@ import { registerPurchaseRoutes } from "./purchase.js";
 import { registerSchemeRoutes } from "./schemes.js";
 import { registerCollectionRoutes } from "./collections.js";
 import { registerEinvoiceRoutes } from "./einvoice.js";
+import { registerAuditRoutes } from "./audits.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor"] as const;
@@ -188,6 +189,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerSchemeRoutes({ app, db, auth, wrap, tenant });
   registerCollectionRoutes({ app, db, auth, wrap, tenant });
   registerEinvoiceRoutes({ app, db, auth, wrap, tenant });
+  registerAuditRoutes({ app, db, auth, wrap, tenant });
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {
@@ -197,6 +199,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
 
   app.use((err: any, _q: Request, res: Response, _n: NextFunction) => {
     const dup = err.code === "23505" || /duplicate|unique/i.test(err.message || "");
+    if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "photo is too large — please take a smaller photo" });
     res.status(err.status || (dup ? 409 : 500)).json({ error: dup ? "already exists" : err.message });
   });
   return app;

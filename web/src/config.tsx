@@ -7,7 +7,7 @@ import { CreditSettings } from "./collect";
 
 type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void; go?: (t: string) => void };
 const FEATURES: [string, string][] = [["stock", "Track stock — stop orders when stock runs out"], ["batches", "Batches & expiry dates — use the nearest expiry first"], ["sizeGrid", "Order sizes/colours in a grid"], ["gps", "Reps must share location when checking in"],
-  ["schemes", "Offers & schemes (discounts, free goods)"], ["drugLicence", "Record drug licence numbers"], ["services", "Allow services (items without stock)"], ["photos", "Photos during visits"], ["invoicing", "GST invoices, returns & payments"], ["purchaseOrders", "Distributors can order stock from the company"], ["distributorBilling", "Distributors bill outlets under their own GST number"], ["eInvoice", "GST e-invoices (government invoice number + QR code)"]];
+  ["schemes", "Offers & schemes (discounts, free goods)"], ["drugLicence", "Record drug licence numbers"], ["services", "Allow services (items without stock)"], ["photos", "Photos during visits"], ["invoicing", "GST invoices, returns & payments"], ["purchaseOrders", "Distributors can order stock from the company"], ["distributorBilling", "Distributors bill outlets under their own GST number"], ["eInvoice", "GST e-invoices (government invoice number + QR code)"], ["audits", "Store checks — checklists and shelf photos during visits"]];
 export const attrText = (a: Record<string, string>) => Object.values(a || {}).join(" / ");
 const unitsText = (u: { code: string; factor: number }[]) => u.map(x => `${x.code}=${x.factor}`).join(", ");
 

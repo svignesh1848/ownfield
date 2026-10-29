@@ -111,6 +111,14 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, issuer, number));
 CREATE TABLE IF NOT EXISTS payment_allocations (
   id SERIAL PRIMARY KEY, payment_id INTEGER NOT NULL REFERENCES payments(id), invoice_id INTEGER NOT NULL REFERENCES invoices(id), amount NUMERIC NOT NULL);
+CREATE TABLE IF NOT EXISTS audit_templates (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL, questions TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE);
+CREATE TABLE IF NOT EXISTS audits (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), visit_id INTEGER NOT NULL REFERENCES visits(id), template_id INTEGER NOT NULL REFERENCES audit_templates(id),
+  rep_id INTEGER NOT NULL REFERENCES users(id), shop_id INTEGER NOT NULL REFERENCES shops(id), answers TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS audit_photos (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), audit_id INTEGER NOT NULL REFERENCES audits(id), question TEXT NOT NULL,
+  file TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

@@ -1,6 +1,6 @@
 // Industry templates. Each one presets features, variant attributes, units and custom fields.
 // Everything stays editable per company afterwards. All sample data is fictitious and labelled "Sample".
-export const FEATURE_KEYS = ["stock", "batches", "sizeGrid", "gps", "schemes", "drugLicence", "services", "photos", "invoicing", "purchaseOrders", "distributorBilling", "eInvoice"] as const;
+export const FEATURE_KEYS = ["stock", "batches", "sizeGrid", "gps", "schemes", "drugLicence", "services", "photos", "invoicing", "purchaseOrders", "distributorBilling", "eInvoice", "audits"] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type Features = Record<FeatureKey, boolean>;
 export const FIELD_TYPES = ["text", "number", "date", "select"] as const;
