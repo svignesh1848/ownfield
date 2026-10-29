@@ -67,7 +67,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   doc_date TEXT NOT NULL, order_id INTEGER REFERENCES orders(id), ref_invoice_id INTEGER REFERENCES invoices(id), shop_id INTEGER NOT NULL REFERENCES shops(id),
   seller TEXT NOT NULL, buyer TEXT NOT NULL, place_of_supply TEXT, intra_state BOOLEAN NOT NULL, reason TEXT,
   taxable NUMERIC NOT NULL, cgst NUMERIC NOT NULL, sgst NUMERIC NOT NULL, igst NUMERIC NOT NULL, round_off NUMERIC NOT NULL, total NUMERIC NOT NULL,
-  created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, issuer, number));
+  created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  irn TEXT, ack_no TEXT, einv_ack_at TIMESTAMPTZ, signed_qr TEXT, einv_status TEXT, einv_provider TEXT, einv_cancelled_at TIMESTAMPTZ, einv_cancel_reason TEXT,
+  UNIQUE (company_id, issuer, number));
 CREATE TABLE IF NOT EXISTS invoice_lines (
   id SERIAL PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id), order_line_id INTEGER REFERENCES order_lines(id),
   ref_line_id INTEGER REFERENCES invoice_lines(id), variant_id INTEGER NOT NULL REFERENCES variants(id), description TEXT NOT NULL, hsn TEXT,

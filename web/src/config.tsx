@@ -6,7 +6,7 @@ import { CreditSettings } from "./collect";
 
 type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void };
 const FEATURES: [string, string][] = [["stock", "Stock tracking"], ["batches", "Batch & expiry (FEFO)"], ["sizeGrid", "Size-grid ordering"], ["gps", "GPS check-in required"],
-  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"], ["photos", "Visit photos"], ["invoicing", "GST invoicing & credit notes"], ["purchaseOrders", "Purchase orders from distributors"], ["distributorBilling", "Distributors invoice under their own GSTIN"]];
+  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"], ["photos", "Visit photos"], ["invoicing", "GST invoicing & credit notes"], ["purchaseOrders", "Purchase orders from distributors"], ["distributorBilling", "Distributors invoice under their own GSTIN"], ["eInvoice", "GST e-invoicing (IRN / QR)"]];
 export const attrText = (a: Record<string, string>) => Object.values(a || {}).join(" / ");
 const unitsText = (u: { code: string; factor: number }[]) => u.map(x => `${x.code}=${x.factor}`).join(", ");
 
@@ -76,6 +76,7 @@ export function SettingsPage({ s, cfg, reload }: P) {
   const [features, setFeatures] = useState({ ...st.features }); const [attrs, setAttrs] = useState(st.attributes.join(", ")); const [units, setUnits] = useState(unitsText(st.uoms));
   const [cf, setCf] = useState<Record<string, string>>({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) });
   const [msg, setMsg] = useState(""); const [gst, setGst] = useState<any>({ ...(st as any).gst }); const [po, setPo] = useState<any>({ ...(st as any).po });
+  const [einv, setEinv] = useState<string>((st as any).einvoice?.provider || "test");
   const [credit, setCredit] = useState<any>({ days: 0, limit: 0, onBreach: "warn", ...(st as any).credit });
   useEffect(() => { api(null, "/api/templates").then(setTpl); }, []);
   useEffect(() => { setFeatures({ ...st.features }); setAttrs(st.attributes.join(", ")); setUnits(unitsText(st.uoms)); setCf({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) }); setGst({ ...(st as any).gst }); setPo({ ...(st as any).po }); }, [cfg]);
@@ -96,7 +97,9 @@ export function SettingsPage({ s, cfg, reload }: P) {
     {features.invoicing && <GstSettings g={gst} onChange={setGst} />}
     {features.purchaseOrders && <PoSettings po={po} onChange={setPo} />}
     {features.invoicing && <CreditSettings c={credit} onChange={setCredit} />}
-    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, ...(features.invoicing ? { gst: { ...gst, defaultRate: Number(gst.defaultRate) } } : {}), ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, "Settings saved")}>Save settings</button>
+    {features.eInvoice && <><h3>E-invoicing</h3><label className="fld"><span>Provider</span><select value={einv} onChange={e => setEinv(e.target.value)}>
+      <option value="test">TEST mock (fake IRN/QR — not valid for GST)</option><option value="gsp">GSP adapter (configure EINV_GSP_* env on the server)</option></select></label></>}
+    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, ...(features.invoicing ? { gst: { ...gst, defaultRate: Number(gst.defaultRate) } } : {}), ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.eInvoice ? { einvoice: { provider: einv } } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, "Settings saved")}>Save settings</button>
     <p>{msg}</p></>;
 }
 

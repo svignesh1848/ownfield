@@ -91,6 +91,11 @@ export function validateSettings(input: any, base: Settings): Settings {
     if (!String(po.numberFormat).includes("{seq")) throw bad("PO number format must contain {seq}");
     s.po = po;
   }
+  if (input.einvoice) {
+    const e = { ...s.einvoice, ...input.einvoice };
+    if (!["test", "gsp"].includes(e.provider)) throw bad("e-invoice provider must be test or gsp");
+    s.einvoice = e;
+  }
   if (input.credit) {
     const c = { ...s.credit, ...input.credit };
     c.days = Number(c.days); c.limit = Number(c.limit);

@@ -66,6 +66,15 @@ Open-source, **industry-agnostic** field sales and distributor management for FM
   - **Ageing report:** buckets of 0-30, 31-60, 61-90 and 90+ days, exportable to Excel or CSV.
   - **Rep app:** a Collect tab and an inline credit warning on the order form.
 
+- **(e) E-invoicing** (a toggle per company, plus a provider setting).
+  - **JSON:** builds NIC e-invoice schema **v1.1** JSON for invoices (INV) and credit notes (CRN, linked to the original invoice), B2B only, with UQC unit mapping (`GET /api/invoices/:id/einvoice/json`).
+  - **Provider interface:** `EinvProvider` with two adapters:
+    - **TEST mock:** fake IRN (sha256) and QR, marked *TEST — NOT VALID FOR GST* in the payload and on the print.
+    - **GSP stub:** reads `EINV_GSP_BASE_URL`, `EINV_GSP_CLIENT_ID`, `EINV_GSP_CLIENT_SECRET`, `EINV_GSP_USERNAME` and `EINV_GSP_PASSWORD`. Returns 503 if they are missing and 501 otherwise. Connect your GSP there.
+  - **Printed invoice:** shows the IRN, acknowledgement number and date, and the QR code.
+  - **Cancellation:** allowed within 24 hours of generation, with a NIC reason code.
+  - **No real API calls are made.**
+
 > GST rates in the industry templates are **samples**. Verify the rate for every HSN/SAC code with your tax advisor. E-invoicing (IRN/QR) and e-way bills are not included yet.
 
 ## Stack
@@ -91,4 +100,4 @@ Demo logins: `PLATFORM / owner@example.com / demo`, `DEMO / admin@example.com / 
 Upload templates are in `sample-data/`. All sample data there is made up.
 
 ## Roadmap
-Step 5 (proposed): payments & outstanding/collections, distributor-billed invoices (distributor GSTIN), e-invoice (IRN) export JSON, purchase orders from distributors to the company, and offline photo queue.
+Next (proposed): offline photo queue, a real GSP adapter for e-invoicing (needs your GSP credentials), and e-way bills.

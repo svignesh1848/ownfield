@@ -1,5 +1,6 @@
 // Step 4: GST invoices & credit notes (returns). HSN/SAC-based rates, CGST+SGST (intra-state) vs IGST (inter-state),
 // numbering per Indian financial year (April–March), printable HTML. Every write runs in one DB transaction.
+import { einvBlock } from "./einvoice.js";
 import type { Express, Response, Request, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
 import { bad, getCompany, parseJson, parseDate, today } from "./catalog.js";
@@ -64,7 +65,7 @@ export async function loadInvoice(db: Db, cid: number, id: number) {
 
 export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 export const inr = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-export function invoiceHtml(inv: any, ref?: string) {
+export function invoiceHtml(inv: any, ref?: string, einv = "") {
   const title = inv.kind === "invoice" ? "TAX INVOICE" : "CREDIT NOTE";
   const hsn = new Map<string, any>();
   for (const l of inv.lines) { const k = `${l.hsn || "-"}|${l.gst_rate}`; const h = hsn.get(k) || { hsn: l.hsn || "-", rate: l.gst_rate, taxable: 0, cgst: 0, sgst: 0, igst: 0 }; for (const f of ["taxable", "cgst", "sgst", "igst"]) h[f] = r2(h[f] + l[f]); hsn.set(k, h); }
@@ -77,6 +78,7 @@ th,td{border:1px solid #999;padding:4px 6px;text-align:left}td.n,th.n{text-align
 <h1>${title}</h1><div>No. <b>${esc(inv.number)}</b> · Date ${esc(inv.doc_date)} · FY ${esc(inv.fy)}${ref ? ` · Against invoice <b>${esc(ref)}</b>` : ""}</div>
 <div class="grid"><div><b>Supplier</b><br>${esc(inv.seller.name)}<br>${esc(inv.seller.address)}<br>GSTIN ${esc(inv.seller.gstin)} · State ${esc(inv.seller.state)}</div>
 <div><b>Recipient</b><br>${esc(inv.buyer.name)}<br>${esc(inv.buyer.address)}<br>GSTIN ${esc(inv.buyer.gstin || "Unregistered")} · Place of supply ${esc(inv.place_of_supply)}</div></div>
+${einv}
 ${inv.reason ? `<p>Reason: ${esc(inv.reason)}</p>` : ""}
 <table><tr><th>#</th><th>Description</th><th>HSN/SAC</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Taxable</th><th class="n">GST %</th>${taxCols.map(c => `<th class="n">${c}</th>`).join("")}<th class="n">Total</th></tr>
 ${inv.lines.map((l: any, i: number) => `<tr><td>${i + 1}</td><td>${esc(l.description)}</td><td>${esc(l.hsn)}</td><td class="n">${l.base_qty} ${esc(l.uom)}</td><td class="n">${inr(l.rate)}</td><td class="n">${inr(l.taxable)}</td><td class="n">${l.gst_rate}</td>${inv.intra_state ? `<td class="n">${inr(l.cgst)}</td><td class="n">${inr(l.sgst)}</td>` : `<td class="n">${inr(l.igst)}</td>`}<td class="n">${inr(l.total)}</td></tr>`).join("")}
@@ -185,7 +187,7 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   app.get("/api/invoices", auth(...BILL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const sc = scope(req);
-    const rows = (await db.query(`SELECT i.id,i.issuer,i.kind,i.number,i.doc_date,i.order_id,i.ref_invoice_id,i.intra_state,i.taxable,i.cgst,i.sgst,i.igst,i.total,i.seller,s.name AS shop_name
+    const rows = (await db.query(`SELECT i.id,i.issuer,i.kind,i.number,i.doc_date,i.order_id,i.ref_invoice_id,i.intra_state,i.taxable,i.cgst,i.sgst,i.igst,i.total,i.seller,i.irn,i.einv_status,i.einv_provider,s.name AS shop_name
       FROM invoices i JOIN shops s ON s.id=i.shop_id WHERE i.company_id=$1 ${sc ? "AND i.issuer=$2" : ""} ORDER BY i.id DESC`, sc ? [cid, sc] : [cid])).rows
       .map(r => ({ ...r, seller: parseJson<any>(r.seller, {}).name }));
     res.json(rows.map(r => ({ ...r, taxable: Number(r.taxable), total: Number(r.total), tax: Number(r.cgst) + Number(r.sgst) + Number(r.igst) })));
@@ -197,6 +199,6 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     const inv = await visible(req, cid, Number(req.params.id));
     const ref = inv.ref_invoice_id ? (await db.query("SELECT number FROM invoices WHERE id=$1", [inv.ref_invoice_id])).rows[0]?.number : undefined;
-    res.type("html").send(invoiceHtml(inv, ref));
+    res.type("html").send(invoiceHtml(inv, ref, await einvBlock(inv)));
   }));
 }

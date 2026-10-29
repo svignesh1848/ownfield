@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, Table, type Session, type Cfg } from "./main";
+import { download } from "./po";
 
 type P = { s: Session; cfg: Cfg };
 const inr = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -10,7 +11,9 @@ export const openPrint = async (s: Session, id: number) => {
 };
 const month0 = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
 
-export function Invoices({ s }: P) {
+export function Invoices({ s, cfg }: P) {
+  const einv = !!cfg?.settings.features.eInvoice;
+  const act = async (fn: () => Promise<any>, ok: string) => { try { await fn(); setMsg(ok); load(); } catch (e: any) { setMsg(e.message); } };
   const [rows, setRows] = useState<any[]>([]); const [cn, setCn] = useState<any>(null); const [msg, setMsg] = useState("");
   const load = () => api(s, "/api/invoices").then(setRows); useEffect(() => { load(); }, []);
   const startCn = async (id: number) => { const inv = await api(s, `/api/invoices/${id}`); setCn({ inv, qty: {}, reason: "", restock: true }); };
@@ -18,7 +21,11 @@ export function Invoices({ s }: P) {
     <Table rows={rows.map(r => ({ ...r, type: r.kind === "invoice" ? "Invoice" : "Credit note", tax_type: r.intra_state ? "CGST+SGST" : "IGST", taxable: inr(r.taxable), tax: inr(r.tax), total: inr(r.total) }))}
       cols={["number", "type", "doc_date", ...(s.user.role !== "distributor" ? ["seller"] : []), "shop_name", "tax_type", "taxable", "tax", "total"]} />
     {rows.map(r => <span key={r.id} className="chips"><button className="sm ghost" onClick={() => openPrint(s, r.id).catch(e => setMsg(e.message))}>Print {r.number}</button>
-      {r.kind === "invoice" && <button className="sm ghost" onClick={() => startCn(r.id)}>Return / credit note</button>}</span>)}
+      {r.kind === "invoice" && <button className="sm ghost" onClick={() => startCn(r.id)}>Return / credit note</button>}
+      {einv && <>{!r.irn && <button className="sm" onClick={() => act(() => api(s, `/api/invoices/${r.id}/einvoice`, { method: "POST" }), `IRN generated for ${r.number}`)}>Generate IRN</button>}
+        <button className="sm ghost" onClick={() => download(s, `/api/invoices/${r.id}/einvoice/json`, `${r.number.replace(/\W+/g, "-")}-einvoice.json`).catch(e => setMsg(e.message))}>e-invoice JSON</button>
+        {r.irn && <span className={`pill ${r.einv_status === "cancelled" ? "rejected" : "accepted"}`}>IRN {r.einv_status}{r.einv_provider === "TEST" ? " (TEST)" : ""}</span>}
+        {r.einv_status === "generated" && <button className="sm ghost" onClick={() => { const remark = prompt("Cancel IRN — remark (allowed within 24h; reason: data entry mistake)"); if (remark) act(() => api(s, `/api/invoices/${r.id}/einvoice/cancel`, { method: "POST", body: JSON.stringify({ reason: "2", remark }) }), "IRN cancelled"); }}>Cancel IRN</button>}</>}</span>)}
     {cn && <div className="card sub"><h3>Credit note against {cn.inv.number}</h3>
       {cn.inv.lines.map((l: any) => <div className="line" key={l.id}><span>{l.description} <span className="muted">invoiced {l.base_qty} {l.uom === "" ? "" : "(base units)"}</span></span>
         <input inputMode="numeric" placeholder="0" value={cn.qty[l.id] || ""} onChange={e => setCn({ ...cn, qty: { ...cn.qty, [l.id]: e.target.value.replace(/\D/g, "") } })} /></div>)}
