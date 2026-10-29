@@ -33,7 +33,8 @@ describe("usage maths", () => {
 describe("auth & roles", () => {
   it("company-code login; wrong code fails", async () => {
     expect(await login("ACME", "admin@x.com", "pw")).toBeTruthy();
-    await request(app).post("/api/auth/login").send({ companyCode: "NOPE", email: "admin@x.com", password: "pw" }).expect(401);
+    expect((await request(app).post("/api/auth/login").send({ companyCode: "NOPE", email: "admin@x.com", password: "pw" }).expect(404)).body.error).toMatch(/Company code not found/);
+    expect((await request(app).post("/api/auth/login").send({ companyCode: "acme", email: "admin@x.com", password: "nope" }).expect(401)).body.error).toBe("Wrong email or password");
   });
   it("non-owner cannot manage companies", async () => {
     const t = await login("ACME", "admin@x.com", "pw");

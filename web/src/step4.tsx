@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, Table, type Session, type Cfg } from "./main";
 import { download } from "./po";
+import { Term, Empty, fmtDate } from "./ui";
 
 type P = { s: Session; cfg: Cfg };
 const inr = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -22,10 +23,10 @@ export function Invoices({ s, cfg }: P) {
       cols={["number", "type", "doc_date", ...(s.user.role !== "distributor" ? ["seller"] : []), "shop_name", "tax_type", "taxable", "tax", "total"]} />
     {rows.map(r => <span key={r.id} className="chips"><button className="sm ghost" onClick={() => openPrint(s, r.id).catch(e => setMsg(e.message))}>Print {r.number}</button>
       {r.kind === "invoice" && <button className="sm ghost" onClick={() => startCn(r.id)}>Return / credit note</button>}
-      {einv && <>{!r.irn && <button className="sm" onClick={() => act(() => api(s, `/api/invoices/${r.id}/einvoice`, { method: "POST" }), `IRN generated for ${r.number}`)}>Generate IRN</button>}
-        <button className="sm ghost" onClick={() => download(s, `/api/invoices/${r.id}/einvoice/json`, `${r.number.replace(/\W+/g, "-")}-einvoice.json`).catch(e => setMsg(e.message))}>e-invoice JSON</button>
-        {r.irn && <span className={`pill ${r.einv_status === "cancelled" ? "rejected" : "accepted"}`}>IRN {r.einv_status}{r.einv_provider === "TEST" ? " (TEST)" : ""}</span>}
-        {r.einv_status === "generated" && <button className="sm ghost" onClick={() => { const remark = prompt("Cancel IRN — remark (allowed within 24h; reason: data entry mistake)"); if (remark) act(() => api(s, `/api/invoices/${r.id}/einvoice/cancel`, { method: "POST", body: JSON.stringify({ reason: "2", remark }) }), "IRN cancelled"); }}>Cancel IRN</button>}</>}</span>)}
+      {einv && <>{!r.irn && <button className="sm" onClick={() => act(() => api(s, `/api/invoices/${r.id}/einvoice`, { method: "POST" }), `E-invoice registered for ${r.number}`)}>Register e-invoice</button>}
+        <button className="sm ghost" onClick={() => download(s, `/api/invoices/${r.id}/einvoice/json`, `${r.number.replace(/\W+/g, "-")}-einvoice.json`).catch(e => setMsg(e.message))}>Download e-invoice file</button>
+        {r.irn && <span className={`pill ${r.einv_status === "cancelled" ? "rejected" : "accepted"}`}><Term k="IRN">e-invoice</Term> {r.einv_status === "cancelled" ? "cancelled" : "registered"}{r.einv_provider === "TEST" ? " (TEST)" : ""}</span>}
+        {r.einv_status === "generated" && <button className="sm ghost" onClick={() => { const remark = prompt("Why cancel this e-invoice? (allowed only within 24 hours)"); if (remark) act(() => api(s, `/api/invoices/${r.id}/einvoice/cancel`, { method: "POST", body: JSON.stringify({ reason: "2", remark }) }), "E-invoice cancelled"); }}>Cancel e-invoice</button>}</>}</span>)}
     {cn && <div className="card sub"><h3>Credit note against {cn.inv.number}</h3>
       {cn.inv.lines.map((l: any) => <div className="line" key={l.id}><span>{l.description} <span className="muted">invoiced {l.base_qty} {l.uom === "" ? "" : "(base units)"}</span></span>
         <input inputMode="numeric" placeholder="0" value={cn.qty[l.id] || ""} onChange={e => setCn({ ...cn, qty: { ...cn.qty, [l.id]: e.target.value.replace(/\D/g, "") } })} /></div>)}
@@ -87,8 +88,8 @@ async function shrink(file: File): Promise<Blob> {
 export function Visits({ s, cfg }: P) {
   const [rows, setRows] = useState<any[]>([]); useEffect(() => { api(s, "/api/visits").then(r => setRows(r.slice(0, 50))); }, []);
   const defs = cfg.settings.customFields.visit;
-  return <><h2>Recent visits</h2>{!rows.length && <p className="muted">No visits yet.</p>}
-    {rows.map(v => <div className="row" key={v.id}><b>{v.shop_name}</b> <span className="muted">{v.rep_name} · {new Date(v.check_in_at).toLocaleString()}{v.check_out_at ? ` → ${new Date(v.check_out_at).toLocaleTimeString()}` : " (open)"}</span>
+  return <><h2>Recent visits</h2>{!rows.length && <Empty icon="📍" title="No visits yet" text="Visits appear here when reps check in at outlets." />}
+    {rows.map(v => <div className="row" key={v.id}><b>{v.shop_name}</b> <span className="muted">{v.rep_name} · {fmtDate(v.check_in_at, true)}{v.check_out_at ? ` → ${new Date(v.check_out_at).toLocaleTimeString()}` : " (open)"}</span>
       <div className="muted small">{defs.filter(d => v.custom?.[d.key] != null).map(d => `${d.label}: ${v.custom[d.key]}`).join(" · ")}</div>
       {cfg.settings.features.photos && <VisitPhotos s={s} visitId={v.id} />}</div>)}</>;
 }

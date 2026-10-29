@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, Table, type Session } from "./main";
 import { openHtml } from "./po";
+import { Empty, fmtDate } from "./ui";
 
 const money = (n: number) => `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -22,20 +23,20 @@ export function Collections({ s }: { s: Session }) {
   };
   const bounce = async (p: any) => { const reason = prompt(`Bounce reason for ${p.number}?`); if (!reason) return;
     try { await api(s, `/api/payments/${p.id}/bounce`, { method: "POST", body: JSON.stringify({ reason }) }); load(); } catch (x: any) { setMsg(x.message); } };
-  return <><h2>Collections</h2>
-    {rows.length === 0 && <p className="muted">Nothing outstanding.</p>}
+  return <><h2>Collections</h2><p className="muted">What each outlet owes, and payments received.</p>
+    {rows.length === 0 && <Empty icon="🎉" title="Nothing to collect" text="No outlet owes money right now. Unpaid invoices will show here." />}
     {rows.map(r => <div className="row" key={`${r.shop_id}|${r.issuer}`}>
       <b>{r.outlet}</b> <span className="muted">billed by {r.issuer_name}</span>
       <div>Outstanding <b>{money(r.outstanding)}</b>{r.overdue > 0 && <span className="pill rejected"> overdue {money(r.overdue)}</span>}{r.advance > 0 && <span className="muted"> · advance {money(r.advance)}</span>}
         {(r.terms.days > 0 || r.terms.limit > 0) && <span className="muted small"> · terms {r.terms.days || "–"} days / limit {r.terms.limit ? money(r.terms.limit) : "–"}</span>}</div>
-      {r.invoices.map((i: any) => <div className="muted small" key={i.id}>{i.number} · {i.doc_date} · {i.age} days · {money(i.outstanding)} of {money(i.total)}</div>)}
+      {r.invoices.map((i: any) => <div className="muted small" key={i.id}>{i.number} · {fmtDate(i.doc_date)} · {i.age} days old · {money(i.outstanding)} of {money(i.total)}</div>)}
       <button className="sm" onClick={() => { setSel(r); setF(blank); }}>Collect</button>
       {sel === r && <form onSubmit={collect}>
         <input inputMode="decimal" placeholder="Amount ₹" value={f.amount} onChange={e => setF({ ...f, amount: e.target.value })} />
         <select value={f.mode} onChange={e => setF({ ...f, mode: e.target.value })}><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option><option value="neft">NEFT</option></select>
         {f.mode !== "cash" && <input placeholder={f.mode === "cheque" ? "Cheque no." : "UTR / reference"} value={f.reference} onChange={e => setF({ ...f, reference: e.target.value })} />}
         {f.mode === "cheque" && <label className="small">Cheque date <input type="date" value={f.chequeDate} onChange={e => setF({ ...f, chequeDate: e.target.value })} /></label>}
-        <label className="chk"><input type="checkbox" checked={f.fifo} onChange={e => setF({ ...f, fifo: e.target.checked })} />Adjust oldest invoices first (FIFO)</label>
+        <label className="chk"><input type="checkbox" checked={f.fifo} onChange={e => setF({ ...f, fifo: e.target.checked })} />Clear the oldest bills first</label>
         {!f.fifo && r.invoices.map((i: any) => <label className="fld" key={i.id}><span>{i.number} ({money(i.outstanding)})</span>
           <input inputMode="decimal" value={f.pick[i.id] || ""} onChange={e => setF({ ...f, pick: { ...f.pick, [i.id]: e.target.value } })} /></label>)}
         <button>Save &amp; print receipt</button></form>}

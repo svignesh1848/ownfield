@@ -70,11 +70,14 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   app.post("/api/auth/login", wrap(async (req, res) => {
     const { companyCode, email, password } = req.body || {};
     const code = String(companyCode || "").toUpperCase().trim();
+    if (!code || !email || !password) return res.status(400).json({ error: "Enter your company code, email and password" });
+    if (code !== PLATFORM_CODE && !(await db.query("SELECT id FROM companies WHERE code=$1", [code])).rows[0])
+      return res.status(404).json({ error: "Company code not found. Check the code your administrator gave you." });
     const rows = code === PLATFORM_CODE
       ? (await db.query("SELECT u.*, NULL AS code FROM users u WHERE u.company_id IS NULL AND u.email=$1 AND u.role='platform_owner'", [String(email).toLowerCase()])).rows
       : (await db.query("SELECT u.*, c.code FROM users u JOIN companies c ON c.id=u.company_id WHERE c.code=$1 AND u.email=$2 AND u.active=TRUE", [code, String(email).toLowerCase()])).rows;
     const u = rows[0];
-    if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return res.status(401).json({ error: "invalid credentials" });
+    if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return res.status(401).json({ error: "Wrong email or password" });
     const token = jwt.sign({ uid: u.id, companyId: u.company_id, role: u.role }, secret, { expiresIn: "12h" });
     res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code } });
   }));

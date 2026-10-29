@@ -1,12 +1,13 @@
+import { Empty } from "./ui";
 import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { GstSettings } from "./step4";
 import { PoSettings, poForSave } from "./po";
 import { CreditSettings } from "./collect";
 
-type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void };
-const FEATURES: [string, string][] = [["stock", "Stock tracking"], ["batches", "Batch & expiry (FEFO)"], ["sizeGrid", "Size-grid ordering"], ["gps", "GPS check-in required"],
-  ["schemes", "Schemes / discounts"], ["drugLicence", "Drug licence numbers"], ["services", "Service (non-stock) items"], ["photos", "Visit photos"], ["invoicing", "GST invoicing & credit notes"], ["purchaseOrders", "Purchase orders from distributors"], ["distributorBilling", "Distributors invoice under their own GSTIN"], ["eInvoice", "GST e-invoicing (IRN / QR)"]];
+type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void; go?: (t: string) => void };
+const FEATURES: [string, string][] = [["stock", "Track stock — stop orders when stock runs out"], ["batches", "Batches & expiry dates — use the nearest expiry first"], ["sizeGrid", "Order sizes/colours in a grid"], ["gps", "Reps must share location when checking in"],
+  ["schemes", "Offers & schemes (discounts, free goods)"], ["drugLicence", "Record drug licence numbers"], ["services", "Allow services (items without stock)"], ["photos", "Photos during visits"], ["invoicing", "GST invoices, returns & payments"], ["purchaseOrders", "Distributors can order stock from the company"], ["distributorBilling", "Distributors bill outlets under their own GST number"], ["eInvoice", "GST e-invoices (government invoice number + QR code)"]];
 export const attrText = (a: Record<string, string>) => Object.values(a || {}).join(" / ");
 const unitsText = (u: { code: string; factor: number }[]) => u.map(x => `${x.code}=${x.factor}`).join(", ");
 
@@ -16,11 +17,12 @@ export function CustomInputs({ defs, value, onChange }: { defs: any[]; value: Re
       : <input type={d.type === "number" ? "number" : d.type === "date" ? "date" : "text"} value={value[d.key] ?? ""} onChange={e => onChange({ ...value, [d.key]: e.target.value })} />}</label>)}</>;
 }
 
-export function Catalog({ s, cfg }: P) {
+export function Catalog({ s, cfg, go }: P) {
   const [items, setItems] = useState<any[]>([]); useEffect(() => { api(s, "/api/items").then(setItems); }, []);
   const pf = cfg.settings.customFields.product;
-  return <><h2>Catalogue</h2>{!items.length && <p className="muted">No products yet — import them or load the sample data in Settings.</p>}
-    {items.map(i => <div className="row" key={i.id}><b>{i.name}</b> <span className="muted">{i.code}{i.category ? ` · ${i.category}` : ""}{i.hsn ? ` · HSN ${i.hsn}` : ""}</span>
+  return <><h2>Products</h2>{!items.length && <Empty icon="📚" title="No products yet" text={s.user.role === "company_admin" ? "Upload your product list from Excel, or load sample data from Company settings to try things out." : "Your administrator hasn't added products yet."}
+      action={s.user.role === "company_admin" && go ? "Upload products" : undefined} onAction={() => go?.("import")} />}
+    {items.map(i => <div className="row" key={i.id}><b>{i.name}</b> <span className="muted">{i.code}{i.category ? ` · ${i.category}` : ""}{i.hsn ? ` · HSN code ${i.hsn}` : ""}</span>
       {i.kind === "service" && <span className="pill">service</span>}
       <div className="muted">Units: {unitsText(i.uoms)}{pf.filter(f => i.custom[f.key] != null).map(f => ` · ${f.label}: ${i.custom[f.key]}`).join("")}</div>
       <Table rows={i.variants.map((v: any) => ({ ...v, variant: attrText(v.attrs) }))} cols={["sku", "variant", "mrp", "billing_price"]} /></div>)}</>;
@@ -50,7 +52,7 @@ export function Schemes({ s }: P) {
     await api(s, "/api/schemes", { method: "POST", body: JSON.stringify({ ...f, minQty: Number(f.minQty), discountPct: Number(f.discountPct), amount: Number(f.amount), buy: Number(f.buy), get: Number(f.get), slabs,
       itemId: f.itemId || null, distributorId: f.distributorId || null, category: f.category || null, startsOn: f.startsOn || null, endsOn: f.endsOn || null }) });
     setMsg("Scheme added"); setF(blank); load(); } catch (x: any) { setMsg(x.message); } };
-  return <><h2>Schemes</h2>
+  return <><h2>Offers & schemes</h2><p className="muted">Discounts and free goods are applied to orders automatically.</p>
     <Table rows={rows.map(r => ({ ...r, applies_to: [r.item_name || (r.category ? `Category ${r.category}` : "All items"), r.distributor_name && `via ${r.distributor_name}`].filter(Boolean).join(" "),
       valid: `${r.starts_on || "…"} → ${r.ends_on || "…"}`, status: r.live ? "live" : r.active ? "not in date range" : "off" }))} cols={["name", "rule", "applies_to", "min_qty", "valid", "status"]} />
     {rows.map(r => <button key={r.id} className="sm ghost" onClick={() => api(s, `/api/schemes/${r.id}/active`, { method: "POST", body: JSON.stringify({ active: !r.active }) }).then(load)}>{r.active ? "Turn off" : "Turn on"} {r.name}</button>)}
@@ -113,7 +115,7 @@ export function ImportPage({ s, cfg, onUsage }: P) {
     ...(f.stock ? { stock: ["SKU", "Qty", "Unit", ...(f.batches ? ["Batch", "Expiry"] : []), "Distributor Email"] } : {}),
   };
   const dl = (k: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([cols[k].join(",") + "\n"], { type: "text/csv" })); a.download = `${k}-template.csv`; a.click(); };
-  return <><h2>Import from Excel / CSV</h2>
+  return <><h2>Upload data from Excel</h2><p className="muted">Download a template, fill it in Excel, and upload it. You can upload the same file again to update.</p>
     {Object.keys(cols).map(k => <form key={k} className="row" onSubmit={async e => { e.preventDefault(); try { const r = await api(s, `/api/import/${k}`, { method: "POST", body: new FormData(e.currentTarget) }); setMsg(`${k}: ${r.inserted} added, ${r.updated} updated, ${r.errors.length} errors ${r.errors.map((x: any) => `[row ${x.row}: ${x.error}]`).join(" ")}`); onUsage?.(r.usage); } catch (x: any) { setMsg(x.message); } }}>
       <label><b>{label(k)}</b> <a href="#" onClick={e => { e.preventDefault(); dl(k); }}>download template</a></label>
       <div className="muted small">{cols[k].join(" · ")}</div>
