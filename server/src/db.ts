@@ -213,6 +213,11 @@ CREATE TABLE IF NOT EXISTS survey_responses (
   user_id INTEGER REFERENCES users(id), answers TEXT NOT NULL, client_ref TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE UNIQUE INDEX IF NOT EXISTS survey_responses_ref ON survey_responses (company_id, client_ref);
 CREATE INDEX IF NOT EXISTS survey_responses_form ON survey_responses (company_id, form_id, id);
+CREATE TABLE IF NOT EXISTS message_log (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), channel TEXT NOT NULL, to_phone TEXT, shop_id INTEGER, template TEXT NOT NULL, body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued', provider TEXT, attempts INTEGER NOT NULL DEFAULT 0, error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS message_log_status ON message_log (status, id);
+CREATE INDEX IF NOT EXISTS message_log_company ON message_log (company_id, id);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

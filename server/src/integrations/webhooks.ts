@@ -47,6 +47,7 @@ export async function emit(db: Db, companyId: number, event: string, data: unkno
     const conns = (await db.query("SELECT id, config FROM connectors WHERE company_id=$1 AND enabled=TRUE", [companyId])).rows
       .filter(c => { try { return String(JSON.parse(c.config).events || "").split(",").map(x => x.trim()).includes(event); } catch { return false; } });
     for (const c of conns) await db.query("INSERT INTO webhook_deliveries (company_id,connector_id,event,payload) VALUES ($1,$2,$3,$4)", [companyId, c.id, event, JSON.stringify({ event, data })]);
+    if (messageHook) await messageHook(db, companyId, event, data);
     return hooks.length + conns.length;
   } catch (e: any) { console.error("webhook emit failed:", e.message); return 0; }
 }
@@ -66,6 +67,8 @@ export async function checkLowStock(db: Db, companyId: number, variantIds: numbe
 type Fetch = typeof fetch;
 /** Connector deliveries are handed to this function (set by connectors/service.ts) so this file has no plugin imports. */
 let connectorDeliver: ((db: Db, d: any, f: Fetch) => Promise<{ code: number | null; detail?: string; sample?: boolean }>) | null = null;
+let messageHook: ((db: Db, cid: number, event: string, data: any) => Promise<unknown>) | null = null;
+export function setMessageHook(fn: typeof messageHook) { messageHook = fn; }
 export function setConnectorDeliver(fn: typeof connectorDeliver) { connectorDeliver = fn; }
 /** Send up to `limit` due deliveries. Returns how many were attempted. */
 export async function drain(db: Db, opts: { limit?: number; fetchImpl?: Fetch; timeoutMs?: number } = {}) {

@@ -187,3 +187,32 @@ describe("surveys", () => {
     expect((await request(app).get("/api/surveys/responses").set(as("rep")).expect(200)).body).toHaveLength(2);
   });
 });
+
+describe("messaging", () => {
+  it("is mock by default (logged, never sent), sends only through an admin-configured provider, and masks its key", async () => {
+    const { drainMessages } = await import("../src/messaging.js");
+    await request(app).get("/api/messages/log").set(as("adm")).expect(403);
+    await on({ messaging: true });
+    await db.query("UPDATE shops SET phone='9876500001' WHERE id=$1", [id.s]);
+    const calls: any[] = []; const fakeFetch: any = async (u: string, o: any) => { calls.push({ u, o }); return { ok: true, status: 200 }; };
+    await request(app).post("/api/payments").set(as("rep")).send({ shopId: id.s, amount: 5, mode: "cash", clientRef: "msg-p1" });
+    await request(app).post("/api/messages/reminders").set(as("adm")).send({}).expect(201);
+    await drainMessages(db, { fetchImpl: fakeFetch });
+    let log = (await request(app).get("/api/messages/log").set(as("adm")).expect(200)).body;
+    expect(log.length).toBeGreaterThan(0);
+    expect(log.every((m: any) => ["mock", "skipped"].includes(m.status))).toBe(true);
+    expect(log.find((m: any) => m.status === "mock").to_phone).toBe("919876500001");
+    expect(calls).toHaveLength(0); // nothing leaves the server in mock mode
+    await request(app).put("/api/messages/settings").set(as("adm")).send({ provider: "http", http: { url: "http://10.0.0.1/send" } }).expect(400);
+    const prev = process.env.WEBHOOK_ALLOW_PRIVATE; process.env.WEBHOOK_ALLOW_PRIVATE = "1";
+    try {
+      const st = (await request(app).put("/api/messages/settings").set(as("adm")).send({ provider: "http", http: { url: "https://sms.example.com/send", authValue: "sk_sample" } }).expect(200)).body;
+      expect(st.http.authValue).toBe("******");
+      await request(app).post("/api/messages/test").set(as("adm")).send({ to: "98765 00002" }).expect(201);
+      await drainMessages(db, { fetchImpl: fakeFetch });
+      expect(calls).toHaveLength(1); expect(calls[0].o.headers.Authorization).toBe("sk_sample");
+      expect(JSON.parse(calls[0].o.body)).toMatchObject({ to: "919876500002", channel: "whatsapp" });
+    } finally { if (prev == null) delete process.env.WEBHOOK_ALLOW_PRIVATE; else process.env.WEBHOOK_ALLOW_PRIVATE = prev; await request(app).put("/api/messages/settings").set(as("adm")).send({ provider: "mock" }).expect(200); }
+    await request(app).get("/api/messages/settings").set(as("rep")).expect(403);
+  });
+});

@@ -25,6 +25,7 @@ import { registerInventoryRoutes } from "./inventory.js";
 import { registerClaimRoutes } from "./claims.js";
 import { registerLeadRoutes } from "./leads.js";
 import { registerSurveyRoutes } from "./surveys.js";
+import { registerMessagingRoutes } from "./messaging.js";
 import { registerTrackingRoutes } from "./tracking.js";
 import { registerCoverageRoutes } from "./coverage.js";
 import { registerApiV1 } from "./integrations/api.js";
@@ -268,6 +269,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerClaimRoutes({ app, db, auth, wrap, tenant });
   registerLeadRoutes({ app, db, auth, wrap, tenant });
   registerSurveyRoutes({ app, db, auth, wrap, tenant });
+  registerMessagingRoutes({ app, db, auth, wrap, tenant });
   registerTrackingRoutes({ app, db, auth, wrap, tenant });
   registerCoverageRoutes({ app, db, auth, wrap, tenant });
   registerIntegrationRoutes({ app, db, auth, wrap, tenant });

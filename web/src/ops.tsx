@@ -257,3 +257,33 @@ export function Surveys({ s }: ViewProps) {
       {forms?.map(x => <div key={x.id} className="muted small">{x.name} · {x.questions.length} questions · <a href="#" onClick={async e => { e.preventDefault(); await run(() => api(s, `/api/surveys/forms/${x.id}`, { method: "PUT", body: JSON.stringify({ active: !x.active }) })); reload(); }}>{x.active ? "turn off" : "turn on"}</a></div>)}
     </details>}</>;
 }
+
+// ---------- WhatsApp / SMS ----------
+const TPL_NAME: Record<string, string> = { order_confirmed: "Order received", invoice_created: "Invoice ready", payment_received: "Payment received", payment_reminder: "Payment reminder" };
+export function Messages({ s }: ViewProps) {
+  const admin = s.user.role === "company_admin";
+  const [cfg, reloadCfg] = useData<any>(s, admin ? "/api/messages/settings" : null);
+  const [log, reloadLog] = useData<any[]>(s, "/api/messages/log");
+  const [c, setC] = useState<any>(null), [to, setTo] = useState(""), [min, setMin] = useState("0");
+  useEffect(() => { if (cfg) setC(cfg); }, [cfg]);
+  const http = c?.provider === "http";
+  return <><h2>WhatsApp / SMS</h2>
+    {admin && c && <div className="card">
+      <div className={http ? "usage warn" : "banner"}>{http ? "Real messages are sent through your provider." : "Mock mode: messages are only written to the log below. Nothing is sent."}</div>
+      <Field label="Provider"><select value={c.provider} onChange={e => setC({ ...c, provider: e.target.value })}>{Object.entries(c.providers).map(([k, v]: any) => <option key={k} value={k}>{v}</option>)}</select></Field>
+      <Field label="Channel"><select value={c.channel} onChange={e => setC({ ...c, channel: e.target.value })}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select></Field>
+      {http && <><Field label="Provider URL (https)"><input value={c.http.url} onChange={e => setC({ ...c, http: { ...c.http, url: e.target.value } })} placeholder="https://your-gateway.example.com/send" /></Field>
+        <Field label="Key header"><input value={c.http.authHeader} onChange={e => setC({ ...c, http: { ...c.http, authHeader: e.target.value } })} /></Field>
+        <Field label="Key"><input type="password" value={c.http.authValue} onChange={e => setC({ ...c, http: { ...c.http, authValue: e.target.value } })} /></Field>
+        <Field label="Body ({to}, {text}, {channel})"><textarea rows={2} value={c.http.body} onChange={e => setC({ ...c, http: { ...c.http, body: e.target.value } })} /></Field></>}
+      {Object.keys(c.defaults).map(k => <div key={k}>
+        {k !== "payment_reminder" && <label className="small"><input type="checkbox" checked={!!c.auto[k]} onChange={e => setC({ ...c, auto: { ...c.auto, [k]: e.target.checked } })} /> Send automatically</label>}
+        <Field label={TPL_NAME[k]}><textarea rows={2} value={c.templates[k] ?? c.defaults[k]} onChange={e => setC({ ...c, templates: { ...c.templates, [k]: e.target.value } })} /></Field></div>)}
+      <div className="row-btns"><button onClick={async () => { if (await run(() => api(s, "/api/messages/settings", { method: "PUT", body: JSON.stringify(c) }))) { toast("Saved"); reloadCfg(); } }}>Save</button>
+        <input placeholder="Test phone" value={to} onChange={e => setTo(e.target.value)} style={{ maxWidth: 140 }} />
+        <button className="sm ghost" onClick={async () => { if (await run(() => api(s, "/api/messages/test", { method: "POST", body: JSON.stringify({ to }) }))) { toast("Test queued"); reloadLog(); } }}>Send test</button></div></div>}
+    <div className="card"><b>Payment reminders</b><Field label="Outlets owing more than ₹"><input inputMode="decimal" value={min} onChange={e => setMin(e.target.value)} /></Field>
+      <button className="sm" onClick={async () => { const r: any = await run(() => api(s, "/api/messages/reminders", { method: "POST", body: JSON.stringify({ minAmount: Number(min) }) })); if (r) { toast(`${r.queued} reminders queued${r.skipped ? `, ${r.skipped} outlets have no phone` : ""}`); reloadLog(); } }}>Queue reminders</button></div>
+    <h3>Message log</h3>
+    {!log ? <Loading /> : !log.length ? <p className="muted">No messages yet.</p> : log.map(m => <div key={m.id} className="card small"><b>{TPL_NAME[m.template] || m.template}</b> <span className="muted">· {m.shop_name || m.to_phone || "—"} · {m.channel} · <b>{m.status === "mock" ? "logged (mock)" : m.status}</b>{m.error ? ` · ${m.error}` : ""} · {String(m.created_at).slice(0, 16).replace("T", " ")}</span><div>{m.body}</div></div>)}</>;
+}
