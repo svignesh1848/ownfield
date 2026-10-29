@@ -2,7 +2,7 @@
 // in the admin Integrations screen. See README.md in this folder.
 import type { Rule } from "./mapping.js";
 
-/** FieldForce entities a connector can send out (events / schedule / export) or take in (inbound webhook / file import). */
+/** OwnField entities a connector can send out (events / schedule / export) or take in (inbound webhook / file import). */
 export type OutEntity = "orders" | "invoices" | "collections" | "stock";
 export type InEntity = "products" | "stock" | "customers" | "distributors";
 export type Mapping = Partial<Record<OutEntity | InEntity, Rule[]>>;
@@ -32,7 +32,7 @@ export interface ConnectorPlugin {
   formats?: string[];
   /** Push one mapped record somewhere (REST call, queue ...). Called from the retrying delivery queue. Throw to retry. */
   send?(ctx: SendCtx): Promise<SendResult>;
-  /** Fetch external records for an inbound entity (e.g. products from an ERP). Return raw rows; the mapping turns them into FieldForce fields. */
+  /** Fetch external records for an inbound entity (e.g. products from an ERP). Return raw rows; the mapping turns them into OwnField fields. */
   pull?(ctx: { config: Record<string, any>; entity: InEntity; sample: boolean; fetchImpl: typeof fetch }): Promise<Record<string, any>[]>;
   /** Render a batch of mapped records as a file. */
   exportFile?(ctx: { entity: OutEntity | InEntity; rows: Record<string, any>[]; format: string; config: Record<string, any> }): FileOut;

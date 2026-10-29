@@ -1,6 +1,6 @@
 // Offline app shell: pages are network-first (fall back to the cached shell), built assets are cache-first.
 // API calls are never cached here; the app keeps its own small offline cache and outbox.
-const C = "ff-shell-v2";
+const C = "ff-shell-v3";
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(["/", "/manifest.webmanifest"]).catch(() => {}))); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {

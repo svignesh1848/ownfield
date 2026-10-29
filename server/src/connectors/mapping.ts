@@ -1,5 +1,5 @@
-// No-code field mapping: a list of rules turns a FieldForce record into an external record (outbound) or an external
-// record into FieldForce fields (inbound). Rules are plain JSON so the admin screen can edit them.
+// No-code field mapping: a list of rules turns a OwnField record into an external record (outbound) or an external
+// record into OwnField fields (inbound). Rules are plain JSON so the admin screen can edit them.
 export type Rule = {
   /** Target field; dots create nested objects ("partner.ref"). */
   to: string;

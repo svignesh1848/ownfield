@@ -1,6 +1,6 @@
-# Integrating FieldForce with ERP, accounting and warehouse systems
+# Integrating OwnField with ERP, accounting and warehouse systems
 
-FieldForce has one generic integration layer. Nothing is tied to one vendor: SAP, Odoo, Tally, Logic ERP and WMS
+OwnField has one generic integration layer. Nothing is tied to one vendor: SAP, Odoo, Tally, Logic ERP and WMS
 support are **presets** (ready-made field mappings) on top of generic connectors that you can change in the UI.
 
 Admin → **Integrations** has four tabs: **API keys**, **Webhooks**, **Connectors**, **Delivery log**.
@@ -64,10 +64,10 @@ point at private or cloud-metadata addresses. Logs older than 30 days are trimme
   the drop folder at it; no SFTP client is bundled to keep the server small.
 * **Tally XML** — Sales, Sales Order and Receipt vouchers for Tally import.
 * **Inbound webhook** — every connector has its own URL `POST /api/v1/inbound/<token>/<products|stock|customers|distributors>`.
-  The connector's mapping turns the sender's fields into FieldForce fields. Optional `inboundSecret` in the config makes
-  FieldForce require `X-Signature: sha256=<hex HMAC of the raw body>`.
+  The connector's mapping turns the sender's fields into OwnField fields. Optional `inboundSecret` in the config makes
+  OwnField require `X-Signature: sha256=<hex HMAC of the raw body>`.
 
-**Field mapper**: each rule is *FieldForce field → external field* with a transform: rename, constant, date format
+**Field mapper**: each rule is *OwnField field → external field* with a transform: rename, constant, date format
 (`DD.MM.YYYY`, `YYYYMMDD` …), number (decimals), lookup table (`cash=Cash;*=Bank`), upper/lower, or template
 (`Order {{client_ref}}`). Order/invoice lines use nested rules (`each`). Mappings are saved per company per connector.
 
@@ -83,7 +83,7 @@ delivery log, but never calls the network. Secrets are masked in the UI and API.
 | Tally | Tally XML | Sales / Receipt vouchers |
 | Logic ERP | File | **Parked**: CSV export only; live mode is blocked |
 | WMS pick list | Custom REST | Pick list on `order.approved`; use a File connector for CSV pick lists |
-| Generic CSV / Excel | File | FieldForce column names, rename as needed |
+| Generic CSV / Excel | File | OwnField column names, rename as needed |
 
 ### Writing your own connector
 
@@ -92,7 +92,7 @@ Drop one file in `server/src/connectors/plugins/`. See `server/src/connectors/RE
 ## 4. Typical two-way setup
 
 1. Create an API key with the write scopes. The ERP pushes products, customers, distributors and stock with the upserts
-   **or** FieldForce pulls them: in a Custom REST connector set *Sync every N minutes* and *Pull on schedule* to
+   **or** OwnField pulls them: in a Custom REST connector set *Sync every N minutes* and *Pull on schedule* to
    `products,stock` (and/or `customers,distributors`) with one endpoint per record type and a mapping.
 2. Add a webhook or a connector for `order.created` / `invoice.created` / `collection.created` so documents go to the ERP.
 3. The ERP writes its document number back with `PUT /orders/{id}/external-id`.

@@ -62,7 +62,7 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
     if (u.totp_enabled) return res.status(409).json({ error: "Two-step sign-in is already on" });
     const secret = b32encode(crypto.randomBytes(20));
     await db.query("UPDATE users SET totp_secret=$1 WHERE id=$2", [secret, req.user.uid]);
-    const uri = `otpauth://totp/FieldForce:${encodeURIComponent(u.email)}?secret=${secret}&issuer=FieldForce`;
+    const uri = `otpauth://totp/OwnField:${encodeURIComponent(u.email)}?secret=${secret}&issuer=OwnField`;
     res.json({ secret, uri, qr: await QRCode.toDataURL(uri) });
   }));
   app.post("/api/me/totp/enable", auth(), wrap(async (req: any, res: any) => {
@@ -106,7 +106,7 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
     const company = (await db.query("SELECT code FROM companies WHERE id=$1", [cid])).rows[0].code;
     const link = `/?reset=${code}&company=${company}&email=${encodeURIComponent(u.email)}`;
     let mailed = false;
-    if (mailer) { try { await mailer(u.email, "Reset your FieldForce password", `Use code ${code} within 30 minutes, or open ${link}`); mailed = true; } catch (e: any) { console.error("mailer failed:", e.message); } }
+    if (mailer) { try { await mailer(u.email, "Reset your OwnField password", `Use code ${code} within 30 minutes, or open ${link}`); mailed = true; } catch (e: any) { console.error("mailer failed:", e.message); } }
     await log(req, "user.reset_code", u.email, { mailed });
     res.json({ code, link, expiresInMin: 30, mailed });
   }));

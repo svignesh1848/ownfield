@@ -4,7 +4,7 @@ English is the source: the English text itself is the key (`t("Save")`), so any 
 `en.json` lists every user-facing string in the app (plus the user-facing server error messages, which the app translates when it shows them).
 Each language is `<code>.json` and is downloaded only when chosen, together with its Noto font (self-hosted, one script per language).
 
-Write in simple, everyday business words. Keep product and brand terms as they are: GST, GSTIN, SKU, MRP, UPI, NEFT, PO, QR, WhatsApp, SMS, FieldForce.
+Write in simple, everyday business words. Keep product and brand terms as they are: GST, GSTIN, SKU, MRP, UPI, NEFT, PO, QR, WhatsApp, SMS, OwnField.
 `{0}`, `{1}` are filled in by the app — keep them. A test (`server/test/i18n.test.ts`) checks keys, placeholders and the English fallback.
 
 ## Status

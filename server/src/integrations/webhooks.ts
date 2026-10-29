@@ -21,7 +21,7 @@ function privateIp(ip: string) {
 }
 /** Webhook URLs must be https (http only when WEBHOOK_ALLOW_HTTP=1) and must not point at private/loopback/metadata addresses. */
 export async function checkUrl(raw: string, resolve = process.env.WEBHOOK_ALLOW_PRIVATE !== "1"): Promise<string | null> {
-  let u: URL; try { u = new URL(raw); } catch { return "Enter a full URL, e.g. https://erp.example.com/hooks/fieldforce"; }
+  let u: URL; try { u = new URL(raw); } catch { return "Enter a full URL, e.g. https://erp.example.com/hooks/ownfield"; }
   if (u.protocol !== "https:" && !(u.protocol === "http:" && process.env.WEBHOOK_ALLOW_HTTP === "1")) return "URL must start with https://";
   if (u.username || u.password) return "Put credentials in your receiver, not in the URL";
   if (!resolve) return null;
@@ -90,7 +90,7 @@ export async function drain(db: Db, opts: { limit?: number; fetchImpl?: Fetch; t
       const bad = await checkUrl(d.url); if (bad) throw new Error(bad);
       const ts = String(Math.floor(Date.now() / 1000));
       const r = await f(d.url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(opts.timeoutMs || 8000),
-        headers: { "Content-Type": "application/json", "User-Agent": "FieldForce-Webhooks/1", "X-FieldForce-Event": d.event, "X-FieldForce-Delivery": String(d.id),
+        headers: { "Content-Type": "application/json", "User-Agent": "OwnField-Webhooks/1", "X-FieldForce-Event": d.event, "X-FieldForce-Delivery": String(d.id),
           "X-FieldForce-Timestamp": ts, "X-FieldForce-Signature": sign(d.secret, ts, d.payload) }, body: d.payload });
       code = r.status; if (r.status < 200 || r.status >= 300) err = `HTTP ${r.status}`;
     } catch (e: any) { err = String(e.message || e).slice(0, 300); }

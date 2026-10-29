@@ -1,8 +1,14 @@
-# FieldForce OSS
+<p><img src="web/public/logo-wordmark.svg" alt="OwnField" width="300"/></p>
+
+# OwnField
+
+**Own your sales.**
 
 Open-source, **industry-agnostic** field sales and distributor management for FMCG, pharma, retail and consumer durables, apparel, and services companies. It's meant as a self-hostable alternative to commercial field-force SaaS tools.
 
-**License:** AGPL-3.0-only (see `LICENSE`).
+**License:** AGPL-3.0-only (see `LICENSE`, `NOTICE`). **Trademark:** the OwnField name and logo are not covered by the code licence — see `TRADEMARKS.md`.
+
+> OwnField was previously called FieldForce OSS. Internal identifiers (database names, env vars, package names, `X-FieldForce-*` webhook headers) keep the old name for compatibility.
 **Hosted version:** free up to a fixed number of users per company. The platform owner sets each company's user limit. Admins see a warning at 80% of the limit, and new users are blocked once the limit is reached. You can self-host it with no limits.
 
 ## Step 1 features
@@ -140,3 +146,9 @@ Screenshots use the in-memory DEMO company (`npm run demo -w server`). All of it
 - Helmet headers (HSTS, CSP, frame deny, nosniff), same-origin CORS (`CORS_ORIGINS` to allow more), app binds to `127.0.0.1` (`HOST` to change), `trust proxy` = 1.
 - Activity log of sign-ins, alerts (new device/IP, failures, lockouts) and admin changes under **Security & privacy**; data export (JSON/CSV) and user/company deletion by anonymisation; privacy notice at `/privacy.html`.
 - Nightly gzip `pg_dump` at 02:30 into `~/backups` (7 kept; `BACKUP_DIR`, `BACKUP_KEEP`, optional `BACKUP_S3_BUCKET`).
+
+## Copyright & trademark
+
+© 2026 Vignesh S. OwnField is a trademark of Vignesh S.
+
+SPDX-License-Identifier: AGPL-3.0-only. You may use, change and share the code under the AGPL. You may not use the OwnField name or logo for your own product or service without permission; see [TRADEMARKS.md](TRADEMARKS.md).

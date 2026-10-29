@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// © 2026 Vignesh S. OwnField is a trademark of Vignesh S. See TRADEMARKS.md.
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
@@ -59,7 +61,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
   };
   const fe = (k: string) => err?.field === k ? err.text : undefined;
   return <div className="login-wrap"><form className="card login" onSubmit={submit} noValidate>
-    <div className="brand"><span className="logo">{t("FF")}</span><div><h1>{t("FieldForce")}</h1><p className="muted">{t("Sales & distributor app")}</p></div></div>
+    <div className="brand"><span className="logo">{t("OF")}</span><div><h1>{t("OwnField")}</h1><p className="muted">{t("Own your sales.")}</p><p className="muted small">{t("Sales & distributor app")}</p></div></div>
     <Field label={t("Company code")} help={t("The short code your company uses, e.g. DEMO. Ask your administrator if you don't know it.")} error={fe("companyCode")}>
       <input autoCapitalize="characters" autoComplete="organization" value={f.companyCode} onChange={e => setF({ ...f, companyCode: e.target.value })} /></Field>
     {demo && <div className="hint"><b>{t("Sample logins for the DEMO company")}</b><br />{t("Admin: admin@example.com / Demo@2026")}<br />{t("Sales rep: rep@example.com / Demo@2026")}<br />{t("Distributor: distributor@example.com / Demo@2026")}<br />{t("Shop (retailer): retailer@example.com / Demo@2026")}<br /><span className="muted">{t("All DEMO data is sample data.")}</span>
@@ -78,7 +80,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     <p className="center"><a href="#reset">{t("Have a reset code from your administrator?")}</a></p>
     <p className="center"><a href="#signup">{t("New here? Create your company")}</a></p>
     <p className="muted small center">{t("Platform owner? Use company code PLATFORM.")}</p>
-    <LangPicker /></form></div>;
+    <LangPicker /><p className="muted small center copy">© 2026 Vignesh S. OwnField is a trademark of Vignesh S. · <a href="/privacy.html">{t("Privacy")}</a></p></form></div>;
 }
 
 function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
@@ -120,7 +122,7 @@ function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
   };
   const fe = (k: string) => err?.field === k ? err.text : undefined;
   return <div className="login-wrap"><form className="card login" onSubmit={submit} noValidate>
-    <div className="brand"><span className="logo">{t("FF")}</span><div><h1>{t("Create your company")}</h1><p className="muted">{t("Free plan · up to 5 users · no card needed")}</p></div></div>
+    <div className="brand"><span className="logo">{t("OF")}</span><div><h1>{t("Create your company")}</h1><p className="muted">{t("Free plan · up to 5 users · no card needed")}</p></div></div>
     <Field label={t("Company name")} error={fe("companyName")}>
       <input autoComplete="organization" value={f.companyName} onChange={e => set("companyName", e.target.value)} /></Field>
     <Field label={t("Company code")} help={codeOk && !codeOk.available ? t("Taken. Try {0}.", codeOk.suggestion) : t("Your team types this to sign in. You can change it.")} error={fe("companyCode")}>
@@ -219,11 +221,12 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   const C = views[cur];
   const Item = ({ t }: { t: string }) => /* t is a tab id here */ <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{i18n(TAB_LABEL[t] || t)}</span></button>;
   return <div className="shell">
-    <aside className="sidebar"><div className="brand sm"><span className="logo">{t("FF")}</span><b>{t("FieldForce")}</b></div>
+    <aside className="sidebar"><div className="brand sm"><span className="logo">{t("OF")}</span><b>{t("OwnField")}</b></div>
       {groups.map(([g, ts]) => <div key={g} className="group"><div className="group-h">{t(g)}</div>{ts.map(t => <Item key={t} t={t} />)}</div>)}
-      <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div></aside>
+      <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div>
+      <p className="muted small copy">{t("OwnField — Own your sales.")}<br />© 2026 Vignesh S. OwnField is a trademark of Vignesh S. AGPL-3.0.</p></aside>
     <div className="content">
-      <header className="top"><div className="brand sm"><span className="logo">{t("FF")}</span><b>{s.user.companyCode}</b></div><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
+      <header className="top"><div className="brand sm"><span className="logo">{t("OF")}</span><b>{s.user.companyCode}</b></div><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
       {mgr && cur === "home" && <Usage u={usage} />}<OfflineBadge s={s} />
       <section className="card main-card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} go={setTab} /></section>
     </div>
@@ -249,7 +252,7 @@ function App() {
   useEffect(() => { const h = () => setHash(location.hash); addEventListener("hashchange", h); return () => removeEventListener("hashchange", h); }, []);
   if (!s && (hash === "#reset" || new URLSearchParams(location.search).has("reset"))) return <><ResetPassword onDone={() => { location.hash = ""; setHash(""); }} /><Toasts /></>;
   if (!s) return <>{hash === "#signup" ? <Signup onLogin={set} /> : <Login onLogin={set} />}<Toasts /></>;
-  return <>{s.user.role === "platform_owner" ? <main><header className="top"><b>{t("FieldForce · Platform")}</b><button className="sm ghost" onClick={() => set(null)}>{t("Sign out")}</button></header><Platform s={s} /></main>
+  return <>{s.user.role === "platform_owner" ? <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={() => set(null)}>{t("Sign out")}</button></header><Platform s={s} /></main>
     : <Company s={s} onLogout={() => { set(null); location.hash = ""; }} />}<Toasts /></>;
 }
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

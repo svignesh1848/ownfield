@@ -45,7 +45,7 @@ const getOp = (tag: string, schema: string, scope: string) => ({ get: { tags: [t
 export function openapiSpec() {
   return {
     openapi: "3.0.3",
-    info: { title: "FieldForce OSS public API", version: "1.0.0", license: { name: "AGPL-3.0-only" },
+    info: { title: "OwnField public API", version: "1.0.0", license: { name: "AGPL-3.0-only" },
       description: "Versioned REST API for ERP, DMS and WMS integrations. Authenticate with a company API key (`Authorization: Bearer ffk_...` or `X-API-Key`). Admins create keys under Integrations. Webhooks are signed with HMAC-SHA256: `X-FieldForce-Signature: sha256=hex(HMAC(secret, timestamp + '.' + body))`, timestamp in `X-FieldForce-Timestamp`." },
     servers: [{ url: "/api/v1" }],
     security: [{ bearer: [] }, { apiKey: [] }],
@@ -81,13 +81,13 @@ export function openapiSpec() {
 }
 
 export const DOCS_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FieldForce API docs</title><style>
+<title>OwnField API docs</title><style>
 body{font:15px/1.5 system-ui,sans-serif;margin:0;color:#1c2430;background:#f7f8fa}main{max-width:960px;margin:auto;padding:24px}
 h1{margin:0 0 4px}.op{background:#fff;border:1px solid #e2e5ea;border-radius:8px;margin:10px 0;padding:10px 14px}
 .m{display:inline-block;min-width:56px;font-weight:700;font-family:monospace}.get{color:#0a7}.post{color:#06c}.put{color:#a60}
 code,pre{font-family:ui-monospace,monospace;font-size:13px}pre{background:#f0f2f5;padding:10px;border-radius:6px;overflow:auto}
 details summary{cursor:pointer}.tag{margin-top:28px}</style></head>
-<body><main><h1>FieldForce public API v1</h1><p>Machine-readable spec: <a href="openapi.json">openapi.json</a> (OpenAPI 3). Generate clients with
+<body><main><h1>OwnField public API v1</h1><p>Machine-readable spec: <a href="openapi.json">openapi.json</a> (OpenAPI 3). Generate clients with
 <code>npx @openapitools/openapi-generator-cli generate -i &lt;this-site&gt;/api/v1/openapi.json -g python -o ./ff-client</code>. Full guide: INTEGRATIONS.md in the repository.</p>
 <div id="app">Loading…</div></main><script src="docs.js"></script></body></html>`;
 

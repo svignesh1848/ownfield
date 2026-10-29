@@ -25,7 +25,7 @@ export const PRESETS: Preset[] = [
     mapping: {
       orders: [
         { to: "partner_id", from: "customer.external_id", transform: "number" }, { to: "client_order_ref", from: "client_ref" },
-        { to: "date_order", from: "created_at", transform: "date", format: "YYYY-MM-DD HH:mm:ss" }, { to: "note", value: "From FieldForce", transform: "constant" },
+        { to: "date_order", from: "created_at", transform: "date", format: "YYYY-MM-DD HH:mm:ss" }, { to: "note", value: "From OwnField", transform: "constant" },
         { to: "order_line", from: "lines", each: [{ to: "0", value: 0, transform: "constant" }, { to: "1", value: 0, transform: "constant" },
           { to: "2.product_id", from: "product_external_id", transform: "number" }, { to: "2.product_uom_qty", from: "base_qty" }, { to: "2.price_unit", from: "price" }] },
       ],
@@ -61,7 +61,7 @@ export const PRESETS: Preset[] = [
     config: { company: "Sample Company" },
     mapping: {
       invoices: [{ to: "voucher_type", value: "Sales", transform: "constant" }, { to: "voucher_no", from: "number" }, { to: "date", from: "doc_date", transform: "date", format: "YYYYMMDD" },
-        { to: "party", from: "customer.name" }, { to: "amount", from: "total" }, { to: "narration", transform: "template", value: "FieldForce invoice {{number}}" },
+        { to: "party", from: "customer.name" }, { to: "amount", from: "total" }, { to: "narration", transform: "template", value: "OwnField invoice {{number}}" },
         { to: "lines", from: "lines", each: [{ to: "item", from: "description" }, { to: "qty", from: "base_qty" }, { to: "uom", from: "uom" }, { to: "rate", from: "rate" }, { to: "amount", from: "taxable" }] }],
       orders: [{ to: "voucher_type", value: "Sales Order", transform: "constant" }, { to: "voucher_no", from: "client_ref" }, { to: "date", from: "created_at", transform: "date", format: "YYYYMMDD" },
         { to: "party", from: "customer.name" }, { to: "amount", from: "total" },
@@ -91,7 +91,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "csv", label: "Generic CSV / Excel", type: "file",
-    note: "Plain files with FieldForce column names. Change the mapping to rename columns.",
+    note: "Plain files with OwnField column names. Change the mapping to rename columns.",
     config: { format: "csv" }, mapping: {},
   },
 ];

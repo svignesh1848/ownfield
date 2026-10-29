@@ -54,7 +54,7 @@ export async function exportFile(db: Db, c: ConnRow, entity: OutEntity, format: 
   return p.exportFile({ entity, rows, format: format || conf(c).format || p.formats?.[0] || "csv", config: conf(c) });
 }
 
-/** Map external rows to FieldForce fields and upsert them. */
+/** Map external rows to OwnField fields and upsert them. */
 export async function importRows(db: Db, c: ConnRow, entity: InEntity, rows: any[]) {
   const rules = maps(c)[entity];
   return upsertRows(db, c.company_id, entity, rows.slice(0, 5000).map(r => applyMapping(rules, r)));

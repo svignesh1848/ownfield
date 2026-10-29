@@ -1,4 +1,5 @@
-/* FieldForce design system — one accent colour, ≥14px text, ≥44px tap targets, mobile first. */
+/* SPDX-License-Identifier: AGPL-3.0-only · © 2026 Vignesh S. OwnField is a trademark of Vignesh S. */
+/* OwnField design system — one accent colour, ≥14px text, ≥44px tap targets, mobile first. */
 :root{--accent:#0f766e;--accent-d:#115e59;--accent-l:#e6f4f1;--ink:#0f172a;--muted:#5b6474;--line:#e3e7ee;--bg:#f5f7fa;--card:#fff;--bad:#b42318;--bad-l:#fef0ee;--warn:#9a5b00;--warn-l:#fff6e5;--ok-l:#ecfdf3;--r:12px}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
 body{margin:0;font-family:Inter,"Segoe UI",Roboto,system-ui,var(--script-font,sans-serif),sans-serif;font-size:16px;line-height:1.45;background:var(--bg);color:var(--ink)}
@@ -120,3 +121,4 @@ nav:not(.bottom){display:flex;gap:6px;margin:8px 0;overflow-x:auto}
 .earn-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;background:var(--accent-l);color:var(--accent-d);border:1px solid #b7ddd6;margin:8px 0;text-align:left}.earn-card:hover{background:#d8eee9}.earn-card b{font-size:26px}
 .lang-pick{display:block;margin-top:12px;font-size:14px}[dir=rtl] .toast,[dir=rtl] .field{text-align:right}
 .prod input.must,.grid input.must{border-color:#d97706;box-shadow:0 0 0 2px #fde68a}.sm-input{max-width:220px;display:inline-block;min-height:36px}
+.copy{font-size:12px;margin-top:12px;line-height:1.4}

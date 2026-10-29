@@ -1,1 +1,6 @@
-{"name":"FieldForce OSS","short_name":"FieldForce","start_url":"/","display":"standalone","background_color":"#ffffff","theme_color":"#0f766e","icons":[]}
+{"name":"OwnField — Own your sales.","short_name":"OwnField","description":"Own your sales. Open-source field sales and distributor app.","start_url":"/","display":"standalone","background_color":"#ffffff","theme_color":"#0f766e","icons":[
+ {"src":"/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+ {"src":"/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+ {"src":"/icons/icon-maskable-192.png","sizes":"192x192","type":"image/png","purpose":"maskable"},
+ {"src":"/icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"},
+ {"src":"/icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}

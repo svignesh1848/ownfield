@@ -1,4 +1,4 @@
-// Canonical FieldForce records that mappings read from. Field lists below drive the admin field mapper's pick lists.
+// Canonical OwnField records that mappings read from. Field lists below drive the admin field mapper's pick lists.
 import type { Db } from "../db.js";
 import { parseJson } from "../catalog.js";
 import type { OutEntity, InEntity } from "./types.js";

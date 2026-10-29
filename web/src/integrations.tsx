@@ -7,7 +7,7 @@ import { Field, toast, Loading } from "./ui";
 export function Integrations({ s }: ViewProps) {
   const [tab, setTab] = useState("keys");
   return <><h2>{t("Integrations")}</h2>
-    <p className="muted">{t("Connect FieldForce to your ERP, accounting or warehouse system. API docs:")}{" "}<a href="/api/v1/docs" target="_blank">/api/v1/docs</a></p>
+    <p className="muted">{t("Connect OwnField to your ERP, accounting or warehouse system. API docs:")}{" "}<a href="/api/v1/docs" target="_blank">/api/v1/docs</a></p>
     <div className="row-btns">{[["keys", t("API keys")], ["hooks", t("Webhooks")], ["conn", t("Connectors")], ["log", t("Delivery log")]].map(([k, l]) =>
       <button key={k} className={tab === k ? "sm" : "sm ghost"} onClick={() => setTab(k)}>{l}</button>)}</div>
     {tab === "keys" && <Keys s={s} />}{tab === "hooks" && <Hooks s={s} />}{tab === "conn" && <Connectors s={s} />}{tab === "log" && <Log s={s} />}</>;
@@ -36,7 +36,7 @@ function Hooks({ s }: { s: any }) {
   return <>
     {secret && <div className="hint"><b>{t("Signing secret (copy it now):")}</b> <code>{secret}</code></div>}
     <form className="card" onSubmit={async e => { e.preventDefault(); const r = await run(() => api(s, "/api/integrations/webhooks", { method: "POST", body: JSON.stringify({ url, events: ev }) })); if (r) { setSecret(r.secret); setUrl(""); load(); } }}>
-      <Field label={t("URL (https)")}><input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://erp.example.com/hooks/fieldforce" /></Field>
+      <Field label={t("URL (https)")}><input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://erp.example.com/hooks/ownfield" /></Field>
       <div>{d.events.filter((x: string) => x !== "test.ping").map((x: string) => <label key={x} style={{ display: "inline-block", marginRight: 12 }}><input type="checkbox" checked={ev.includes(x)} onChange={e => setEv(e.target.checked ? [...ev, x] : ev.filter(y => y !== x))} /> {x}</label>)}</div>
       <button>{t("Add webhook")}</button></form>
     <Table rows={d.webhooks.map((w: any) => ({ ...w, events: w.events.join(", ") }))} cols={["url", "events", "active"]} empty={{ title: t("No webhooks yet") }} />
@@ -50,7 +50,7 @@ function Hooks({ s }: { s: any }) {
 const TRANSFORMS = ["rename", "constant", "date", "number", "lookup", "upper", "lower", "template"];
 function Mapper({ fields, rules, onChange }: { fields: string[]; rules: any[]; onChange: (r: any[]) => void }) {
   const upd = (i: number, k: string, v: any) => onChange(rules.map((r, j) => j === i ? { ...r, [k]: v } : r));
-  return <div className="scroll"><table><thead><tr><th>{t("FieldForce field")}</th><th>{t("Transform")}</th><th>{t("Value / format")}</th><th>{t("External field")}</th><th /></tr></thead><tbody>
+  return <div className="scroll"><table><thead><tr><th>{t("OwnField field")}</th><th>{t("Transform")}</th><th>{t("Value / format")}</th><th>{t("External field")}</th><th /></tr></thead><tbody>
     {rules.map((r, i) => <tr key={i}>
       <td><select value={r.from || ""} onChange={e => upd(i, "from", e.target.value || undefined)}><option value="">—</option>{fields.filter(f => !f.includes("[]")).map(f => <option key={f}>{f}</option>)}{r.from && !fields.includes(r.from) && <option>{r.from}</option>}</select>{r.each && <div className="muted">+{r.each.length} {t("line rules")}</div>}</td>
       <td><select value={r.transform || "rename"} onChange={e => upd(i, "transform", e.target.value)}>{TRANSFORMS.map(t => <option key={t}>{t}</option>)}</select></td>
@@ -61,7 +61,7 @@ function Mapper({ fields, rules, onChange }: { fields: string[]; rules: any[]; o
       <td><input value={r.to} onChange={e => upd(i, "to", e.target.value)} /></td>
       <td><button className="sm ghost" onClick={() => onChange(rules.filter((_, j) => j !== i))}>✕</button></td></tr>)}
   </tbody></table><button className="sm ghost" onClick={() => onChange([...rules, { to: "", transform: "rename" }])}>{t("+ Add field")}</button>
-    <p className="muted">{t("No rules = send FieldForce field names as they are. Line items: edit as JSON below.")}</p></div>;
+    <p className="muted">{t("No rules = send OwnField field names as they are. Line items: edit as JSON below.")}</p></div>;
 }
 
 function Connectors({ s }: { s: any }) {

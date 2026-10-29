@@ -1,0 +1,13 @@
+OwnField — Own your sales.
+Copyright © 2026 Vignesh S.
+
+This product is licensed under the GNU Affero General Public License v3.0 only
+(SPDX-License-Identifier: AGPL-3.0-only). See the LICENSE file.
+
+"OwnField" and the OwnField logo are trademarks of Vignesh S. The AGPL does not
+grant permission to use these marks. See TRADEMARKS.md.
+
+OwnField was previously published as "FieldForce OSS".
+
+This product includes third-party open-source software; see package.json and
+package-lock.json for the list of dependencies and their licences.

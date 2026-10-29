@@ -89,7 +89,7 @@ export function registerIntegrationRoutes({ app, db, auth, wrap, tenant }: Ctx) 
   app.post("/api/integrations/webhooks/:id/test", admin, wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const h = (await db.query("SELECT id FROM webhooks WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0]; if (!h) throw bad("webhook not found", 404);
-    const payload = JSON.stringify({ id: crypto.randomUUID(), event: "test.ping", created_at: new Date().toISOString(), data: { message: "Test from FieldForce (sample)" } });
+    const payload = JSON.stringify({ id: crypto.randomUUID(), event: "test.ping", created_at: new Date().toISOString(), data: { message: "Test from OwnField (sample)" } });
     const d = (await db.query("INSERT INTO webhook_deliveries (company_id,webhook_id,event,payload) VALUES ($1,$2,'test.ping',$3) RETURNING id", [cid, h.id, payload])).rows[0];
     await drain(db, { limit: 5 });
     res.json((await db.query("SELECT id, status, attempts, response_code, last_error FROM webhook_deliveries WHERE id=$1", [d.id])).rows[0]);
@@ -214,7 +214,7 @@ export function registerIntegrationRoutes({ app, db, auth, wrap, tenant }: Ctx) 
 }
 
 /** Public inbound webhook: POST /api/v1/inbound/<token>/<entity> with a JSON object, array or {items:[...]}.
- *  The connector's mapping for that entity turns the external fields into FieldForce fields. Optional HMAC check when
+ *  The connector's mapping for that entity turns the external fields into OwnField fields. Optional HMAC check when
  *  the connector has config.inboundSecret: header X-Signature: sha256=<hex HMAC of the raw body>. */
 export function registerInbound(app: Express, db: Db) {
   const hits = new HitCounter(Number(process.env.INBOUND_RATE_MAX || 60), 60_000);

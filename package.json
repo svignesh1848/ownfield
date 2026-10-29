@@ -1,1 +1,1 @@
-{"name":"fieldforce-oss","private":true,"workspaces":["server","web"],"scripts":{"build":"npm run build -w web && npm run build -w server","test":"npm test -w server","start":"npm start -w server"},"license":"AGPL-3.0-only"}
+{"name":"fieldforce-oss","description":"OwnField — Own your sales.","author":"Vignesh S <svignesh1848@gmail.com>","private":true,"workspaces":["server","web"],"scripts":{"build":"npm run build -w web && npm run build -w server","test":"npm test -w server","start":"npm start -w server"},"license":"AGPL-3.0-only"}

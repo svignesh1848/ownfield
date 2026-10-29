@@ -7,7 +7,7 @@ Generic connector framework. The core never talks to a specific ERP; SAP, Odoo, 
 |---|---|
 | `types.ts` | The `ConnectorPlugin` interface |
 | `mapping.ts` | No-code field mapping engine (rename, constant, date, number, lookup, upper/lower, template, nested line rules) |
-| `records.ts` | Canonical FieldForce records that mappings read from, and the field lists shown in the mapper |
+| `records.ts` | Canonical OwnField records that mappings read from, and the field lists shown in the mapper |
 | `service.ts` | Runs connectors: queued event deliveries, schedules, pulls, inbound webhooks, file import/export |
 | `registry.ts` | Loads every file in `plugins/` |
 | `plugins/custom-rest.ts` | Any REST/JSON API, configured in the UI (auth: none / API key header / basic / bearer / OAuth2 client credentials) |
@@ -36,5 +36,5 @@ export default plugin;
 ```
 
 Restart the server. It appears under Admin → Integrations → Connectors. `send` runs from the retrying delivery queue;
-`pull` returns raw rows that the company mapping turns into FieldForce fields; `exportFile` renders mapped rows as a file.
+`pull` returns raw rows that the company mapping turns into OwnField fields; `exportFile` renders mapped rows as a file.
 Fields of kind `secret` are masked in the UI and API.
