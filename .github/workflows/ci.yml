@@ -1,0 +1,22 @@
+name: CI
+on:
+  push: { branches: [master] }
+  pull_request:
+  schedule: [{ cron: "30 1 * * 1" }] # weekly dependency scan (Mon 07:00 IST)
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --no-fund
+      - name: npm audit (runtime deps, high and above)
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm audit (all deps, report only)
+        run: npm audit --audit-level=critical || true
+      - run: npm run build
+      - run: npm test

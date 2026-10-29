@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "xlsx" # installed from the SheetJS CDN tarball; update by hand
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
