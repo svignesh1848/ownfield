@@ -185,8 +185,10 @@ async function importProduct({ db, cid, s }: Imp, r: any) {
   else item = (await db.query("INSERT INTO items (company_id,code,name,category,kind,hsn,uoms,custom) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
     [cid, code, name, r.category || null, kind, String(r.hsn ?? "") || null, uoms, custom])).rows[0];
   const v = (await db.query("SELECT id FROM variants WHERE company_id=$1 AND sku=$2", [cid, sku])).rows[0];
-  if (v) { await db.query("UPDATE variants SET updated_at=NOW(), item_id=$1,attrs=$2,mrp=$3,billing_price=$4 WHERE id=$5", [item.id, JSON.stringify(attrs), mrp, bp, v.id]); return "updated"; }
-  await db.query("INSERT INTO variants (company_id,item_id,sku,attrs,mrp,billing_price) VALUES ($1,$2,$3,$4,$5,$6)", [cid, item.id, sku, JSON.stringify(attrs), mrp, bp]);
+  const barcode = empty(r.barcode ?? r.ean ?? r.gtin) ? null : String(r.barcode ?? r.ean ?? r.gtin).trim().slice(0, 64);
+  if (barcode && (await db.query("SELECT id FROM variants WHERE company_id=$1 AND barcode=$2 AND sku<>$3", [cid, barcode, sku])).rows[0]) throw bad(`barcode ${barcode} is already used by another product`);
+  if (v) { await db.query("UPDATE variants SET updated_at=NOW(), item_id=$1,attrs=$2,mrp=$3,billing_price=$4,barcode=COALESCE($6,barcode) WHERE id=$5", [item.id, JSON.stringify(attrs), mrp, bp, v.id, barcode]); return "updated"; }
+  await db.query("INSERT INTO variants (company_id,item_id,sku,attrs,mrp,billing_price,barcode) VALUES ($1,$2,$3,$4,$5,$6,$7)", [cid, item.id, sku, JSON.stringify(attrs), mrp, bp, barcode]);
   return "inserted";
 }
 
@@ -272,12 +274,18 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
   app.get("/api/products", auth(...ANY), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return; res.json(await variantRows(cid));
   }));
+  // Barcode / QR lookup for scanning (matches the barcode field or the SKU itself).
+  app.get("/api/products/scan/:code", auth(...ANY), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const code = String(req.params.code).trim(); const v = (await variantRows(cid)).find(x => x.barcode === code || x.sku === code);
+    if (!v) throw bad("no product with this code", 404); res.json(v);
+  }));
   app.get("/api/items", auth(...ANY), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const m = new Map<number, any>();
     for (const v of await variantRows(cid)) {
       if (!m.has(v.item_id)) m.set(v.item_id, { id: v.item_id, code: v.item_code, name: v.item_name, category: v.category, kind: v.kind, hsn: v.hsn, uoms: v.uoms, custom: v.custom, variants: [] });
-      m.get(v.item_id).variants.push({ id: v.id, sku: v.sku, attrs: v.attrs, mrp: v.mrp, billing_price: v.billing_price });
+      m.get(v.item_id).variants.push({ id: v.id, sku: v.sku, barcode: v.barcode, attrs: v.attrs, mrp: v.mrp, billing_price: v.billing_price });
     }
     res.json([...m.values()]);
   }));

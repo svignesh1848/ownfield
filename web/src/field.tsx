@@ -1,3 +1,4 @@
+import { ScanButton } from "./ops";
 import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { CustomInputs, attrText } from "./config";
@@ -153,7 +154,8 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
   }
 
   return <><Steps n={2} /><h2>Add products</h2><p className="muted">For <b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>
-    <div className="searchbar"><input type="search" placeholder="Search products or codes" value={q} onChange={e => setQ(e.target.value)} /></div>
+    <div className="searchbar"><input type="search" placeholder="Search products or codes" value={q} onChange={e => setQ(e.target.value)} />
+      {f.barcode && <ScanButton onCode={c => { const v = items.flatMap(i => i.variants).find((v: any) => v.barcode === c || v.sku === c); if (!v) return toast(`No product for ${c}`, "err"); setQty({ ...qty, [v.sku]: String((Number(qty[v.sku]) || 0) + 1) }); toast(`Added ${v.sku}`); }} />}</div>
     {cats.length > 1 && <div className="chiprow">{["", ...cats].map(c => <button key={c || "all"} className={`chip ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>{c || "All"}</button>)}</div>}
     {!loaded ? <Loading text="Loading products…" /> : !items.length ? <Empty icon="📚" title="No products yet" text="Your administrator needs to upload the product list first." />
       : !shown.length ? <Empty icon="🔍" title="No products match" text="Try another word or category." action="Clear search" onAction={() => { setQ(""); setCat(""); }} /> : null}

@@ -83,3 +83,15 @@ describe("claims", () => {
     expect((await request(app).post(`/api/claims/${r.id}/decide`).set(as("adm")).send({ approve: false, reason: "Not eligible" }).expect(200)).body.status).toBe("rejected");
   });
 });
+
+describe("barcodes", () => {
+  it("barcode column on products, unique per company, scan lookup, usable in van loads and stock moves", async () => {
+    const csvP = csv([["Item Code", "Item Name", "SKU", "MRP", "Billing Price", "Barcode"], ["SAMPLE-BC", "Sample barcode item", "SAMPLE-BC-1", 50, 40, "8900000000017"], ["SAMPLE-BC", "Sample barcode item", "SAMPLE-BC-2", 50, 40, "8900000000017"]]);
+    const r = (await request(app).post("/api/import/products").set(as("adm")).attach("file", csvP, "p.csv").expect(200)).body;
+    expect(r.inserted).toBe(1); expect(r.errors[0].error).toContain("already used");
+    expect((await request(app).get("/api/products/scan/8900000000017").set(as("rep")).expect(200)).body.sku).toBe("SAMPLE-BC-1");
+    await request(app).get("/api/products/scan/000").set(as("rep")).expect(404);
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "in", lines: [{ sku: "8900000000017", qty: 3 }] }).expect(201);
+    expect((await request(app).get("/api/inventory").set(as("dist"))).body.rows.find((x: any) => x.sku === "SAMPLE-BC-1").qty).toBe(3);
+  });
+});

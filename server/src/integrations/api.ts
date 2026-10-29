@@ -49,7 +49,7 @@ export function registerApiV1(app: Express, db: Db) {
   }));
   const logWrite = (req: ApiReq, what: string, out: any) => audit(db, { companyId: req.api.companyId, action: `api.${what}`, target: `key:${req.api.name}`, detail: { inserted: out.inserted, updated: out.updated, errors: out.errors.length }, ip: req.ip });
   // ---- Products / SKUs ----
-  const productSelect = "v.id, v.sku, v.external_id, i.code AS item_code, i.external_id AS item_external_id, i.name, i.category, i.kind, i.hsn, v.mrp, v.billing_price AS price, v.attrs, v.updated_at";
+  const productSelect = "v.id, v.sku, v.barcode, v.external_id, i.code AS item_code, i.external_id AS item_external_id, i.name, i.category, i.kind, i.hsn, v.mrp, v.billing_price AS price, v.attrs, v.updated_at";
   const product = (x: any) => ({ ...x, mrp: Number(x.mrp), price: Number(x.price), attrs: parseJson(x.attrs, {}) });
   r.get("/products", need("products:read"), w((req, res) => list(db, req, res, { select: productSelect, from: "variants v JOIN items i ON i.id=v.item_id", where: "v.company_id=$1", ts: "v.updated_at" }, product)));
   r.get("/products/:id", need("products:read"), w(async (req, res) => {

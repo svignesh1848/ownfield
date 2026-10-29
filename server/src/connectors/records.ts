@@ -12,7 +12,7 @@ export const FIELDS: Record<OutEntity | InEntity, string[]> = {
     "lines", "lines[].sku", "lines[].description", "lines[].hsn", "lines[].base_qty", "lines[].uom", "lines[].rate", "lines[].taxable", "lines[].gst_rate", "lines[].cgst", "lines[].sgst", "lines[].igst", "lines[].total"],
   collections: ["id", "number", "external_id", "pay_date", "mode", "reference", "cheque_date", "amount", "status", ...CUSTOMER],
   stock: ["sku", "product_external_id", "distributor_id", "distributor_external_id", "batch_no", "expiry", "qty"],
-  products: ["external_id", "sku", "item_code", "item_external_id", "name", "category", "hsn", "mrp", "price", "units"],
+  products: ["external_id", "sku", "barcode", "item_code", "item_external_id", "name", "category", "hsn", "mrp", "price", "units"],
   customers: ["external_id", "code", "name", "owner_name", "phone", "address", "city", "pincode", "state_code", "gstin", "credit_days", "credit_limit", "distributor_external_id"],
   distributors: ["external_id", "name", "email", "phone"],
 };

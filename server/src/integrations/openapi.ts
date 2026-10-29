@@ -8,8 +8,8 @@ const obj = (properties: Record<string, any>, required: string[] = []) => ({ typ
 const ref = (n: string) => ({ $ref: `#/components/schemas/${n}` });
 
 const schemas: Record<string, any> = {
-  Product: obj({ id: int, sku: str, external_id: nstr, item_code: str, item_external_id: nstr, name: str, category: nstr, kind: str, hsn: nstr, mrp: num, price: num, attrs: S("object", { additionalProperties: str }), updated_at: ts }),
-  ProductUpsert: obj({ external_id: str, sku: str, item_code: str, item_external_id: str, name: str, category: str, hsn: str, mrp: num, price: num, units: S("string", { description: "e.g. PCS=1;BOX=12" }), attrs: S("object", { additionalProperties: str }) }, ["mrp", "price"]),
+  Product: obj({ id: int, sku: str, barcode: nstr, external_id: nstr, item_code: str, item_external_id: nstr, name: str, category: nstr, kind: str, hsn: nstr, mrp: num, price: num, attrs: S("object", { additionalProperties: str }), updated_at: ts }),
+  ProductUpsert: obj({ external_id: str, sku: str, barcode: S("string", { description: "EAN/UPC/QR value for scanning" }), item_code: str, item_external_id: str, name: str, category: str, hsn: str, mrp: num, price: num, units: S("string", { description: "e.g. PCS=1;BOX=12" }), attrs: S("object", { additionalProperties: str }) }, ["mrp", "price"]),
   Stock: obj({ id: int, sku: str, product_external_id: nstr, distributor_id: S("integer", { nullable: true }), distributor_external_id: nstr, batch_no: str, expiry: nstr, qty: S("integer", { description: "base units" }), updated_at: ts }),
   StockUpsert: obj({ sku: str, product_external_id: str, distributor_external_id: str, distributor_id: int, batch_no: str, expiry: S("string", { format: "date" }), qty: int, unit: str }, ["qty"]),
   Customer: obj({ id: int, code: str, external_id: nstr, name: str, owner_name: nstr, phone: nstr, address: nstr, city: nstr, pincode: nstr, state_code: nstr, gstin: nstr, credit_days: S("integer", { nullable: true }), credit_limit: S("number", { nullable: true }), distributor_id: S("integer", { nullable: true }), distributor_external_id: nstr, updated_at: ts }),
