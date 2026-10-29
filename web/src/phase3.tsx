@@ -76,4 +76,49 @@ export function AuditReport({ s }: ViewProps) {
         <div className="muted small">{r.checklist}: {r.answers.filter((a: any) => a.value !== "").map((a: any) => `${a.label} ${a.value}`).join(" · ")}</div>
         <div className="thumbs">{r.photos.map((p: any) => <AuthImg key={p.id} s={s} src={`/api/audit-photos/${p.id}`} alt="Shelf photo" />)}</div></div>)}</>;
 }
-void inr0; void Table;
+// ---------- 2) Expenses ----------
+const month0 = () => today().slice(0, 7);
+const STATUS: Record<string, string> = { pending: "Waiting", approved: "Approved", rejected: "Rejected" };
+export function MyExpenses({ s }: ViewProps) {
+  const [list, setList] = useState<any[] | null>(null); const [cats, setCats] = useState<string[]>([]);
+  const [f, setF] = useState({ amount: "", category: "", spentOn: today(), note: "" }); const [file, setFile] = useState<File | null>(null); const [busy, setBusy] = useState(false);
+  const load = () => api(s, "/api/expenses").then(setList).catch(e => { setList([]); toast(e.message, "err"); });
+  useEffect(() => { load(); api(s, "/api/expenses/categories").then(setCats); }, []);
+  const submit = async () => {
+    if (!file) return toast("Add a photo of the bill", "err");
+    setBusy(true);
+    try { const fd = new FormData(); Object.entries(f).forEach(([k, v]) => fd.append(k, v)); fd.append("receipt", await compressPhoto(file), "receipt.jpg");
+      await api(s, "/api/expenses", { method: "POST", body: fd }); setF({ amount: "", category: "", spentOn: today(), note: "" }); setFile(null); load(); }
+    catch (e: any) { toast(e.message, "err"); } finally { setBusy(false); }
+  };
+  return <><h2>My expenses</h2>
+    <div className="card sub"><h3>New claim</h3>
+      <Field label="Amount (₹)"><input inputMode="decimal" value={f.amount} onChange={e => setF({ ...f, amount: e.target.value.replace(/[^\d.]/g, "") })} /></Field>
+      <Field label="What for?"><select value={f.category} onChange={e => setF({ ...f, category: e.target.value })}><option value="">Choose…</option>{cats.map(c => <option key={c}>{c}</option>)}</select></Field>
+      <Field label="Date"><input type="date" max={today()} value={f.spentOn} onChange={e => setF({ ...f, spentOn: e.target.value })} /></Field>
+      <Field label="Note (optional)"><input value={f.note} onChange={e => setF({ ...f, note: e.target.value })} /></Field>
+      <PhotoButton label={file ? "Bill photo added ✓" : "Photo of the bill"} onFile={setFile} />
+      <button className="block" disabled={busy || !f.amount || !f.category} onClick={submit}>{busy ? "Sending…" : "Send claim"}</button></div>
+    {list == null ? <Loading /> : !list.length ? <Empty icon="🧾" title="No claims yet" text="Your expense claims and their status show here." />
+      : list.map(e => <div className="row" key={e.id}><b>{inr0(e.amount)}</b> {e.category} <span className="muted">· {fmtDate(e.spent_on)}</span> <span className={`pill ${e.status === "pending" ? "placed" : e.status === "approved" ? "fulfilled" : "rejected"}`}>{STATUS[e.status]}</span>
+        {e.reason && <div className="muted small">Reason: {e.reason}</div>}</div>)}</>;
+}
+export function ExpenseApprovals({ s }: ViewProps) {
+  const [month, setMonth] = useState(month0()); const [list, setList] = useState<any[] | null>(null); const [rep, setRep] = useState<any>(null); const [open, setOpen] = useState<number | null>(null);
+  const load = () => { api(s, `/api/expenses?month=${month}`).then(setList).catch(e => { setList([]); toast(e.message, "err"); }); api(s, `/api/expenses/report?month=${month}`).then(setRep).catch(() => {}); };
+  useEffect(() => { load(); }, [month]);
+  const decide = async (id: number, status: string) => { const reason = status === "rejected" ? prompt("Why are you rejecting this claim?") : ""; if (status === "rejected" && !reason) return;
+    try { await api(s, `/api/expenses/${id}/decision`, { method: "POST", body: JSON.stringify({ status, reason }) }); load(); } catch (e: any) { toast(e.message, "err"); } };
+  const pending = (list || []).filter(e => e.status === "pending");
+  return <><h2>Expenses</h2>
+    <Field label="Month"><input type="month" value={month} onChange={e => setMonth(e.target.value)} /></Field>
+    <h3>Waiting for you ({pending.length})</h3>
+    {list == null ? <Loading /> : !pending.length ? <p className="muted">No claims waiting.</p> : pending.map(e => <div className="row" key={e.id}><b>{e.rep_name}</b> · {inr0(e.amount)} {e.category} <span className="muted">· {fmtDate(e.spent_on)}{e.note ? ` · ${e.note}` : ""}</span>
+      <div className="row-btns"><button className="sm" onClick={() => decide(e.id, "approved")}>Approve</button><button className="sm ghost" onClick={() => decide(e.id, "rejected")}>Reject</button>
+        <button className="sm ghost" onClick={() => setOpen(open === e.id ? null : e.id)}>{open === e.id ? "Hide bill" : "See bill"}</button></div>
+      {open === e.id && <AuthImg s={s} src={`/api/expenses/${e.id}/receipt`} alt="Bill photo" />}</div>)}
+    <h3>Month summary</h3>
+    {rep && <Table rows={rep.reps.map((r: any) => ({ rep_name: r.rep, approved: inr0(r.approved), pending: inr0(r.pending), rejected: inr0(r.rejected), by_category: Object.entries(r.byCategory).map(([k, v]) => `${k} ${inr0(v)}`).join(", ") }))}
+      cols={["rep_name", "approved", "pending", "rejected", "by_category"]} empty={{ title: "No claims this month" }} />}</>;
+}
+

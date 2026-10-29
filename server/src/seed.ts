@@ -33,4 +33,13 @@ export async function seedDemo(db: Db, code = "DEMO") {
       await db.query("INSERT INTO audit_photos (company_id,audit_id,question,file,mime,size) VALUES ($1,$2,$3,$4,$5,$6)", [cid, a.id, "shelf_photo", p.file, p.mime, p.size]);
     }
   }
+  // 2) Expenses
+  await enable(db, cid, ["expenses"]);
+  if (rep && !(await one(db, "SELECT id FROM expenses WHERE company_id=$1", [cid]))) {
+    const d = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    for (const [amt, cat, note, st] of [[240, "Travel", "Sample — bus fare to outlets", "approved"], [150, "Food", "Sample — lunch on beat", "pending"]] as const) {
+      const p = photo(cid);
+      await db.query("INSERT INTO expenses (company_id,rep_id,spent_on,amount,category,note,receipt_file,receipt_mime,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [cid, rep.id, d, amt, cat, note, p.file, p.mime, st]);
+    }
+  }
 }

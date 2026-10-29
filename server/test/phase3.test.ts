@@ -59,6 +59,29 @@ describe("store audits", () => {
   });
 });
 
+describe("expenses", () => {
+  it("rep claims with receipt; manager approves/rejects; monthly report", async () => {
+    await request(app).post("/api/expenses").set(H("r1")).field("amount", "100").field("category", "Travel").attach("receipt", SAMPLE_PNG, "r.png").expect(403);
+    await features("a", { expenses: true }).expect(200);
+    await request(app).post("/api/expenses").set(H("r1")).field("amount", "100").field("category", "Travel").expect(400);
+    await request(app).post("/api/expenses").set(H("r1")).field("amount", "0").field("category", "Travel").attach("receipt", SAMPLE_PNG, "r.png").expect(400);
+    await request(app).post("/api/expenses").set(H("r1")).field("amount", "10").field("category", "Party").attach("receipt", SAMPLE_PNG, "r.png").expect(400);
+    const e1 = (await request(app).post("/api/expenses").set(H("r1")).field("amount", "240.5").field("category", "travel").field("note", "bus").attach("receipt", SAMPLE_PNG, "r.png").expect(201)).body;
+    const e2 = (await request(app).post("/api/expenses").set(H("r1")).field("amount", "99").field("category", "Food").attach("receipt", SAMPLE_PNG, "r.png").expect(201)).body;
+    expect(e1).toMatchObject({ category: "Travel", status: "pending" });
+    await request(app).post(`/api/expenses/${e1.id}/decision`).set(H("r1")).send({ status: "approved" }).expect(403);
+    await request(app).post(`/api/expenses/${e2.id}/decision`).set(H("m")).send({ status: "rejected" }).expect(400);
+    await request(app).post(`/api/expenses/${e1.id}/decision`).set(H("m")).send({ status: "approved" }).expect(200);
+    await request(app).post(`/api/expenses/${e2.id}/decision`).set(H("m")).send({ status: "rejected", reason: "No bill" }).expect(200);
+    await request(app).post(`/api/expenses/${e1.id}/decision`).set(H("m")).send({ status: "rejected", reason: "x" }).expect(404);
+    expect((await request(app).get(`/api/expenses/${e1.id}/receipt`).set(H("r2"))).status).toBe(404);
+    await request(app).get(`/api/expenses/${e1.id}/receipt`).set(H("m")).expect(200);
+    const r = (await request(app).get("/api/expenses/report").set(H("m")).expect(200)).body;
+    expect(r.reps).toEqual([{ repId: ids.r1, rep: "Rep One", approved: 240.5, pending: 0, rejected: 99, byCategory: { Travel: 240.5 } }]);
+    expect((await request(app).get("/api/expenses").set(H("r2"))).body).toHaveLength(0);
+  });
+});
+
 describe("DEMO sample data", () => {
   it("seeds labelled sample data idempotently", async () => {
     await seedDemo(db); await seedDemo(db);
