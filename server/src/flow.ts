@@ -51,4 +51,33 @@ export function registerFlowRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     const f = cleanFlow(req.body || {}, await getFlow(db, cid)); await kvSet(db, cid, "flow", f); res.json(f);
   }));
+  // Must-sell: the list for an outlet's type (plus the "*" list for every outlet).
+  app.get("/api/must-sell", auth(...MGR, "sales_rep", "distributor", "retailer"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const shop = (await db.query("SELECT id, outlet_type FROM shops WHERE id=$1 AND company_id=$2", [Number(req.query.shopId), cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
+    res.json({ outlet_type: shop.outlet_type, skus: mustSellFor(await getFlow(db, cid), shop.outlet_type) });
+  }));
+  app.put("/api/shops/:id/type", auth(...MGR), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const v = String(req.body?.outletType ?? "").trim().slice(0, 40) || null;
+    const r = await db.query("UPDATE shops SET outlet_type=$1, updated_at=NOW() WHERE id=$2 AND company_id=$3 RETURNING id, outlet_type", [v, Number(req.params.id), cid]);
+    if (!r.rows[0]) throw bad("shop not found", 404); res.json(r.rows[0]);
+  }));
+}
+export const mustSellFor = (f: Flow, type: string | null) => [...new Set([...(f.mustSell["*"] || []), ...(type ? f.mustSell[type] || [] : [])])];
+/** Must-sell compliance: orders that contain every must-sell SKU for the outlet, per rep. */
+export async function mustSellStats(db: Db, cid: number, lo: string, hi: string) {
+  const f = await getFlow(db, cid); if (!Object.keys(f.mustSell).length) return new Map<number, { orders: number; complete: number; missing: Record<string, number> }>();
+  const rows = (await db.query(`SELECT o.id, o.rep_id, s.outlet_type, v.sku FROM orders o JOIN shops s ON s.id=o.shop_id JOIN order_lines l ON l.order_id=o.id JOIN variants v ON v.id=l.variant_id
+    WHERE o.company_id=$1 AND o.created_at>=$2 AND o.created_at<$3 AND o.status<>'rejected' AND o.rep_id IS NOT NULL`, [cid, lo, hi])).rows;
+  const byOrder = new Map<number, { rep: number; type: string | null; skus: Set<string> }>();
+  for (const r of rows) { const o = byOrder.get(r.id) || { rep: r.rep_id, type: r.outlet_type, skus: new Set<string>() }; o.skus.add(r.sku); byOrder.set(r.id, o); }
+  const out = new Map<number, { orders: number; complete: number; missing: Record<string, number> }>();
+  for (const o of byOrder.values()) {
+    const need = mustSellFor(f, o.type); if (!need.length) continue;
+    const st = out.get(o.rep) || { orders: 0, complete: 0, missing: {} }; st.orders++;
+    const miss = need.filter(k => !o.skus.has(k)); if (!miss.length) st.complete++; for (const k of miss) st.missing[k] = (st.missing[k] || 0) + 1;
+    out.set(o.rep, st);
+  }
+  return out;
 }

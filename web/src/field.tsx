@@ -61,6 +61,7 @@ export function ShopsMap({ s, cfg }: { s: Session; cfg: Cfg }) {
   useEffect(() => { load(); if (mgr) api(s, "/api/distributors").then(setD); }, []);
   return <><h2>{t("Outlets & distributor mapping")}</h2>{shops.map(x => <div className="row" key={x.id}><b>{x.name}</b> <span className="muted">{x.code} · {x.city}</span>
     <div className="muted">{cfg.settings.features.drugLicence && t("DL: {0} ", x.drug_licence || "—")}{defs.filter(f => x.custom?.[f.key] != null).map(f => `${f.label}: ${x.custom[f.key]}`).join(" · ")}</div>
+    {mgr && <input className="sm-input" placeholder={t("Outlet type (e.g. Grocery)")} defaultValue={x.outlet_type ?? ""} onBlur={async e => { if (e.target.value !== (x.outlet_type ?? "")) { await api(s, `/api/shops/${x.id}/type`, { method: "PUT", body: JSON.stringify({ outletType: e.target.value }) }); load(); } }} />}
     {mgr && <select value={x.distributor_id ?? ""} onChange={async e => { await api(s, `/api/shops/${x.id}/distributor`, { method: "POST", body: JSON.stringify({ distributorId: e.target.value ? Number(e.target.value) : null }) }); load(); }}>
       <option value="">{t("Company direct (no distributor)")}</option>{d.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>}</div>)}</>;
 }
@@ -109,6 +110,10 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
     api(s, "/api/shops").then(r => { setShops(r); localStorage.setItem("ff-shops", JSON.stringify(r)); }).catch(() => {});
     api(s, "/api/items").then(r => { setItems(r); setLoaded(true); localStorage.setItem("ff-items", JSON.stringify(r)); }).catch(() => setLoaded(true));
   }, []);
+  const [must, setMust] = useState<string[]>([]);
+  useEffect(() => { setMust([]); if (shopId) api(s, `/api/must-sell?shopId=${shopId}`).then(r => setMust(r.skus || [])).catch(() => {}); }, [shopId]);
+  const mustMissing = must.filter(k => !(Number(qty[k]) > 0));
+  const MustBanner = () => must.length ? <div className={`banner ${mustMissing.length ? "warnb" : ""}`}>⭐ {mustMissing.length ? t("Must-sell not in this order yet: {0}", mustMissing.join(", ")) : t("All must-sell products are in this order")}</div> : null;
   const st = cfg.settings, f = st.features;
   const factor = (i: any) => (i.uoms.find((u: any) => u.code === unit[i.id]) ?? i.uoms.find((u: any) => u.factor === 1) ?? { factor: 1 }).factor;
   const unitName = (i: any) => unit[i.id] || i.uoms.find((u: any) => u.factor === 1)?.code || "PCS";
@@ -140,7 +145,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
   const cats = [...new Set(items.map(i => i.category).filter(Boolean))] as string[];
   const needle = q.trim().toLowerCase();
   const shown = items.filter(i => (!cat || i.category === cat) && (!needle || [i.name, i.code, i.category, ...i.variants.map((v: any) => v.sku)].some(x => String(x || "").toLowerCase().includes(needle))));
-  const cell = (v: any) => <input inputMode="numeric" aria-label={t("Quantity {0}", v.sku)} className={Number(qty[v.sku]) > 0 ? "has" : ""} value={qty[v.sku] || ""} placeholder="0" onChange={e => setQty({ ...qty, [v.sku]: e.target.value.replace(/\D/g, "").slice(0, 5) })} />;
+  const cell = (v: any) => <input inputMode="numeric" aria-label={t("Quantity {0}", v.sku)} className={`${Number(qty[v.sku]) > 0 ? "has" : ""} ${must.includes(v.sku) ? "must" : ""}`} value={qty[v.sku] || ""} placeholder="0" onChange={e => setQty({ ...qty, [v.sku]: e.target.value.replace(/\D/g, "").slice(0, 5) })} />;
   const shownTotal = pv ? pv.total : total;
 
   if (step === "done") return <div className="done-screen"><div className="big-ic">{result?.ok ? "✅" : "⚠️"}</div><h2>{result?.text}</h2>
@@ -159,6 +164,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
     const lines = pv?.lines || items.flatMap(i => i.variants.filter((v: any) => Number(qty[v.sku]) > 0).map((v: any) => ({ sku: v.sku, qty: Number(qty[v.sku]), uom: unitName(i), amount: Number(qty[v.sku]) * factor(i) * v.billing_price, name: `${i.name} ${attrText(v.attrs)}` })));
     const nameOf = (sku: string) => { for (const i of items) { const v = i.variants.find((x: any) => x.sku === sku); if (v) return `${i.name} ${attrText(v.attrs)}`.trim(); } return sku; };
     return <><Steps n={3} /><h2>{t("Review order")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>
+      <MustBanner />
       <div className="review">{lines.map((l: any, k: number) => <div className="rline" key={k}><div><b>{nameOf(l.sku)}</b><div className="muted small">{l.qty} {l.uom}{l.free ? t(" · FREE") : ""}{l.scheme && !l.free ? t(" · offer: {0}", l.scheme) : ""}</div></div>
         <span>{l.free ? t("Free") : inr(l.amount)}</span></div>)}
         {pv?.savings > 0 && <div className="rline savings"><b>{t("You save")}</b><b>{inr(pv.savings)}</b></div>}
@@ -169,7 +175,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
       <div className="cartbar"><button className="ghost" onClick={() => setStep("items")}>{t("← Edit")}</button><button disabled={busy} onClick={submit}>{busy ? t("Placing…") : t("Place order · {0}", inr0(shownTotal))}</button></div></>;
   }
 
-  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>
+  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p><MustBanner />
     <div className="searchbar"><input type="search" placeholder={t("Search products or codes")} value={q} onChange={e => setQ(e.target.value)} />
       {f.barcode && <ScanButton onCode={c => { const v = items.flatMap(i => i.variants).find((v: any) => v.barcode === c || v.sku === c); if (!v) return toast(t("No product for {0}", c), "err"); setQty({ ...qty, [v.sku]: String((Number(qty[v.sku]) || 0) + 1) }); toast(t("Added {0}", v.sku)); }} />}</div>
     {cats.length > 1 && <div className="chiprow">{["", ...cats].map(c => <button key={c || "all"} className={`chip ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>{c || t("All")}</button>)}</div>}

@@ -161,8 +161,10 @@ async function importShop({ db, cid, s }: Imp, r: any) {
   const ex = (await db.query("SELECT id, distributor_id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
   if (ex) {
     await db.query("UPDATE shops SET updated_at=NOW(), name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,pincode=$10,distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
+    if (!empty(r.outlet_type)) await db.query("UPDATE shops SET outlet_type=$1 WHERE id=$2", [String(r.outlet_type).trim().slice(0, 40), ex.id]);
     return "updated";
   }
+  if (!empty(r.outlet_type)) { await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code,outlet_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", [...vals, dist, cid, String(r.code), String(r.outlet_type).trim().slice(0, 40)]); return "inserted"; }
   await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [...vals, dist, cid, String(r.code)]);
   return "inserted";
 }

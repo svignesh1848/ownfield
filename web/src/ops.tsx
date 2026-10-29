@@ -222,8 +222,10 @@ export function Coverage({ s }: ViewProps) {
   return <><h2>{t("Coverage")}</h2>
     <div className="row-btns"><input type="date" value={from} onChange={e => setFrom(e.target.value)} /> to <input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
     <p className="muted small">{t("Planned calls come from beat plans. Productive = an order was taken at the outlet that day.")}</p>
-    <Table rows={d?.reps.map((r: any) => ({ ...r, missed: r.missed_outlets.length, productivity: r.productivity_pct == null ? "–" : `${r.productivity_pct}%`, adherence: r.beat_adherence_pct == null ? "–" : `${r.beat_adherence_pct}%` })) ?? null}
-      cols={["rep_name", "planned_calls", "total_calls", "productive_calls", "non_productive_calls", "productivity", "adherence", "unplanned_calls", "missed"]} empty={{ title: t("No sales reps") }} />
+    <Table rows={d?.reps.map((r: any) => ({ ...r, missed: r.missed_outlets.length, productivity: r.productivity_pct == null ? "–" : `${r.productivity_pct}%`, adherence: r.beat_adherence_pct == null ? "–" : `${r.beat_adherence_pct}%`, must_sell: r.must_sell_pct == null ? "–" : `${r.must_sell_pct}%` })) ?? null}
+      cols={["rep_name", "planned_calls", "total_calls", "productive_calls", "non_productive_calls", "productivity", "adherence", "unplanned_calls", "missed", "must_sell"]} empty={{ title: t("No sales reps") }} />
+    {d?.reps.some((r: any) => Object.keys(r.must_sell_missing || {}).length) && <div className="card"><h3>{t("Must-sell products missed in orders")}</h3>
+      <Table rows={Object.entries(d.reps.reduce((a: any, r: any) => { for (const [k, n] of Object.entries(r.must_sell_missing || {})) a[k] = (a[k] || 0) + (n as number); return a; }, {})).map(([sku, orders]) => ({ sku, orders }))} cols={["sku", "orders"]} /></div>}
     {d?.reps.some((r: any) => Object.keys(r.no_order_reasons || {}).length) && <div className="card"><h3>{t("Why no order")}</h3>
       <Table rows={Object.entries(d.reps.reduce((a: any, r: any) => { for (const [k, n] of Object.entries(r.no_order_reasons || {})) a[k] = (a[k] || 0) + (n as number); return a; }, {})).map(([reason, calls]) => ({ reason: t(reason), calls }))} cols={["reason", "calls"]} /></div>}
     {d?.reps.filter((r: any) => r.missed_outlets.length).map((r: any) => <details key={r.rep_id} open={open === r.rep_id} onToggle={() => setOpen(r.rep_id)}><summary>{t("Missed outlets —")}{" "}{r.rep_name} ({r.missed_outlets.length})</summary>

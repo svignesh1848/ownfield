@@ -83,3 +83,17 @@ describe("3. productive calls and no-order reasons", () => {
     expect(c.no_order_reasons["Enough stock"]).toBe(1);
   });
 });
+
+describe("4. must-sell lists per outlet type", () => {
+  it("lists must-sell SKUs for the outlet and coverage shows compliance", async () => {
+    const other = (await db.query("SELECT sku FROM variants ORDER BY id LIMIT 1 OFFSET 1")).rows[0].sku;
+    await request(app).put(`/api/shops/${id.s2}/type`).set(as("rep")).send({ outletType: "Grocery" }).expect(403);
+    await request(app).put(`/api/shops/${id.s2}/type`).set(as("adm")).send({ outletType: "Grocery" }).expect(200);
+    await request(app).put("/api/flow-settings").set(as("adm")).send({ mustSell: { Grocery: [sku, other] } }).expect(200);
+    expect((await request(app).get(`/api/must-sell?shopId=${id.s2}`).set(as("rep")).expect(200)).body).toEqual({ outlet_type: "Grocery", skus: [sku, other] });
+    expect((await request(app).get(`/api/must-sell?shopId=${id.s}`).set(as("rep")).expect(200)).body.skus).toEqual([]);
+    await request(app).post("/api/orders").set(as("rep")).send({ clientRef: "ms-1", shopId: id.s2, lines: [{ sku, qty: 1 }, { sku: other, qty: 1 }] }).expect(201);
+    const c = (await request(app).get("/api/coverage").set(as("mgr"))).body.reps.find((r: any) => r.rep_id === id.rep);
+    expect(c.must_sell_orders).toBeGreaterThanOrEqual(2); expect(c.must_sell_complete).toBe(1); expect(c.must_sell_missing[other]).toBeGreaterThanOrEqual(1);
+  });
+});

@@ -119,3 +119,4 @@ nav:not(.bottom){display:flex;gap:6px;margin:8px 0;overflow-x:auto}
 .earn{font-size:28px;font-weight:700;color:var(--accent-d)}
 .earn-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;background:var(--accent-l);color:var(--accent-d);border:1px solid #b7ddd6;margin:8px 0;text-align:left}.earn-card:hover{background:#d8eee9}.earn-card b{font-size:26px}
 .lang-pick{display:block;margin-top:12px;font-size:14px}[dir=rtl] .toast,[dir=rtl] .field{text-align:right}
+.prod input.must,.grid input.must{border-color:#d97706;box-shadow:0 0 0 2px #fde68a}.sm-input{max-width:220px;display:inline-block;min-height:36px}

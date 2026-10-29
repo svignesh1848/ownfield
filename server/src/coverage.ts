@@ -4,6 +4,7 @@
 // at that outlet the same day.
 import { bad } from "./catalog.js";
 import { dayKey } from "./field.js";
+import { mustSellStats } from "./flow.js";
 import { type Ctx, MGR, requireFeature, dateOk } from "./common.js";
 
 export function registerCoverageRoutes({ app, db, auth, wrap, tenant }: Ctx) {
@@ -41,6 +42,8 @@ export function registerCoverageRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       return { rep_id: r.id, rep_name: r.name, planned_calls: planned, total_calls: calls, productive_calls: productive, non_productive_calls: calls - productive, no_order_reasons: reasons, productivity_pct: pct(productive, calls),
         beat_adherence_pct: pct(visitedPlanned, planned), unplanned_calls: unplanned, missed_outlets: missed };
     });
+    const ms = await mustSellStats(db, cid, lo, hi);
+    for (const r of out as any[]) { const m = ms.get(r.rep_id); r.must_sell_orders = m?.orders ?? 0; r.must_sell_complete = m?.complete ?? 0; r.must_sell_pct = m?.orders ? Math.round(100 * m.complete / m.orders) : null; r.must_sell_missing = m?.missing ?? {}; }
     res.json({ from, to, reps: out });
   }));
 }
