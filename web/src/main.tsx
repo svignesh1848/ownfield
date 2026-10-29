@@ -49,7 +49,70 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
         <button type="button" className="ghost sm" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></Field>
     {err && !err.field && <p className="err">{err.text}</p>}
     <button className="block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+    <p className="center"><a href="#signup">New here? Create your company</a></p>
     <p className="muted small center">Platform owner? Use company code PLATFORM.</p></form></div>;
+}
+
+function Signup({ onLogin }: { onLogin: (s: Session) => void }) {
+  const [f, setF] = useState({ companyName: "", companyCode: "", industry: "", adminName: "", email: "", password: "", confirm: "", website: "" });
+  const [codeEdited, setCodeEdited] = useState(false); const [codeOk, setCodeOk] = useState<null | { available: boolean; suggestion?: string }>(null);
+  const [tpl, setTpl] = useState<any[]>([]); const [show, setShow] = useState(false);
+  const [err, setErr] = useState<{ field?: string; text: string } | null>(null); const [busy, setBusy] = useState(false);
+  useEffect(() => { api(null, "/api/templates").then(setTpl).catch(() => {}); }, []);
+  const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
+  useEffect(() => {
+    const q = codeEdited ? `code=${encodeURIComponent(f.companyCode)}` : `name=${encodeURIComponent(f.companyName)}`;
+    if (!(codeEdited ? f.companyCode : f.companyName).trim()) { setCodeOk(null); return; }
+    const t = setTimeout(() => api(null, `/api/signup/check-code?${q}`).then(r => {
+      if (!codeEdited) { const c = r.available ? r.code : r.suggestion || r.code; setF(p => ({ ...p, companyCode: c })); setCodeOk({ available: true }); }
+      else setCodeOk(r);
+    }).catch(() => {}), 350);
+    return () => clearTimeout(t);
+  }, [f.companyName, f.companyCode, codeEdited]);
+  const submit = async (e: any) => {
+    e.preventDefault();
+    const fail = (field: string, text: string) => setErr({ field, text });
+    if (f.companyName.trim().length < 2) return fail("companyName", "Enter your company name");
+    if (!/^[A-Za-z0-9]{3,12}$/.test(f.companyCode.trim())) return fail("companyCode", "Use 3–12 letters or numbers, no spaces");
+    if (!f.industry) return fail("industry", "Pick what your business sells");
+    if (f.adminName.trim().length < 2) return fail("adminName", "Enter your name");
+    if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) return fail("email", "Enter a valid email, e.g. name@company.com");
+    if (f.password.length < 8 || !/[A-Za-z]/.test(f.password) || !/[0-9]/.test(f.password)) return fail("password", "Use at least 8 characters with a letter and a number");
+    if (f.password !== f.confirm) return fail("confirm", "Passwords don't match");
+    setBusy(true); setErr(null);
+    try {
+      const { confirm, ...body } = f;
+      const r = await api(null, "/api/signup", { method: "POST", body: JSON.stringify({ ...body, companyCode: f.companyCode.trim().toUpperCase(), email: f.email.trim() }) });
+      location.hash = "home"; onLogin(r); toast("Welcome! Your company is ready.");
+    } catch (x: any) {
+      const field = /code/i.test(x.message) ? "companyCode" : /email/i.test(x.message) ? "email" : /password/i.test(x.message) ? "password" : undefined;
+      setErr({ field, text: /fetch/i.test(x.message) ? "Can't reach the server. Check your internet connection." : x.message });
+    } finally { setBusy(false); }
+  };
+  const fe = (k: string) => err?.field === k ? err.text : undefined;
+  return <div className="login-wrap"><form className="card login" onSubmit={submit} noValidate>
+    <div className="brand"><span className="logo">FF</span><div><h1>Create your company</h1><p className="muted">Free plan · up to 5 users · no card needed</p></div></div>
+    <Field label="Company name" error={fe("companyName")}>
+      <input autoComplete="organization" value={f.companyName} onChange={e => set("companyName", e.target.value)} /></Field>
+    <Field label="Company code" help={codeOk && !codeOk.available ? `Taken. Try ${codeOk.suggestion}.` : "Your team types this to sign in. You can change it."} error={fe("companyCode")}>
+      <input autoCapitalize="characters" maxLength={12} value={f.companyCode} onChange={e => { setCodeEdited(true); set("companyCode", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); }} /></Field>
+    <Field label="What does your business sell?" error={fe("industry")}>
+      <select value={f.industry} onChange={e => set("industry", e.target.value)}><option value="">Choose one…</option>
+        {tpl.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
+    {f.industry && <p className="muted small">{tpl.find(t => t.id === f.industry)?.description}</p>}
+    <Field label="Your name" error={fe("adminName")}>
+      <input autoComplete="name" value={f.adminName} onChange={e => set("adminName", e.target.value)} /></Field>
+    <Field label="Your email" help="You'll sign in with this." error={fe("email")}>
+      <input type="email" inputMode="email" autoComplete="email" value={f.email} onChange={e => set("email", e.target.value)} /></Field>
+    <Field label="Password" help="At least 8 characters, with a letter and a number." error={fe("password")}>
+      <div className="pw"><input type={show ? "text" : "password"} autoComplete="new-password" value={f.password} onChange={e => set("password", e.target.value)} />
+        <button type="button" className="ghost sm" onClick={() => setShow(!show)}>{show ? "Hide" : "Show"}</button></div></Field>
+    <Field label="Confirm password" error={fe("confirm")}>
+      <input type={show ? "text" : "password"} autoComplete="new-password" value={f.confirm} onChange={e => set("confirm", e.target.value)} /></Field>
+    <input style={{ display: "none" }} tabIndex={-1} autoComplete="off" value={f.website} onChange={e => set("website", e.target.value)} aria-hidden="true" />
+    {err && !err.field && <p className="err">{err.text}</p>}
+    <button className="block" disabled={busy}>{busy ? "Creating…" : "Create company"}</button>
+    <p className="center"><a href="#">Already have an account? Sign in</a></p></form></div>;
 }
 
 /** Data table: friendly headers, ₹/dates already formatted by callers or auto-formatted, and a helpful empty state. */
@@ -148,7 +211,9 @@ function Users({ s, cfg, go }: ViewProps) {
 function App() {
   const [s, setS] = useState<Session | null>(() => JSON.parse(localStorage.getItem("ff") || "null"));
   const set = (v: Session | null) => { setS(v); v ? localStorage.setItem("ff", JSON.stringify(v)) : localStorage.removeItem("ff"); };
-  if (!s) return <><Login onLogin={set} /><Toasts /></>;
+  const [hash, setHash] = useState(location.hash);
+  useEffect(() => { const h = () => setHash(location.hash); addEventListener("hashchange", h); return () => removeEventListener("hashchange", h); }, []);
+  if (!s) return <>{hash === "#signup" ? <Signup onLogin={set} /> : <Login onLogin={set} />}<Toasts /></>;
   return <>{s.user.role === "platform_owner" ? <main><header className="top"><b>FieldForce · Platform</b><button className="sm ghost" onClick={() => set(null)}>Sign out</button></header><Platform s={s} /></main>
     : <Company s={s} onLogout={() => { set(null); location.hash = ""; }} />}<Toasts /></>;
 }

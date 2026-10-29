@@ -20,6 +20,16 @@ export const PLATFORM_CODE = "PLATFORM";
 type Claims = { uid: number; companyId: number | null; role: Role };
 type AuthReq = Request & { user: Claims };
 
+export const FREE_PLAN_USER_LIMIT = Number(process.env.FREE_PLAN_USER_LIMIT || 5);
+const CODE_RE = /^[A-Z0-9]{3,12}$/;
+/** Password rule for self sign-up: 8+ chars with at least one letter and one number. */
+export function passwordProblem(pw: string): string | null {
+  if (pw.length < 8) return "Password needs at least 8 characters";
+  if (pw.length > 128) return "Password is too long";
+  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return "Password needs at least one letter and one number";
+  return null;
+}
+
 export function usageInfo(count: number, limit: number) {
   const pct = limit > 0 ? Math.round((count / limit) * 100) : 100;
   return { count, limit, pct, warning: pct >= 80, atLimit: count >= limit };
@@ -80,6 +90,53 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return res.status(401).json({ error: "Wrong email or password" });
     const token = jwt.sign({ uid: u.id, companyId: u.company_id, role: u.role }, secret, { expiresIn: "12h" });
     res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code } });
+  }));
+
+  // ---- Public self sign-up (free plan) ----
+  const signupHits = new Map<string, number[]>();
+  const SIGNUP_MAX = Number(process.env.SIGNUP_RATE_MAX || 5), SIGNUP_WINDOW_MS = 60 * 60 * 1000;
+  const signupLimiter = (req: Request, res: Response, next: NextFunction) => {
+    const ip = String(req.headers["x-forwarded-for"] || "").split(",").pop()!.trim() || req.ip || "?";
+    const now = Date.now(), hits = (signupHits.get(ip) || []).filter(t => now - t < SIGNUP_WINDOW_MS);
+    if (hits.length >= SIGNUP_MAX) return res.status(429).json({ error: "Too many sign-ups from this network. Please try again in an hour." });
+    hits.push(now); signupHits.set(ip, hits); next();
+  };
+  const checkHits = new Map<string, number[]>();
+  const signupCheckLimiter = (req: Request, res: Response, next: NextFunction) => {
+    const ip = String(req.headers["x-forwarded-for"] || "").split(",").pop()!.trim() || req.ip || "?";
+    const now = Date.now(), hits = (checkHits.get(ip) || []).filter(t => now - t < 60000);
+    if (hits.length >= 60) return res.status(429).json({ error: "Too many requests. Please wait a minute." });
+    hits.push(now); checkHits.set(ip, hits); next();
+  };
+  const suggestCode = (name: string) => String(name || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+  app.get("/api/signup/check-code", signupCheckLimiter, wrap(async (req, res) => {
+    let code = String(req.query.code || "").toUpperCase().trim() || suggestCode(String(req.query.name || ""));
+    if (!code) return res.json({ code: "", available: false });
+    const taken = async (c: string) => c === PLATFORM_CODE || !!(await db.query("SELECT id FROM companies WHERE code=$1", [c])).rows[0];
+    const available = CODE_RE.test(code) && !(await taken(code));
+    let suggestion = code;
+    if (!available && CODE_RE.test(code.slice(0, 10))) for (let i = 2; i < 100; i++) { const c = code.slice(0, 10) + i; if (!(await taken(c))) { suggestion = c; break; } }
+    res.json({ code, available, suggestion });
+  }));
+  app.post("/api/signup", signupLimiter, wrap(async (req, res) => {
+    const b = req.body || {};
+    const name = String(b.companyName || "").trim(), code = String(b.companyCode || "").toUpperCase().trim();
+    const industry = String(b.industry || "custom"), adminName = String(b.adminName || "").trim();
+    const email = String(b.email || "").toLowerCase().trim(), password = String(b.password || "");
+    if (b.website) return res.status(400).json({ error: "Sign-up failed" }); // honeypot
+    if (name.length < 2 || name.length > 80) return res.status(400).json({ field: "companyName", error: "Enter your company name (2–80 letters)" });
+    if (!CODE_RE.test(code) || code === PLATFORM_CODE) return res.status(400).json({ field: "companyCode", error: "Company code must be 3–12 letters or numbers, no spaces" });
+    if (!(INDUSTRIES as readonly string[]).includes(industry)) return res.status(400).json({ field: "industry", error: "Pick a business type" });
+    if (adminName.length < 2 || adminName.length > 80) return res.status(400).json({ field: "adminName", error: "Enter your name" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 120) return res.status(400).json({ field: "email", error: "Enter a valid email, e.g. name@company.com" });
+    const pwErr = passwordProblem(password); if (pwErr) return res.status(400).json({ field: "password", error: pwErr });
+    if ((await db.query("SELECT id FROM companies WHERE code=$1", [code])).rows[0]) return res.status(409).json({ field: "companyCode", error: "This company code is taken. Try another." });
+    if ((await db.query("SELECT u.id FROM users u WHERE u.email=$1 AND u.role='company_admin'", [email])).rows[0]) return res.status(409).json({ field: "email", error: "This email already runs a company. Sign in instead." });
+    const c = (await db.query("INSERT INTO companies (code,name,user_limit,industry,settings) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+      [code, name, FREE_PLAN_USER_LIMIT, industry, JSON.stringify(templateSettings(industry))])).rows[0];
+    const u = await addUser(c.id, { email, name: adminName, password, role: "company_admin" });
+    const token = jwt.sign({ uid: u.id, companyId: c.id, role: "company_admin" }, secret, { expiresIn: "12h" });
+    res.status(201).json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: c.code }, plan: { name: "free", userLimit: FREE_PLAN_USER_LIMIT } });
   }));
 
   // ---- Platform owner ----
