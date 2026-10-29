@@ -1,3 +1,4 @@
-Code,Name,Owner Name,Phone,Address,City,GSTIN
-SHOP001,Sample Kids Store,Sample Owner,9000000001,1 Sample Street,Chennai,
-SHOP002,Demo Baby Boutique,Demo Owner,9000000002,2 Demo Road,Coimbatore,
+Code,Name,Owner Name,Phone,Address,City,GSTIN,Distributor Email
+SHOP001,Sample Kids Store,Sample Owner,9000000001,1 Sample Street,Chennai,,distributor@example.com
+SHOP002,Demo Baby Boutique,Demo Owner,9000000002,2 Demo Road,Coimbatore,,distributor@example.com
+SHOP003,Example Little Wear,Example Owner,9000000003,3 Example Lane,Chennai,,

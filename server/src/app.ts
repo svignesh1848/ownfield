@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import path from "node:path";
 import fs from "node:fs";
 import type { Db } from "./db.js";
+import { registerFieldRoutes } from "./field.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor"] as const;
 export type Role = (typeof ROLES)[number];
@@ -133,8 +134,16 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
           if (!r.code || !r.name) throw new Error("code and name required");
           const ex = (await db.query("SELECT id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
           const vals = [r.name, r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, r.gstin || null];
-          if (ex) { await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6 WHERE id=$7", [...vals, ex.id]); result.updated++; }
-          else { await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [...vals, cid, String(r.code)]); result.inserted++; }
+          let dist: number | null = null;
+          if (r.distributor_email) {
+            dist = (await db.query("SELECT id FROM users WHERE company_id=$1 AND email=$2 AND role='distributor'", [cid, String(r.distributor_email).toLowerCase()])).rows[0]?.id;
+            if (!dist) throw new Error(`distributor ${r.distributor_email} not found`);
+          }
+          if (ex) { if (dist) await db.query("UPDATE shops SET distributor_id=$1 WHERE id=$2", [dist, ex.id]);
+            await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6 WHERE id=$7", [...vals, ex.id]); result.updated++; }
+          else { await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [...vals, cid, String(r.code)]);
+            if (dist) await db.query("UPDATE shops SET distributor_id=$1 WHERE company_id=$2 AND code=$3", [dist, cid, String(r.code)]);
+            result.inserted++; }
         } else if (req.params.kind === "products") {
           const mrp = Number(r.mrp), bp = Number(r.billing_price);
           if (!r.style || !r.sku) throw new Error("style and sku required");
@@ -151,6 +160,8 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     }
     res.json({ ...result, usage: await companyUsage(cid) });
   }));
+
+  registerFieldRoutes({ app, db, auth, wrap, tenant });
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {

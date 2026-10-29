@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge } from "./field";
 
-type Session = { token: string; user: { name: string; role: string; companyCode: string | null } };
-const api = async (s: Session | null, url: string, opts: RequestInit = {}) => {
+export type Session = { token: string; user: { name: string; role: string; companyCode: string | null } };
+export const api = async (s: Session | null, url: string, opts: RequestInit = {}) => {
   const r = await fetch(url, { ...opts, headers: { ...(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(s ? { Authorization: `Bearer ${s.token}` } : {}) } });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
@@ -18,7 +19,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     {err && <p className="err">{err}</p>}<button>Sign in</button></form>;
 }
 
-function Table({ rows, cols }: { rows: any[]; cols: string[] }) {
+export function Table({ rows, cols }: { rows: any[]; cols: string[] }) {
   if (!rows.length) return <p className="muted">No records yet.</p>;
   return <div className="scroll"><table><thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
     <tbody>{rows.map((r, i) => <tr key={i}>{cols.map(c => <td key={c}>{String(r[c] ?? "")}</td>)}</tr>)}</tbody></table></div>;
@@ -48,18 +49,21 @@ function Platform({ s }: { s: Session }) {
 }
 
 function Company({ s }: { s: Session }) {
-  const admin = s.user.role === "company_admin", mgr = admin || s.user.role === "manager";
-  const tabs = [...(mgr ? ["users"] : []), "shops", "products", ...(admin ? ["import"] : [])];
+  const role = s.user.role, admin = role === "company_admin", mgr = admin || role === "manager";
+  const tabs = mgr ? ["dashboard", "beats", "orders", "users", "shops", "products", ...(admin ? ["import"] : [])]
+    : role === "sales_rep" ? ["beat", "order", "orders"] : ["inbox", "products"];
   const [tab, setTab] = useState(tabs[0]); const [rows, setRows] = useState<any[]>([]); const [usage, setUsage] = useState<any>(null); const [msg, setMsg] = useState("");
-  useEffect(() => { if (tab !== "import") api(s, `/api/${tab}`).then(setRows).catch(e => setMsg(e.message)); if (mgr) api(s, "/api/company/usage").then(setUsage); }, [tab]);
-  const cols: Record<string, string[]> = { users: ["name", "email", "role", "active"], shops: ["code", "name", "owner_name", "city", "phone"], products: ["style", "sku", "size", "hsn", "mrp", "billing_price"] };
+  const custom: Record<string, any> = { dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: mgr ? ShopsMap : null };
+  useEffect(() => { setMsg(""); if (!custom[tab] && tab !== "import") api(s, `/api/${tab}`).then(setRows).catch(e => setMsg(e.message)); if (mgr) api(s, "/api/company/usage").then(setUsage); }, [tab]);
+  const cols: Record<string, string[]> = { users: ["name", "email", "role", "active"], products: ["style", "sku", "size", "hsn", "mrp", "billing_price"] };
+  const C = custom[tab];
   return <>
-    <Usage u={usage} />
+    {mgr && <Usage u={usage} />}<OfflineBadge s={s} />
     <nav>{tabs.map(t => <button key={t} className={t === tab ? "on" : ""} onClick={() => setTab(t)}>{t}</button>)}</nav>
-    <section className="card">{tab === "import"
+    <section className="card">{C ? <C s={s} /> : tab === "import"
       ? <>{["shops", "products", "users"].map(k => <form key={k} className="row" onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.currentTarget); try { const r = await api(s, `/api/import/${k}`, { method: "POST", body: fd }); setMsg(`${k}: ${r.inserted} added, ${r.updated} updated, ${r.errors.length} errors ${r.errors.map((x: any) => `[row ${x.row}: ${x.error}]`).join(" ")}`); setUsage(r.usage); } catch (x: any) { setMsg(x.message); } }}>
           <label>Upload {k} (.xlsx / .csv)</label><input name="file" type="file" accept=".xlsx,.xls,.csv" required /><button className="sm">Upload</button></form>)}
-        <p className="muted">Templates: see <code>sample-data/</code> in the repo.</p></>
+        <p className="muted">Templates: see <code>sample-data/</code> in the repo. Shops may include a "Distributor Email" column.</p></>
       : <Table rows={rows} cols={cols[tab]} />}<p>{msg}</p></section></>;
 }
 
