@@ -112,6 +112,20 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
   }, []);
   const [must, setMust] = useState<string[]>([]);
   useEffect(() => { setMust([]); if (shopId) api(s, `/api/must-sell?shopId=${shopId}`).then(r => setMust(r.skus || [])).catch(() => {}); }, [shopId]);
+  const [sug, setSug] = useState<any>(null); const [shelf, setShelf] = useState<Record<string, string>>({});
+  const getSug = () => api(s, "/api/orders/suggest", { method: "POST", body: JSON.stringify({ shopId: Number(shopId) }) }).then(setSug).catch(e => toast(e.message, "err"));
+  const useSug = () => { const nq = { ...qty }, nu = { ...unit };
+    for (const l of sug.lines) { const n = Math.max(0, Math.ceil(l.avg - (Number(shelf[l.sku]) || 0))); const it = items.find(i => i.variants.some((v: any) => v.sku === l.sku)); if (!it) continue;
+      const base = it.uoms.find((u: any) => u.factor === 1); if (base) nu[it.id] = base.code; nq[l.sku] = n ? String(n) : ""; }
+    setUnit(nu); setQty(nq); setSug(null); toast(t("Suggested quantities added — check and edit before you place the order")); };
+  const SugCard = () => !sug ? <button className="sm ghost" onClick={getSug}>💡 {t("Suggest order (last 3 orders)")}</button>
+    : <div className="card"><b>💡 {t("Suggested order")}</b> <span className="muted small">{t("Average of the last {0} orders minus what is on the shelf.", sug.orders)}</span>
+      {!sug.lines.length ? <p className="muted">{t("No past orders for this outlet yet.")}</p> : <>
+        <div className="scroll"><table><thead><tr><th>{t("Product")}</th><th>{t("Average")}</th><th>{t("On shelf")}</th><th>{t("Suggested")}</th></tr></thead><tbody>
+          {sug.lines.map((l: any) => <tr key={l.sku}><td>{l.name} <span className="muted small">{l.sku}</span></td><td>{l.avg}</td>
+            <td><input inputMode="numeric" style={{ width: 70 }} value={shelf[l.sku] ?? ""} placeholder="0" onChange={e => setShelf({ ...shelf, [l.sku]: e.target.value.replace(/\D/g, "") })} /></td>
+            <td><b>{Math.max(0, Math.ceil(l.avg - (Number(shelf[l.sku]) || 0)))}</b></td></tr>)}</tbody></table></div>
+        <div className="row-btns"><button className="sm" onClick={useSug}>{t("Use these quantities")}</button><button className="sm ghost" onClick={() => setSug(null)}>{t("Close")}</button></div></>}</div>;
   const mustMissing = must.filter(k => !(Number(qty[k]) > 0));
   const MustBanner = () => must.length ? <div className={`banner ${mustMissing.length ? "warnb" : ""}`}>⭐ {mustMissing.length ? t("Must-sell not in this order yet: {0}", mustMissing.join(", ")) : t("All must-sell products are in this order")}</div> : null;
   const st = cfg.settings, f = st.features;
@@ -175,7 +189,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
       <div className="cartbar"><button className="ghost" onClick={() => setStep("items")}>{t("← Edit")}</button><button disabled={busy} onClick={submit}>{busy ? t("Placing…") : t("Place order · {0}", inr0(shownTotal))}</button></div></>;
   }
 
-  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p><MustBanner />
+  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p><MustBanner /><SugCard />
     <div className="searchbar"><input type="search" placeholder={t("Search products or codes")} value={q} onChange={e => setQ(e.target.value)} />
       {f.barcode && <ScanButton onCode={c => { const v = items.flatMap(i => i.variants).find((v: any) => v.barcode === c || v.sku === c); if (!v) return toast(t("No product for {0}", c), "err"); setQty({ ...qty, [v.sku]: String((Number(qty[v.sku]) || 0) + 1) }); toast(t("Added {0}", v.sku)); }} />}</div>
     {cats.length > 1 && <div className="chiprow">{["", ...cats].map(c => <button key={c || "all"} className={`chip ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>{c || t("All")}</button>)}</div>}

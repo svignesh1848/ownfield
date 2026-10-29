@@ -97,3 +97,19 @@ describe("4. must-sell lists per outlet type", () => {
     expect(c.must_sell_orders).toBeGreaterThanOrEqual(2); expect(c.must_sell_complete).toBe(1); expect(c.must_sell_missing[other]).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("5. suggested order", () => {
+  it("averages the last 3 orders and subtracts shelf stock", async () => {
+    const other = (await db.query("SELECT sku FROM variants ORDER BY id LIMIT 1 OFFSET 1")).rows[0].sku;
+    const shop = (await request(app).get("/api/shops").set(as("adm"))).body[2].id;
+    expect((await request(app).post("/api/orders/suggest").set(as("rep")).send({ shopId: shop }).expect(200)).body).toEqual({ orders: 0, lines: [] });
+    for (const [i, q] of [[1, 4], [2, 6], [3, 8], [4, 2]] as const) // sg-1 is moved back in time, so it falls outside the last 3
+      await request(app).post("/api/orders").set(as("rep")).send({ clientRef: `sg-${i}`, shopId: shop, lines: [{ sku, qty: q }, ...(i === 2 ? [{ sku: other, qty: 3 }] : [])] }).expect(201);
+    await db.query("UPDATE orders SET created_at=NOW() - INTERVAL '10 days' WHERE client_ref='sg-1'");
+    const r = (await request(app).post("/api/orders/suggest").set(as("rep")).send({ shopId: shop, shelf: { [sku]: 1 } }).expect(200)).body;
+    expect(r.orders).toBe(3);
+    const a = r.lines.find((l: any) => l.sku === sku), b = r.lines.find((l: any) => l.sku === other);
+    expect(a).toMatchObject({ avg: Math.round(((6 + 8 + 2) / 3) * 10) / 10, shelf: 1, suggested: Math.ceil((6 + 8 + 2) / 3 - 1) });
+    expect(b).toMatchObject({ avg: 1, suggested: 1 });
+  });
+});

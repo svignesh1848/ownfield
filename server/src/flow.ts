@@ -57,12 +57,30 @@ export function registerFlowRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const shop = (await db.query("SELECT id, outlet_type FROM shops WHERE id=$1 AND company_id=$2", [Number(req.query.shopId), cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
     res.json({ outlet_type: shop.outlet_type, skus: mustSellFor(await getFlow(db, cid), shop.outlet_type) });
   }));
+  app.post("/api/orders/suggest", auth(...MGR, "sales_rep"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const shop = (await db.query("SELECT id FROM shops WHERE id=$1 AND company_id=$2", [Number(req.body?.shopId), cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
+    const shelf: Record<string, number> = {}; for (const [k, v] of Object.entries(req.body?.shelf || {})) { const n = Number(v); if (!(n >= 0)) throw bad("shelf stock must be ≥ 0"); shelf[k] = n; }
+    res.json(await suggestOrder(db, cid, shop.id, shelf));
+  }));
   app.put("/api/shops/:id/type", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const v = String(req.body?.outletType ?? "").trim().slice(0, 40) || null;
     const r = await db.query("UPDATE shops SET outlet_type=$1, updated_at=NOW() WHERE id=$2 AND company_id=$3 RETURNING id, outlet_type", [v, Number(req.params.id), cid]);
     if (!r.rows[0]) throw bad("shop not found", 404); res.json(r.rows[0]);
   }));
+}
+// Suggested order: average quantity over the outlet's last 3 orders, minus the shelf stock the rep counts. The rep can accept or edit.
+export async function suggestOrder(db: Db, cid: number, shopId: number, shelf: Record<string, number>) {
+  const last = (await db.query("SELECT id FROM orders WHERE company_id=$1 AND shop_id=$2 AND status<>'rejected' ORDER BY created_at DESC, id DESC LIMIT 3", [cid, shopId])).rows.map(r => r.id);
+  if (!last.length) return { orders: 0, lines: [] as any[] };
+  const rows = (await db.query(`SELECT v.sku, i.name, l.base_qty AS q, l.free FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
+    WHERE l.order_id IN (${last.map((_, k) => `$${k + 1}`).join(",")})`, last)).rows.filter(r => !r.free);
+  const by = new Map<string, { name: string; total: number }>();
+  for (const r of rows) { const x = by.get(r.sku) || { name: r.name, total: 0 }; x.total += Number(r.q); by.set(r.sku, x); }
+  const lines = [...by].map(([sku, x]) => { const avg = Math.round((x.total / last.length) * 10) / 10, sh = Math.max(0, Number(shelf[sku]) || 0);
+    return { sku, name: x.name, avg, shelf: sh, suggested: Math.max(0, Math.ceil(avg - sh)) }; }).sort((a, b) => a.sku.localeCompare(b.sku));
+  return { orders: last.length, lines };
 }
 export const mustSellFor = (f: Flow, type: string | null) => [...new Set([...(f.mustSell["*"] || []), ...(type ? f.mustSell[type] || [] : [])])];
 /** Must-sell compliance: orders that contain every must-sell SKU for the outlet, per rep. */
