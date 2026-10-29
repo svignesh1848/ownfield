@@ -206,6 +206,13 @@ ALTER TABLE shops ADD COLUMN IF NOT EXISTS lng NUMERIC;
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS geofence_m INTEGER;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS client_ref TEXT;
 ALTER TABLE visits ADD COLUMN IF NOT EXISTS client_ref TEXT;
+CREATE TABLE IF NOT EXISTS survey_forms (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL, questions TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS survey_responses (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), form_id INTEGER NOT NULL REFERENCES survey_forms(id), shop_id INTEGER REFERENCES shops(id),
+  user_id INTEGER REFERENCES users(id), answers TEXT NOT NULL, client_ref TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE UNIQUE INDEX IF NOT EXISTS survey_responses_ref ON survey_responses (company_id, client_ref);
+CREATE INDEX IF NOT EXISTS survey_responses_form ON survey_responses (company_id, form_id, id);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

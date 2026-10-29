@@ -7,7 +7,7 @@ import type { FeatureKey } from "./templates.js";
 export type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; tenant: (req: any, res: Response) => number | null;
   wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void };
 export const MGR = ["company_admin", "manager"];
-export const FEATURE_NAME: Record<string, string> = { audits: "Store audits", expenses: "Expenses", leave: "Leave & attendance", incentives: "Incentives", retailerApp: "Retailer app" };
+export const FEATURE_NAME: Record<string, string> = { audits: "Store audits", surveys: "Surveys", messaging: "WhatsApp/SMS messages", expenses: "Expenses", leave: "Leave & attendance", incentives: "Incentives", retailerApp: "Retailer app" };
 /** Throw 403 unless the company has this feature switched on. */
 export async function requireFeature(db: Db, cid: number, k: FeatureKey) {
   const { settings } = await getCompany(db, cid);

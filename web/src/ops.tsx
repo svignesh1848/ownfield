@@ -215,3 +215,45 @@ export function Coverage({ s }: ViewProps) {
     {d?.reps.filter((r: any) => r.missed_outlets.length).map((r: any) => <details key={r.rep_id} open={open === r.rep_id} onToggle={() => setOpen(r.rep_id)}><summary>Missed outlets — {r.rep_name} ({r.missed_outlets.length})</summary>
       <Table rows={r.missed_outlets} cols={["day", "shop_name"]} /></details>)}</>;
 }
+
+// ---------- Surveys (custom forms incl. competitor price) ----------
+const QT: Record<string, string> = { text: "Text", number: "Number", yesno: "Yes / No", select: "Choice", price: "Competitor price ₹" };
+export function Surveys({ s }: ViewProps) {
+  const admin = s.user.role === "company_admin", rep = s.user.role === "sales_rep";
+  const [forms, reload] = useData<any[]>(s, `/api/surveys/forms${admin ? "?all=1" : ""}`);
+  const [shops] = useData<any[]>(s, "/api/shops");
+  const [resp, reloadResp] = useData<any[]>(s, "/api/surveys/responses");
+  const [prices] = useData<any[]>(s, rep ? null : "/api/surveys/competitor-prices");
+  const [fid, setFid] = useState<number | null>(null), [shop, setShop] = useState(""), [ans, setAns] = useState<Record<string, any>>({});
+  const [draft, setDraft] = useState<any>({ name: "", questions: [{ label: "", type: "price", brand: "" }] });
+  const f = forms?.find(x => x.id === fid && x.active);
+  const setQ = (i: number, p: any) => setDraft({ ...draft, questions: draft.questions.map((q: any, j: number) => j === i ? { ...q, ...p } : q) });
+  return <><h2>Surveys</h2>
+    {!forms ? <Loading /> : <>
+      <Field label="Survey"><select value={fid ?? ""} onChange={e => { setFid(e.target.value ? Number(e.target.value) : null); setAns({}); }}><option value="">Pick a survey…</option>{forms.filter(x => x.active).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+      {f && <div className="card">
+        <Field label="Outlet"><select value={shop} onChange={e => setShop(e.target.value)}><option value="">—</option>{shops?.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+        {f.questions.map((q: any) => <Field key={q.key} label={q.label + (q.required ? " *" : "")}>
+          {q.type === "yesno" ? <select value={ans[q.key] ?? ""} onChange={e => setAns({ ...ans, [q.key]: e.target.value })}><option value="">—</option><option value="yes">Yes</option><option value="no">No</option></select>
+            : q.type === "select" ? <select value={ans[q.key] ?? ""} onChange={e => setAns({ ...ans, [q.key]: e.target.value })}><option value="">—</option>{q.options.map((o: string) => <option key={o}>{o}</option>)}</select>
+              : <input inputMode={q.type === "text" ? undefined : "decimal"} placeholder={q.type === "price" ? `${q.brand} price ₹` : ""} value={ans[q.key] ?? ""} onChange={e => setAns({ ...ans, [q.key]: e.target.value })} />}</Field>)}
+        <button onClick={async () => { const r: any = await run(() => api(s, "/api/surveys/responses", { method: "POST", body: JSON.stringify({ formId: f.id, shopId: shop ? Number(shop) : undefined, answers: ans, clientRef: ref() }) }));
+          if (r) { toast(r.queued ? "Saved offline — will send when online" : "Survey saved"); setAns({}); reloadResp(); } }}>Submit</button></div>}
+    </>}
+    {prices && prices.length > 0 && <><h3>Competitor prices</h3><Table cols={["item", "reports", "outlets", "min", "avg", "max"]} rows={prices.map(p => ({ item: `${p.brand}${p.brand !== p.question ? ` — ${p.question}` : ""}`, reports: p.reports, outlets: p.outlets, min: inr0(p.min), avg: inr0(p.avg), max: inr0(p.max) }))} /></>}
+    <h3>{rep ? "My recent responses" : "Recent responses"}</h3>
+    {!resp ? <Loading /> : !resp.length ? <p className="muted">No responses yet.</p> : resp.slice(0, 30).map(r => <div key={r.id} className="card small"><b>{r.form_name}</b> <span className="muted">· {r.shop_name || "no outlet"} · {r.user_name} · {String(r.created_at).slice(0, 10)}</span>
+      <div className="muted">{Object.entries(r.answers).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v === true ? "yes" : v === false ? "no" : v}`).join(" · ")}</div></div>)}
+    {admin && <details className="card"><summary><b>+ Build a survey</b></summary>
+      <Field label="Survey name"><input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Competitor price check" /></Field>
+      {draft.questions.map((q: any, i: number) => <div key={i} className="row">
+        <input placeholder={`Question ${i + 1}`} value={q.label} onChange={e => setQ(i, { label: e.target.value })} />
+        <select value={q.type} onChange={e => setQ(i, { type: e.target.value })}>{Object.entries(QT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        {q.type === "select" && <input placeholder="Choices, comma separated" value={q.options || ""} onChange={e => setQ(i, { options: e.target.value })} />}
+        {q.type === "price" && <input placeholder="Competitor brand" value={q.brand || ""} onChange={e => setQ(i, { brand: e.target.value })} />}
+        <label className="small"><input type="checkbox" checked={!!q.required} onChange={e => setQ(i, { required: e.target.checked })} /> required</label></div>)}
+      <div className="row-btns"><button className="sm ghost" onClick={() => setDraft({ ...draft, questions: [...draft.questions, { label: "", type: "text" }] })}>+ Question</button>
+        <button className="sm" onClick={async () => { if (await run(() => api(s, "/api/surveys/forms", { method: "POST", body: JSON.stringify(draft) }))) { setDraft({ name: "", questions: [{ label: "", type: "price", brand: "" }] }); reload(); } }}>Save survey</button></div>
+      {forms?.map(x => <div key={x.id} className="muted small">{x.name} · {x.questions.length} questions · <a href="#" onClick={async e => { e.preventDefault(); await run(() => api(s, `/api/surveys/forms/${x.id}`, { method: "PUT", body: JSON.stringify({ active: !x.active }) })); reload(); }}>{x.active ? "turn off" : "turn on"}</a></div>)}
+    </details>}</>;
+}

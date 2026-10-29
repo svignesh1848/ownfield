@@ -4,7 +4,7 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import type { Db } from "../db.js";
 
-export const EVENTS = ["order.created", "order.approved", "order.status_changed", "invoice.created", "credit_note.created", "collection.created", "stock.low", "van.closed", "claim.submitted", "claim.settled", "lead.converted", "test.ping"] as const;
+export const EVENTS = ["order.created", "order.approved", "order.status_changed", "invoice.created", "credit_note.created", "collection.created", "stock.low", "van.closed", "claim.submitted", "claim.settled", "lead.converted", "survey.submitted", "message.sent", "test.ping"] as const;
 export const MAX_ATTEMPTS = 8;
 /** Backoff after the n-th failed attempt: 30s, 1m, 2m, 4m ... capped at 6h. */
 export const backoffMs = (attempt: number) => Math.min(30_000 * 2 ** Math.max(0, attempt - 1), 6 * 3600_000);

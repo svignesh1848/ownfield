@@ -165,3 +165,25 @@ describe("offline sync", () => {
     } else expect(p1.status).toBe(400); // nothing outstanding to collect against is also fine
   });
 });
+
+describe("surveys", () => {
+  it("is off until enabled, builds a form, validates answers, dedupes offline retries and reports competitor prices", async () => {
+    await request(app).get("/api/surveys/forms").set(as("rep")).expect(403);
+    await on({ surveys: true });
+    await request(app).post("/api/surveys/forms").set(as("rep")).send({ name: "x", questions: [{ label: "a" }] }).expect(403);
+    await request(app).post("/api/surveys/forms").set(as("adm")).send({ name: "x", questions: [{ label: "c", type: "select" }] }).expect(400);
+    const f = (await request(app).post("/api/surveys/forms").set(as("adm")).send({ name: "Sample price check", questions: [
+      { label: "Rival 1L price", type: "price", brand: "Sample Rival", required: true }, { label: "Shelf", type: "select", options: "eye level,bottom" }, { label: "Promo running", type: "yesno" }] }).expect(201)).body;
+    expect(f.questions.map((q: any) => q.key)).toEqual(["rival_1l_price", "shelf", "promo_running"]);
+    await request(app).post("/api/surveys/responses").set(as("rep")).send({ formId: f.id, answers: { shelf: "eye level" } }).expect(400);
+    await request(app).post("/api/surveys/responses").set(as("rep")).send({ formId: f.id, answers: { rival_1l_price: 50, shelf: "top" } }).expect(400);
+    const r = await request(app).post("/api/surveys/responses").set(as("rep")).send({ formId: f.id, shopId: id.s, clientRef: "sv1", answers: { rival_1l_price: "52.5", shelf: "eye level", promo_running: "yes" } }).expect(201);
+    expect(r.body.answers).toEqual({ rival_1l_price: 52.5, shelf: "eye level", promo_running: true });
+    expect((await request(app).post("/api/surveys/responses").set(as("rep")).send({ formId: f.id, clientRef: "sv1", answers: { rival_1l_price: 1 } }).expect(200)).body.duplicate).toBe(true);
+    await request(app).post("/api/surveys/responses").set(as("rep")).send({ formId: f.id, shopId: id.s, answers: { rival_1l_price: 47.5 } }).expect(201);
+    const rep = (await request(app).get("/api/surveys/competitor-prices").set(as("adm")).expect(200)).body;
+    expect(rep[0]).toMatchObject({ brand: "Sample Rival", reports: 2, outlets: 1, min: 47.5, max: 52.5, avg: 50 });
+    await request(app).get("/api/surveys/competitor-prices").set(as("rep")).expect(403);
+    expect((await request(app).get("/api/surveys/responses").set(as("rep")).expect(200)).body).toHaveLength(2);
+  });
+});
