@@ -77,6 +77,16 @@ Open-source, **industry-agnostic** field sales and distributor management for FM
 
 > GST rates in the industry templates are **samples**. Verify the rate for every HSN/SAC code with your tax advisor. E-invoicing (IRN/QR) and e-way bills are not included yet.
 
+## Phase 3 features (each is a company feature toggle in Company settings)
+- **Store checks (audits)** — admin builds checklists (yes/no, number, text, photo questions); reps fill them during a visit and add shelf photos; managers see a report with scores and photos.
+- **Expenses** — reps claim an amount with a category and a bill photo; managers approve or reject (with a reason); monthly summary per rep and category.
+- **Leave & attendance** — reps apply for leave; managers approve; on approved leave days the beat shows "on leave" and check-ins are paused; monthly attendance (days worked / on leave).
+- **Incentives** — admin sets simple rules: reach X% of a target → earn ₹Y (highest step counts); reps see "earned this month" on their home screen.
+- **Retailer app** — a `retailer` login linked to one outlet (users sheet: Role `retailer` + `Shop Code`) can browse products, place orders that go to its distributor's inbox, and see its order history.
+
+Photos are shrunk on the phone (about 1280px JPEG) before upload; the server accepts images up to 1 MB (`PHOTO_MAX_BYTES`).
+On start the server adds labelled sample data for these features to the company with code DEMO only, if missing.
+
 ## Stack
 Node 20 + TypeScript + Express + PostgreSQL. React + Vite on the front end. Tests use Vitest + Supertest against in-memory Postgres (pg-mem).
 
@@ -95,7 +105,7 @@ npm test                 # API tests
 npm run demo -w server   # in-memory demo with SAMPLE data on :8080 (run `npm run build -w web` first)
 npm run dev -w web       # Vite dev server proxying /api
 ```
-Demo logins: `PLATFORM / owner@example.com / demo`, `DEMO / admin@example.com / demo`, `DEMO / rep@example.com / changeme123`, `DEMO / distributor@example.com / changeme123`.
+Demo logins (hosted demo, sample data): `DEMO / admin@example.com / Demo@2026`, `DEMO / rep@example.com / Demo@2026`, `DEMO / distributor@example.com / Demo@2026`, `DEMO / retailer@example.com / Demo@2026` (retailer app). Local `npm run demo`: `PLATFORM / owner@example.com / demo`, `DEMO / admin@example.com / demo`, `DEMO / rep@example.com / changeme123`.
 
 Upload templates are in `sample-data/`. All sample data there is made up.
 

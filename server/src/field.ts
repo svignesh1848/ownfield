@@ -127,9 +127,24 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
 
   // ---- Orders (idempotent on clientRef so the offline queue can safely retry) ----
-  app.post("/api/orders", auth("sales_rep"), wrap(async (req, res) => {
+  // Retailers order for their own outlet only (Retailer app feature); the order goes to the outlet's distributor like a rep order.
+  const retailerShop = async (req: any, cid: number) => {
+    if (req.user.role !== "retailer") return null;
+    const { settings } = await getCompany(db, cid); if (!settings.features.retailerApp) throw bad("the retailer app is turned off for this company", 403);
+    const u = (await db.query("SELECT shop_id FROM users WHERE id=$1 AND company_id=$2", [req.user.uid, cid])).rows[0];
+    if (!u?.shop_id) throw bad("your login is not linked to an outlet", 403);
+    return u.shop_id as number;
+  };
+  app.get("/api/retailer/me", auth("retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const { clientRef, shopId, lines } = req.body || {};
+    const sid = await retailerShop(req, cid);
+    const s = (await db.query("SELECT s.id,s.code,s.name,s.city,s.phone,d.name AS distributor_name FROM shops s LEFT JOIN users d ON d.id=s.distributor_id WHERE s.id=$1", [sid])).rows[0];
+    res.json(s);
+  }));
+  app.post("/api/orders", auth("sales_rep", "retailer"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const own = await retailerShop(req, cid);
+    const { clientRef, lines } = req.body || {}; const shopId = own ?? req.body?.shopId;
     if (!clientRef) throw bad("clientRef required");
     const dup = (await db.query("SELECT * FROM orders WHERE company_id=$1 AND client_ref=$2", [cid, String(clientRef)])).rows[0];
     if (dup) return res.status(200).json({ ...dup, duplicate: true });
@@ -157,19 +172,21 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     res.status(201).json(credit.ok ? o : { ...o, creditWarning: credit.reasons });
   }));
   // Preview: price a cart (schemes applied) without placing it — the rep app shows savings before submitting.
-  app.post("/api/orders/preview", auth("sales_rep", "company_admin", "manager"), wrap(async (req, res) => {
+  app.post("/api/orders/preview", auth("sales_rep", "company_admin", "manager", "retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const shop = await shopIn(cid, req.body?.shopId); if (!shop) throw bad("shop not found", 404);
+    const own = await retailerShop(req, cid);
+    const shop = await shopIn(cid, own ?? req.body?.shopId); if (!shop) throw bad("shop not found", 404);
     const items = (Array.isArray(req.body?.lines) ? req.body.lines : []).filter((l: any) => Number(l.qty) > 0);
     const { settings } = await getCompany(db, cid);
     const { priced } = await priceLines(db, cid, settings, items, shop.distributor_id ?? null);
     const r = (n: number) => Math.round(n * 100) / 100;
     res.json({ lines: priced, gross: r(priced.reduce((a, l) => a + l.gross, 0)), savings: r(priced.reduce((a, l) => a + l.saving, 0)), total: r(priced.reduce((a, l) => a + l.amount, 0)) });
   }));
-  app.get("/api/orders", auth("company_admin", "manager", "sales_rep", "distributor"), wrap(async (req, res) => {
+  app.get("/api/orders", auth("company_admin", "manager", "sales_rep", "distributor", "retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2" : "";
-    const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
+    if (req.user.role === "retailer") await retailerShop(req, cid);
+    const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2" : req.user.role === "retailer" ? "AND o.shop_id=(SELECT shop_id FROM users WHERE id=$2)" : "";
+    const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name, u.role AS placed_by_role FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
       WHERE o.company_id=$1 ${scope} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
     for (const o of orders) {
       o.lines = (await db.query(`SELECT l.id,l.qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,l.gross,l.free,l.scheme_id,sc.name AS scheme,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
@@ -202,7 +219,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
     const since = new Date(Date.now() - days * 864e5);
     const vs = (await db.query("SELECT v.rep_id, u.name, v.check_in_at FROM visits v JOIN users u ON u.id=v.rep_id WHERE v.company_id=$1 AND v.check_in_at>=$2", [cid, since])).rows;
-    const os = (await db.query("SELECT o.rep_id, u.name, o.created_at, o.total FROM orders o JOIN users u ON u.id=o.rep_id WHERE o.company_id=$1 AND o.created_at>=$2", [cid, since])).rows;
+    const os = (await db.query("SELECT o.rep_id, u.name, o.created_at, o.total FROM orders o JOIN users u ON u.id=o.rep_id WHERE o.company_id=$1 AND o.created_at>=$2 AND u.role='sales_rep'", [cid, since])).rows;
     const m = new Map<string, any>();
     const row = (rep: number, name: string, d: Date) => {
       const k = `${dayKey(d)}|${rep}`;

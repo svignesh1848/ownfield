@@ -189,3 +189,19 @@ export function Incentives({ s }: ViewProps) {
       {r.lines.map((l: any) => <div key={l.ruleId} className="muted small">{l.rule}: {l.target == null ? "no target set this month" : `${l.pct}% of ${METRIC[l.metric]} target → ${inr0(l.earned)}`}
         {l.next && ` · reach ${l.next.minPct}% to earn ${inr0(l.next.amount)}`}</div>)}</div>)}</>;
 }
+
+// ---------- 5) Retailer app ----------
+export function RetailerHome({ s, go }: ViewProps) {
+  const [me, setMe] = useState<any>(null); const [orders, setOrders] = useState<any[] | null>(null);
+  useEffect(() => { api(s, "/api/retailer/me").then(setMe).catch(e => setMe({ err: e.message })); api(s, "/api/orders").then(setOrders).catch(() => setOrders([])); }, []);
+  if (!me) return <Loading />;
+  if (me.err) return <Empty icon="⚠️" title="Your shop app is not ready" text={me.err} />;
+  const open = (orders || []).filter(o => ["placed", "accepted"].includes(o.status)).length;
+  return <><h2 className="hello">Welcome, {me.name}</h2>
+    <p className="muted">{me.distributor_name ? <>Your orders go to <b>{me.distributor_name}</b>.</> : "Your supplier will confirm your orders."}</p>
+    <div className="tiles">
+      <button className="tile accent" onClick={() => go("order")}><span className="tile-ic">🛒</span><span className="tile-t">Place an order</span><span className="tile-s">Pick products and quantities</span></button>
+      <button className="tile" onClick={() => go("orders")}><span className="tile-ic">📦</span><span className="tile-t">My orders</span><span className="tile-s">{open ? `${open} on the way` : "See past orders"}</span></button>
+      <button className="tile" onClick={() => go("catalog")}><span className="tile-ic">📚</span><span className="tile-t">Products</span><span className="tile-s">Prices and what's available</span></button>
+    </div></>;
+}

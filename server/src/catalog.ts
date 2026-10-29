@@ -233,7 +233,7 @@ export async function runImport(c: Imp, kind: string, rows: Record<string, unkno
 
 export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, companyUsage }: Ctx) {
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-  const ANY = ["company_admin", "manager", "sales_rep", "distributor"];
+  const ANY = ["company_admin", "manager", "sales_rep", "distributor", "retailer"];
 
   app.get("/api/templates", (_q, res) => res.json(INDUSTRIES.map(id => ({ id, label: TEMPLATES[id].label, description: TEMPLATES[id].description, settings: TEMPLATES[id].settings }))));
 

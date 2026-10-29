@@ -108,6 +108,8 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
   useEffect(() => { if (!shopId || !f.invoicing || !navigator.onLine) return setCredit(null);
     api(s, `/api/credit-check?shopId=${shopId}&amount=${pv ? pv.total : total}`).then(setCredit).catch(() => setCredit(null)); }, [shopId, pv, step]);
   const shop = shops.find(x => String(x.id) === shopId);
+  const retailer = s.user.role === "retailer";
+  useEffect(() => { if (retailer && step === "shop" && shops.length === 1) { setShopId(String(shops[0].id)); setStep("items"); } }, [shops, step]);
   const submit = async () => {
     const lines = cartLines(); if (!shopId || !lines.length) return;
     setBusy(true);
@@ -176,7 +178,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
 const Steps = ({ n }: { n: number }) => <ol className="steps">{["Outlet", "Products", "Review"].map((t, i) => <li key={t} className={i + 1 === n ? "on" : i + 1 < n ? "done" : ""}>{t}</li>)}</ol>;
 
 const STATUS: Record<string, string> = { placed: "New", accepted: "Accepted", fulfilled: "Delivered", rejected: "Rejected" };
-const OrderCard = ({ o, children }: { o: any; children?: any }) => <div className="row"><b>#{o.id} {o.shop_name}</b> <span className={`pill ${o.status}`}>{STATUS[o.status] || o.status}</span>
+const OrderCard = ({ o, children }: { o: any; children?: any }) => <div className="row"><b>#{o.id} {o.shop_name}</b> <span className={`pill ${o.status}`}>{STATUS[o.status] || o.status}</span>{o.placed_by_role === "retailer" && <span className="pill">🏪 From the shop</span>}
   <div className="muted">{o.rep_name} · {fmtDate(o.created_at, true)} · {inr(o.total)}{Number(o.savings) > 0 ? ` · saved ${inr(o.savings)}` : ""}</div>
   {o.lines.map((l: any) => <div className="muted small" key={l.id}>{l.item_name} {attrText(l.attrs)} — {l.qty} {l.uom}{l.free ? ` FREE (${l.scheme})` : l.discount_pct > 0 ? ` (−${l.discount_pct}%${l.scheme ? ` ${l.scheme}` : ""})` : ""} = {inr(l.amount)}
     {l.allocations?.length > 0 && <span className="batches" title="Batches picked, nearest expiry first"> {l.allocations.map((a: any) => `${a.batch_no || "stock"}${a.expiry ? ` exp ${fmtDate(a.expiry)}` : ""} ×${a.qty}`).join("; ")}</span>}</div>)}{children}</div>;

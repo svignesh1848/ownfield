@@ -16,9 +16,10 @@ import { registerAuditRoutes } from "./audits.js";
 import { registerExpenseRoutes } from "./expenses.js";
 import { registerLeaveRoutes } from "./leave.js";
 import { registerIncentiveRoutes } from "./incentives.js";
+import { getCompany } from "./catalog.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 
-export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor"] as const;
+export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor", "retailer"] as const;
 export type Role = (typeof ROLES)[number];
 export const PLATFORM_CODE = "PLATFORM";
 type Claims = { uid: number; companyId: number | null; role: Role };
@@ -72,10 +73,17 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     if (!u.email || !u.name || !u.password) throw Object.assign(new Error("email, name, password required"), { status: 400 });
     const usage = await companyUsage(companyId);
     if (usage.atLimit) throw Object.assign(new Error(`user limit reached (${usage.limit})`), { status: 409 });
+    let shopId: number | null = null;
+    if (role === "retailer") { // a retailer login is linked to exactly one outlet
+      const code = String(u.shop_code ?? u.shopCode ?? u.outlet_code ?? "").trim();
+      const sh = (await db.query(`SELECT id FROM shops WHERE company_id=$1 AND ${code ? "code=$2" : "id=$2"}`, [companyId, code || Number(u.shopId) || 0])).rows[0];
+      if (!sh) throw Object.assign(new Error("retailer needs an outlet (shop code)"), { status: 400 });
+      shopId = sh.id;
+    }
     const hash = await bcrypt.hash(String(u.password), 10);
     const r = await db.query(
-      "INSERT INTO users (company_id,email,name,phone,role,password_hash,drug_licence) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,email,name,role",
-      [companyId, String(u.email).toLowerCase().trim(), u.name, String(u.phone ?? "") || null, role, hash, String(u.drug_licence ?? "").trim() || null]);
+      "INSERT INTO users (company_id,email,name,phone,role,password_hash,drug_licence,shop_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,email,name,role,shop_id",
+      [companyId, String(u.email).toLowerCase().trim(), u.name, String(u.phone ?? "") || null, role, hash, String(u.drug_licence ?? "").trim() || null, shopId]);
     return r.rows[0];
   }
 
@@ -92,6 +100,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
       : (await db.query("SELECT u.*, c.code FROM users u JOIN companies c ON c.id=u.company_id WHERE c.code=$1 AND u.email=$2 AND u.active=TRUE", [code, String(email).toLowerCase()])).rows;
     const u = rows[0];
     if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return res.status(401).json({ error: "Wrong email or password" });
+    if (u.role === "retailer" && !(await getCompany(db, u.company_id)).settings.features.retailerApp) return res.status(403).json({ error: "The retailer app is turned off for this company. Please contact your supplier." });
     const token = jwt.sign({ uid: u.id, companyId: u.company_id, role: u.role }, secret, { expiresIn: "12h" });
     res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code } });
   }));
@@ -167,13 +176,13 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   }));
 
   // ---- Company scoped ----
-  const anyCompanyRole = auth("company_admin", "manager", "sales_rep", "distributor");
+  const anyCompanyRole = auth("company_admin", "manager", "sales_rep", "distributor", "retailer");
   app.get("/api/company/usage", auth("company_admin", "manager"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return; res.json(await companyUsage(cid));
   }));
   app.get("/api/users", auth("company_admin", "manager"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    res.json((await db.query("SELECT id,email,name,phone,role,drug_licence,active FROM users WHERE company_id=$1 ORDER BY id", [cid])).rows);
+    res.json((await db.query("SELECT id,email,name,phone,role,drug_licence,active,shop_id FROM users WHERE company_id=$1 ORDER BY id", [cid])).rows);
   }));
   app.post("/api/users", auth("company_admin"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
@@ -182,7 +191,8 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   }));
   app.get("/api/shops", anyCompanyRole, wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    res.json((await db.query("SELECT * FROM shops WHERE company_id=$1 ORDER BY name", [cid])).rows.map(r => ({ ...r, custom: parseJson(r.custom, {}) })));
+    const own = req.user.role === "retailer";
+    res.json((await db.query(`SELECT * FROM shops WHERE company_id=$1 ${own ? "AND id=(SELECT shop_id FROM users WHERE id=$2)" : ""} ORDER BY name`, own ? [cid, req.user.uid] : [cid])).rows.map(r => ({ ...r, custom: parseJson(r.custom, {}) })));
   }));
   registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, companyUsage });
   registerFieldRoutes({ app, db, auth, wrap, tenant });

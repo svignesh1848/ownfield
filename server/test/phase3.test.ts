@@ -123,10 +123,34 @@ describe("incentives", () => {
   });
 });
 
+describe("retailer app", () => {
+  it("retailer login linked to an outlet: catalog, orders to its distributor, own history only", async () => {
+    await request(app).post("/api/users").set(H("a")).send({ email: "shop@x.com", name: "Shop Owner", password: "pw", role: "retailer" }).expect(400);
+    await request(app).post("/api/users").set(H("a")).send({ email: "shop@x.com", name: "Shop Owner", password: "pw", role: "retailer", shopId: ids.s1 }).expect(201);
+    expect((await request(app).post("/api/auth/login").send({ companyCode: "ACME", email: "shop@x.com", password: "pw" })).status).toBe(403);
+    await features("a", { retailerApp: true }).expect(200);
+    T.shop = await login("ACME", "shop@x.com");
+    expect((await request(app).get("/api/retailer/me").set(H("shop")).expect(200)).body).toMatchObject({ name: "Sample Shop 1", distributor_name: "Dist One" });
+    expect((await request(app).get("/api/items").set(H("shop")).expect(200)).body.length).toBeGreaterThan(0);
+    expect((await request(app).get("/api/shops").set(H("shop"))).body.map((x: any) => x.id)).toEqual([ids.s1]);
+    const o = (await request(app).post("/api/orders").set(H("shop")).send({ clientRef: "ret-1", shopId: 999, lines: [{ sku: "T-2Y", qty: 2 }] }).expect(201)).body;
+    expect(o.shop_id).toBe(ids.s1); expect(Number(o.total)).toBe(600);
+    const inbox = (await request(app).get("/api/orders").set(H("d1"))).body;
+    expect(inbox.find((x: any) => x.client_ref === "ret-1")).toMatchObject({ placed_by_role: "retailer", rep_name: "Shop Owner" });
+    expect((await request(app).get("/api/orders").set(H("shop"))).body.map((x: any) => x.client_ref)).toEqual(["ret-1"]);
+    await request(app).get("/api/dashboard").set(H("shop")).expect(403);
+    await request(app).get("/api/expenses").set(H("shop")).expect(403);
+    expect((await request(app).get("/api/dashboard").set(H("m"))).body.every((r: any) => r.rep !== "Shop Owner")).toBe(true);
+  });
+});
+
 describe("DEMO sample data", () => {
   it("seeds labelled sample data idempotently", async () => {
     await seedDemo(db); await seedDemo(db);
     const t = (await request(app).get("/api/audit-templates").set(H("demo")).expect(200)).body;
     expect(t).toHaveLength(1); expect(t[0].name).toMatch(/sample/);
+    const st = (await request(app).get("/api/company/settings").set(H("demo"))).body.settings.features;
+    expect([st.audits, st.expenses, st.leave, st.incentives, st.retailerApp]).toEqual([true, true, true, true, true]);
+    expect((await request(app).get("/api/incentive-rules").set(H("demo"))).body[0].name).toMatch(/sample/);
   });
 });

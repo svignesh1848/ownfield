@@ -1,5 +1,6 @@
 // Idempotent sample data for the DEMO company, run on server start. Everything created here is labelled "sample".
 // It only touches the company with code DEMO and only adds what is missing.
+import bcrypt from "bcryptjs";
 import type { Db } from "./db.js";
 import { parseJson } from "./catalog.js";
 import { savePhoto, SAMPLE_PNG } from "./photos.js";
@@ -55,5 +56,11 @@ export async function seedDemo(db: Db, code = "DEMO") {
     const month = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
     if (rep && !(await one(db, "SELECT id FROM targets WHERE company_id=$1 AND rep_id=$2 AND month=$3 AND metric='value'", [cid, rep.id, month])))
       await db.query("INSERT INTO targets (company_id,rep_id,month,metric,target) VALUES ($1,$2,$3,'value',$4)", [cid, rep.id, month, 5000]);
+  }
+  // 5) Retailer app: retailer@example.com / Demo@2026 linked to a sample outlet that has a distributor
+  await enable(db, cid, ["retailerApp"]);
+  if (!(await one(db, "SELECT id FROM users WHERE company_id=$1 AND email='retailer@example.com'", [cid]))) {
+    const shop = await one(db, "SELECT id FROM shops WHERE company_id=$1 AND distributor_id IS NOT NULL ORDER BY id", [cid]) || await one(db, "SELECT id FROM shops WHERE company_id=$1 ORDER BY id", [cid]);
+    if (shop) await db.query("INSERT INTO users (company_id,email,name,role,password_hash,shop_id) VALUES ($1,'retailer@example.com','Sample Retailer','retailer',$2,$3)", [cid, await bcrypt.hash("Demo@2026", 10), shop.id]);
   }
 }

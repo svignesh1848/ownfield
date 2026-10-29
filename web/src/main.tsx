@@ -8,7 +8,7 @@ import { Collections } from "./collect";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 import { Invoices, Targets, Reports, Visits } from "./step4";
 import { PurchaseOrders, DistributorTerms } from "./po";
-import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives } from "./phase3";
+import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives, RetailerHome } from "./phase3";
 
 export type Session = { token: string; user: { id: number; name: string; role: string; companyCode: string | null } };
 const SAVED: Record<string, string> = { POST: "Saved", PUT: "Changes saved", PATCH: "Changes saved", DELETE: "Deleted" };
@@ -40,9 +40,10 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     <div className="brand"><span className="logo">FF</span><div><h1>FieldForce</h1><p className="muted">Sales & distributor app</p></div></div>
     <Field label="Company code" help="The short code your company uses, e.g. DEMO. Ask your administrator if you don't know it." error={fe("companyCode")}>
       <input autoCapitalize="characters" autoComplete="organization" value={f.companyCode} onChange={e => setF({ ...f, companyCode: e.target.value })} /></Field>
-    {demo && <div className="hint"><b>Sample logins for the DEMO company</b><br />Admin: admin@example.com / demo<br />Sales rep: rep@example.com / changeme123<br /><span className="muted">All DEMO data is sample data.</span>
-      <div className="row-btns"><button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "admin@example.com", password: "demo" })}>Use admin</button>
-        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "rep@example.com", password: "changeme123" })}>Use sales rep</button></div></div>}
+    {demo && <div className="hint"><b>Sample logins for the DEMO company</b><br />Admin: admin@example.com / Demo@2026<br />Sales rep: rep@example.com / Demo@2026<br />Distributor: distributor@example.com / Demo@2026<br />Shop (retailer): retailer@example.com / Demo@2026<br /><span className="muted">All DEMO data is sample data.</span>
+      <div className="row-btns"><button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "admin@example.com", password: "Demo@2026" })}>Use admin</button>
+        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "rep@example.com", password: "Demo@2026" })}>Use sales rep</button>
+        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "retailer@example.com", password: "Demo@2026" })}>Use shop</button></div></div>}
     <Field label="Email" help="The email address you were registered with." error={fe("email")}>
       <input type="email" inputMode="email" autoComplete="username" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
     <Field label="Password" error={fe("password")}>
@@ -174,13 +175,14 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
     ["Distributors", ["distributors", ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : [])]],
     ["Finance", [...(f.invoicing ? ["invoices", "collections"] : []), ...(f.expenses ? ["expenses"] : []), "reports"]],
     ["Setup", ["catalog", "users", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : [])] : [])]]]
+    : role === "retailer" ? [["Menu", ["home", "order", "orders", "catalog"]]]
     : role === "sales_rep" ? [["Menu", ["home", "beat", "order", "orders", ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "catalog"]]]
     : [["Menu", ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "catalog"]]];
   const tabs = groups.flatMap(g => g[1]);
-  const primary = (mgr ? ["home", "orders", f.invoicing ? "collections" : "dashboard", "reports"] : role === "sales_rep" ? ["home", "beat", "order", f.invoicing ? "collect" : "orders"]
+  const primary = (mgr ? ["home", "orders", f.invoicing ? "collections" : "dashboard", "reports"] : role === "retailer" ? ["home", "order", "orders", "catalog"] : role === "sales_rep" ? ["home", "beat", "order", f.invoicing ? "collect" : "orders"]
     : ["home", "inbox", f.invoicing && f.distributorBilling ? "invoices" : "catalog", f.stock ? "stock" : f.purchaseOrders ? "POs" : "profile"]).filter(t => tabs.includes(t));
   const cur = tabs.includes(tab) ? tab : "home";
-  const views: Record<string, any> = { home: mgr ? ManagerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
+  const views: Record<string, any> = { home: mgr ? ManagerHome : role === "retailer" ? RetailerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
     collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: Users, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
   const C = views[cur];
@@ -201,7 +203,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
       <div className="who"><b>{s.user.name}</b><span>{ROLE[role]} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>Sign out</button></div></div></div>}
   </div>;
 }
-const ROLE: Record<string, string> = { company_admin: "Administrator", manager: "Manager", sales_rep: "Sales rep", distributor: "Distributor", platform_owner: "Platform owner" };
+const ROLE: Record<string, string> = { company_admin: "Administrator", manager: "Manager", sales_rep: "Sales rep", distributor: "Distributor", retailer: "Retailer (shop)", platform_owner: "Platform owner" };
 
 function Users({ s, cfg, go }: ViewProps) {
   const [rows, setRows] = useState<any[] | null>(null); useEffect(() => { api(s, "/api/users").then(setRows); }, []);

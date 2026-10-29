@@ -84,7 +84,7 @@ export function describeScheme(s: any) {
   }
 }
 
-const ANY = ["company_admin", "manager", "sales_rep", "distributor"];
+const ANY = ["company_admin", "manager", "sales_rep", "distributor", "retailer"];
 export function registerSchemeRoutes({ app, db, auth, wrap, tenant }: { app: Express; db: any; auth: (...r: any[]) => any; tenant: (req: any, res: any) => number | null; wrap: (fn: (req: any, res: any) => Promise<unknown>) => any }) {
   app.get("/api/schemes", auth(...ANY), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
