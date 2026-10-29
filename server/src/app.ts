@@ -18,11 +18,13 @@ import { registerLeaveRoutes } from "./leave.js";
 import { registerIncentiveRoutes } from "./incentives.js";
 import { getCompany } from "./catalog.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
+import { securityHeaders, tightCors, loginGuard, audit, errorHandler } from "./security.js";
+import { registerAccountRoutes, newDeviceCheck, totpVerify } from "./accounts.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor", "retailer"] as const;
 export type Role = (typeof ROLES)[number];
 export const PLATFORM_CODE = "PLATFORM";
-type Claims = { uid: number; companyId: number | null; role: Role };
+type Claims = { uid: number; companyId: number | null; role: Role; tv?: number; enroll?: boolean };
 type AuthReq = Request & { user: Claims };
 
 export const FREE_PLAN_USER_LIMIT = Number(process.env.FREE_PLAN_USER_LIMIT || 5);
@@ -42,19 +44,35 @@ export function usageInfo(count: number, limit: number) {
 
 export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret-change-me") {
   const app = express();
-  app.use(express.json());
+  app.set("trust proxy", 1); // one hop: nginx on the same box
+  app.disable("x-powered-by");
+  securityHeaders(app); tightCors(app);
+  app.use(express.json({ limit: "1mb" }));
+  const guard = loginGuard();
+  const idleMs = () => Number(process.env.IDLE_LOGOUT_MIN || 60) * 60_000;
+  const lastSeen = new Map<string, number>();
 
   const wrap = (fn: (req: AuthReq, res: Response) => Promise<unknown>) =>
     (req: Request, res: Response, next: NextFunction) => fn(req as AuthReq, res).catch(next);
 
+  // Every request re-checks the user row: disabled users and bumped token versions (password change) are rejected at once.
   const auth = (...roles: Role[]) => (req: Request, res: Response, next: NextFunction) => {
     const h = req.headers.authorization || "";
-    try {
-      const c = jwt.verify(h.replace(/^Bearer /, ""), secret) as Claims;
+    let c: Claims;
+    try { c = jwt.verify(h.replace(/^Bearer /, ""), secret) as Claims; } catch { return res.status(401).json({ error: "unauthorized" }); }
+    db.query("SELECT u.active, u.token_version, c.idle_minutes FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1", [c.uid]).then(r => {
+      const u = r.rows[0];
+      if (!u || !u.active || Number(u.token_version || 0) !== Number(c.tv || 0)) return res.status(401).json({ error: "Your session has ended. Please sign in again." });
+      const key = `${c.uid}:${c.tv || 0}:${(c as any).iat}`, now = Date.now(), last = lastSeen.get(key);
+      const idle = u.idle_minutes ? Number(u.idle_minutes) * 60_000 : idleMs();
+      if (last && now - last > idle) { lastSeen.delete(key); return res.status(401).json({ error: "Signed out after inactivity. Please sign in again." }); }
+      lastSeen.set(key, now); if (lastSeen.size > 5000) for (const [k, t] of lastSeen) if (now - t > idle) lastSeen.delete(k);
+      if (c.enroll && !/^\/api\/me\/(totp|password)|^\/api\/me$/.test(req.path)) return res.status(403).json({ error: "Set up two-step sign-in first", enrollTotp: true });
       if (roles.length && !roles.includes(c.role)) return res.status(403).json({ error: "forbidden" });
       (req as AuthReq).user = c; next();
-    } catch { res.status(401).json({ error: "unauthorized" }); }
+    }).catch(next);
   };
+  const sign = (u: any, extra: object = {}) => jwt.sign({ uid: u.id, companyId: u.company_id, role: u.role, tv: Number(u.token_version || 0), ...extra }, secret, { expiresIn: "12h" });
   // Tenant guard: every company-scoped route requires a company id from the token.
   const tenant = (req: AuthReq, res: Response) => {
     if (req.user.companyId == null) { res.status(400).json({ error: "company-scoped route" }); return null; }
@@ -89,34 +107,56 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
 
   app.get("/api/health", (_q, res) => res.json({ ok: true }));
 
-  app.post("/api/auth/login", wrap(async (req, res) => {
-    const { companyCode, email, password } = req.body || {};
-    const code = String(companyCode || "").toUpperCase().trim();
-    if (!code || !email || !password) return res.status(400).json({ error: "Enter your company code, email and password" });
-    if (code !== PLATFORM_CODE && !(await db.query("SELECT id FROM companies WHERE code=$1", [code])).rows[0])
-      return res.status(404).json({ error: "Company code not found. Check the code your administrator gave you." });
+  app.post("/api/auth/login", guard.ipLimiter, wrap(async (req, res) => {
+    const { companyCode, email, password, totp, deviceId } = req.body || {};
+    const code = String(companyCode || "").toUpperCase().trim(), mail = String(email || "").toLowerCase().trim();
+    if (!code || !mail || !password) return res.status(400).json({ error: "Enter your company code, email and password" });
+    const acct = `${code}|${mail}`, ip = req.ip || "?";
+    const co = code === PLATFORM_CODE ? { id: null } : (await db.query("SELECT id FROM companies WHERE code=$1", [code])).rows[0];
+    if (!co) return res.status(404).json({ error: "Company code not found. Check the code your administrator gave you." });
+    if (guard.locked(acct)) { await audit(db, { companyId: co.id, action: "login.locked", target: acct, ip }); return res.status(429).json({ error: "Too many failed sign-ins. This account is locked for 15 minutes." }); }
     const rows = code === PLATFORM_CODE
-      ? (await db.query("SELECT u.*, NULL AS code FROM users u WHERE u.company_id IS NULL AND u.email=$1 AND u.role='platform_owner'", [String(email).toLowerCase()])).rows
-      : (await db.query("SELECT u.*, c.code FROM users u JOIN companies c ON c.id=u.company_id WHERE c.code=$1 AND u.email=$2 AND u.active=TRUE", [code, String(email).toLowerCase()])).rows;
+      ? (await db.query("SELECT u.*, NULL AS code, FALSE AS require_totp, FALSE AS device_binding FROM users u WHERE u.company_id IS NULL AND u.email=$1 AND u.role='platform_owner'", [mail])).rows
+      : (await db.query("SELECT u.*, c.code, c.require_totp, c.device_binding FROM users u JOIN companies c ON c.id=u.company_id WHERE c.code=$1 AND u.email=$2 AND u.active=TRUE", [code, mail])).rows;
     const u = rows[0];
-    if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return res.status(401).json({ error: "Wrong email or password" });
+    const fail = async (why: string) => {
+      const n = guard.failed(acct);
+      await audit(db, { companyId: u?.company_id, userId: u?.id, action: "login.failed", target: acct, detail: { why, n }, ip });
+      return res.status(401).json({ error: "Wrong email or password" });
+    };
+    if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return fail("password");
+    if (u.totp_enabled) {
+      if (!totp) return res.status(401).json({ error: "Enter the 6-digit code from your authenticator app", totpRequired: true });
+      if (!totpVerify(u.totp_secret, String(totp))) return fail("totp");
+    }
     if (u.role === "retailer" && !(await getCompany(db, u.company_id)).settings.features.retailerApp) return res.status(403).json({ error: "The retailer app is turned off for this company. Please contact your supplier." });
-    const token = jwt.sign({ uid: u.id, companyId: u.company_id, role: u.role }, secret, { expiresIn: "12h" });
-    res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code } });
+    if (u.device_binding && u.role === "sales_rep") {
+      const dev = String(deviceId || "").slice(0, 100);
+      if (!dev) return res.status(400).json({ error: "This company requires a registered device. Please update the app." });
+      if (!u.device_id) await db.query("UPDATE users SET device_id=$1 WHERE id=$2", [dev, u.id]);
+      else if (u.device_id !== dev) { await audit(db, { companyId: u.company_id, userId: u.id, action: "login.device_blocked", target: mail, ip }); return res.status(403).json({ error: "This account is linked to another phone. Ask your administrator to reset the device." }); }
+    }
+    guard.succeeded(acct);
+    const ua = String(req.headers["user-agent"] || "").slice(0, 200);
+    await newDeviceCheck(db, u, ip, ua);
+    await audit(db, { companyId: u.company_id, userId: u.id, action: "login.success", target: mail, detail: { ua }, ip });
+    const enroll = !!u.require_totp && !u.totp_enabled;
+    const token = sign(u, enroll ? { enroll: true } : {});
+    res.json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code }, ...(enroll ? { enrollTotp: true } : {}) });
   }));
 
   // ---- Public self sign-up (free plan) ----
   const signupHits = new Map<string, number[]>();
   const SIGNUP_MAX = Number(process.env.SIGNUP_RATE_MAX || 5), SIGNUP_WINDOW_MS = 60 * 60 * 1000;
   const signupLimiter = (req: Request, res: Response, next: NextFunction) => {
-    const ip = String(req.headers["x-forwarded-for"] || "").split(",").pop()!.trim() || req.ip || "?";
+    const ip = req.ip || "?";
     const now = Date.now(), hits = (signupHits.get(ip) || []).filter(t => now - t < SIGNUP_WINDOW_MS);
     if (hits.length >= SIGNUP_MAX) return res.status(429).json({ error: "Too many sign-ups from this network. Please try again in an hour." });
     hits.push(now); signupHits.set(ip, hits); next();
   };
   const checkHits = new Map<string, number[]>();
   const signupCheckLimiter = (req: Request, res: Response, next: NextFunction) => {
-    const ip = String(req.headers["x-forwarded-for"] || "").split(",").pop()!.trim() || req.ip || "?";
+    const ip = req.ip || "?";
     const now = Date.now(), hits = (checkHits.get(ip) || []).filter(t => now - t < 60000);
     if (hits.length >= 60) return res.status(429).json({ error: "Too many requests. Please wait a minute." });
     hits.push(now); checkHits.set(ip, hits); next();
@@ -137,6 +177,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     const industry = String(b.industry || "custom"), adminName = String(b.adminName || "").trim();
     const email = String(b.email || "").toLowerCase().trim(), password = String(b.password || "");
     if (b.website) return res.status(400).json({ error: "Sign-up failed" }); // honeypot
+    if (b.consent !== true) return res.status(400).json({ field: "consent", error: "Please accept the privacy notice to continue" });
     if (name.length < 2 || name.length > 80) return res.status(400).json({ field: "companyName", error: "Enter your company name (2–80 letters)" });
     if (!CODE_RE.test(code) || code === PLATFORM_CODE) return res.status(400).json({ field: "companyCode", error: "Company code must be 3–12 letters or numbers, no spaces" });
     if (!(INDUSTRIES as readonly string[]).includes(industry)) return res.status(400).json({ field: "industry", error: "Pick a business type" });
@@ -148,7 +189,9 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     const c = (await db.query("INSERT INTO companies (code,name,user_limit,industry,settings) VALUES ($1,$2,$3,$4,$5) RETURNING *",
       [code, name, FREE_PLAN_USER_LIMIT, industry, JSON.stringify(templateSettings(industry))])).rows[0];
     const u = await addUser(c.id, { email, name: adminName, password, role: "company_admin" });
-    const token = jwt.sign({ uid: u.id, companyId: c.id, role: "company_admin" }, secret, { expiresIn: "12h" });
+    await db.query("UPDATE users SET consent_at=NOW() WHERE id=$1", [u.id]);
+    await audit(db, { companyId: c.id, userId: u.id, action: "signup", target: email, detail: { consent: true }, ip: req.ip });
+    const token = sign({ ...u, company_id: c.id, token_version: 0 });
     res.status(201).json({ token, user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: c.code }, plan: { name: "free", userLimit: FREE_PLAN_USER_LIMIT } });
   }));
 
@@ -165,6 +208,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     const c = (await db.query("INSERT INTO companies (code,name,user_limit,industry,settings) VALUES ($1,$2,$3,$4,$5) RETURNING *",
       [String(code).toUpperCase(), name, Number(userLimit), industry, JSON.stringify(templateSettings(industry))])).rows[0];
     const a = await addUser(c.id, { ...admin, role: "company_admin" });
+    await audit(db, { userId: req.user.uid, companyId: c.id, action: "platform.company_create", target: c.code, ip: req.ip });
     res.status(201).json({ company: c, admin: a });
   }));
   app.patch("/api/platform/companies/:id", auth("platform_owner"), wrap(async (req, res) => {
@@ -172,6 +216,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     if (!Number.isInteger(lim) || lim < 1) return res.status(400).json({ error: "userLimit must be positive integer" });
     const r = await db.query("UPDATE companies SET user_limit=$1 WHERE id=$2 RETURNING *", [lim, Number(req.params.id)]);
     if (!r.rows[0]) return res.status(404).json({ error: "not found" });
+    await audit(db, { userId: req.user.uid, companyId: r.rows[0].id, action: "platform.user_limit", detail: { userLimit: lim }, ip: req.ip });
     res.json(r.rows[0]);
   }));
 
@@ -187,6 +232,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   app.post("/api/users", auth("company_admin"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const u = await addUser(cid, req.body || {});
+    await audit(db, { companyId: cid, userId: req.user.uid, action: "user.create", target: u.email, detail: { role: u.role }, ip: req.ip });
     res.status(201).json({ user: u, usage: await companyUsage(cid) });
   }));
   app.get("/api/shops", anyCompanyRole, wrap(async (req, res) => {
@@ -206,6 +252,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerExpenseRoutes({ app, db, auth, wrap, tenant });
   registerLeaveRoutes({ app, db, auth, wrap, tenant });
   registerIncentiveRoutes({ app, db, auth, wrap, tenant });
+  registerAccountRoutes({ app, db, auth, wrap, tenant, guard });
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {
@@ -213,11 +260,8 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
     app.get(/^(?!\/api).*/, (_q, res) => res.sendFile(path.join(webDir, "index.html")));
   }
 
-  app.use((err: any, _q: Request, res: Response, _n: NextFunction) => {
-    const dup = err.code === "23505" || /duplicate|unique/i.test(err.message || "");
-    if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "photo is too large — please take a smaller photo" });
-    res.status(err.status || (dup ? 409 : 500)).json({ error: dup ? "already exists" : err.message });
-  });
+  app.use("/api", (_q, res) => res.status(404).json({ error: "not found" }));
+  app.use(errorHandler);
   return app;
 }
 

@@ -8,7 +8,7 @@ COPY . .
 RUN npm run build
 FROM node:20-alpine
 WORKDIR /app/server
-ENV NODE_ENV=production WEB_DIR=/app/web/dist
+ENV NODE_ENV=production WEB_DIR=/app/web/dist HOST=0.0.0.0
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/server/dist ./dist
 COPY --from=build /app/server/package.json ./

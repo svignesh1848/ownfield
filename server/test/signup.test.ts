@@ -5,7 +5,7 @@ import { createApp, passwordProblem, FREE_PLAN_USER_LIMIT } from "../src/app.js"
 import { migrate } from "../src/db.js";
 
 let app: any;
-const base = { companyName: "Sample Traders", companyCode: "SAMPLE1", industry: "fmcg", adminName: "Asha", email: "asha@example.com", password: "goodpass1" };
+const base = { companyName: "Sample Traders", companyCode: "SAMPLE1", industry: "fmcg", adminName: "Asha", email: "asha@example.com", password: "goodpass1", consent: true };
 beforeAll(async () => {
   process.env.SIGNUP_RATE_MAX = "4";
   const { Pool } = newDb().adapters.createPg();
