@@ -1,5 +1,6 @@
 // Step 4: targets vs achievement, visit photos, Excel/CSV report exports.
 import { schemeCost } from "./schemes.js";
+import { ageingRows } from "./collections.js";
 import type { Express, Response, Request, NextFunction } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -124,8 +125,9 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
           LEFT JOIN users u ON u.id=st.distributor_id WHERE st.company_id=$1 ORDER BY v.sku, st.expiry`, [cid])).rows.map(r => ({ location: r.location || "Company stock", sku: r.sku, item: r.name,
           batch: r.batch_no, expiry: r.expiry || "", qty_base: Number(r.qty), expired: r.expiry && r.expiry < today() ? "yes" : "" })); break;
       case "targets": rows = (await achievement(db, cid, String(req.query.month || to.slice(0, 7)))).flatMap(r => r.metrics.map(m => ({ month: r.month, rep: r.rep, metric: m.metric, target: m.target ?? "", actual: m.actual, pct: m.pct ?? "" }))); break;
+      case "ageing": rows = await ageingRows(db, cid, to); break;
       case "schemes": rows = await schemeCost(db, cid, inRange, dayKey); break;
-      default: throw bad("unknown report — use orders, visits, gst, stock, targets or schemes", 404);
+      default: throw bad("unknown report — use orders, visits, gst, stock, targets, schemes or ageing", 404);
     }
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: "no rows for this period" }]);
     const name = `${req.params.kind}-${from}-to-${to}`;

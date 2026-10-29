@@ -46,7 +46,7 @@ export function Targets({ s }: P) {
 export function Reports({ s, cfg }: P) {
   const t = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const [from, setFrom] = useState(`${t.slice(0, 8)}01`); const [to, setTo] = useState(t); const [msg, setMsg] = useState("");
-  const kinds = [["orders", "Orders (line level)"], ["visits", "Visits"], ...(cfg.settings.features.invoicing ? [["gst", "GST register (invoices + credit notes)"]] : []), ...(cfg.settings.features.schemes ? [["schemes", "Scheme cost (discounts + free goods)"]] : []),
+  const kinds = [["orders", "Orders (line level)"], ["visits", "Visits"], ...(cfg.settings.features.invoicing ? [["gst", "GST register (invoices + credit notes)"]] : []), ...(cfg.settings.features.invoicing ? [["ageing", "Outstanding ageing (0-30/31-60/61-90/90+)"]] : []), ...(cfg.settings.features.schemes ? [["schemes", "Scheme cost (discounts + free goods)"]] : []),
     ...(cfg.settings.features.stock ? [["stock", "Stock (current)"]] : []), ["targets", "Targets vs achievement (month of 'to')"]];
   const dl = async (k: string, fmt: string) => { try { const r = await authed(s, `/api/reports/${k}?from=${from}&to=${to}&format=${fmt}`); const a = document.createElement("a");
     a.href = URL.createObjectURL(await r.blob()); a.download = `${k}-${from}-to-${to}.${fmt}`; a.click(); } catch (e: any) { setMsg(e.message); } };

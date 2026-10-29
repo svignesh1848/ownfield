@@ -57,6 +57,15 @@ Open-source, **industry-agnostic** field sales and distributor management for FM
 
 - **(c) Schemes.** Four types: percent off, flat ₹ off per unit, buy X get Y free, and quantity or value slabs. Each can be limited to a product, category, distributor or date range. The best price scheme is applied to each order line automatically, and buy-X-get-Y adds free lines at ₹0. Invoices carry the same scheme pricing and free goods. The rep app previews savings before the order is placed (`POST /api/orders/preview`). The scheme-cost report (`/api/reports/schemes`) shows the discount given plus the value of free goods for each scheme.
 
+- **(d) Collections.**
+  - **Outstanding:** tracked per outlet for each issuer (the company or a billing distributor) as invoices − credit notes − payments, with advances shown separately.
+  - **Payments:** cash, UPI, cheque or NEFT (UPI, cheque and NEFT need a reference). Each payment is allocated FIFO or against the invoices you choose.
+  - **Receipts:** printable, numbered `RCPT/<FY>/<seq>` per issuer.
+  - **Cheque bounce:** reverses the allocations, so the invoices re-open, and the receipt is marked bounced.
+  - **Credit terms:** credit days and credit limit are set per company under Settings, and an outlet can override them with `PATCH /api/shops/:id {creditDays, creditLimit}`. A breach either warns (the order is placed with `creditWarning`) or blocks the order (409).
+  - **Ageing report:** buckets of 0-30, 31-60, 61-90 and 90+ days, exportable to Excel or CSV.
+  - **Rep app:** a Collect tab and an inline credit warning on the order form.
+
 > GST rates in the industry templates are **samples**. Verify the rate for every HSN/SAC code with your tax advisor. E-invoicing (IRN/QR) and e-way bills are not included yet.
 
 ## Stack

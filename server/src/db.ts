@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (company_id, email));
 CREATE TABLE IF NOT EXISTS shops (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), code TEXT NOT NULL,
-  name TEXT NOT NULL, owner_name TEXT, phone TEXT, address TEXT, city TEXT, pincode TEXT, state_code TEXT, gstin TEXT, drug_licence TEXT, custom TEXT,
+  name TEXT NOT NULL, owner_name TEXT, phone TEXT, address TEXT, city TEXT, pincode TEXT, state_code TEXT, gstin TEXT, drug_licence TEXT, custom TEXT, credit_days INTEGER, credit_limit NUMERIC,
   distributor_id INTEGER REFERENCES users(id), UNIQUE (company_id, code));
 CREATE TABLE IF NOT EXISTS items (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), code TEXT NOT NULL, name TEXT NOT NULL,
@@ -102,6 +102,13 @@ CREATE TABLE IF NOT EXISTS po_dispatches (
 CREATE TABLE IF NOT EXISTS po_dispatch_lines (
   id SERIAL PRIMARY KEY, dispatch_id INTEGER NOT NULL REFERENCES po_dispatches(id), po_line_id INTEGER NOT NULL REFERENCES po_lines(id),
   qty INTEGER NOT NULL, batch_no TEXT NOT NULL DEFAULT '', expiry TEXT);
+CREATE TABLE IF NOT EXISTS payments (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), issuer TEXT NOT NULL, number TEXT NOT NULL, fy TEXT NOT NULL,
+  shop_id INTEGER NOT NULL REFERENCES shops(id), pay_date TEXT NOT NULL, mode TEXT NOT NULL, reference TEXT, cheque_date TEXT, amount NUMERIC NOT NULL,
+  status TEXT NOT NULL DEFAULT 'cleared', bounce_reason TEXT, bounced_at TIMESTAMPTZ, collected_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, issuer, number));
+CREATE TABLE IF NOT EXISTS payment_allocations (
+  id SERIAL PRIMARY KEY, payment_id INTEGER NOT NULL REFERENCES payments(id), invoice_id INTEGER NOT NULL REFERENCES invoices(id), amount NUMERIC NOT NULL);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

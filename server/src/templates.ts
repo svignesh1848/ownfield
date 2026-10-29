@@ -10,11 +10,12 @@ export type Uom = { code: string; factor: number }; // factor = base units per u
 export type Gst = { legalName: string; gstin: string; stateCode: string; address: string; city?: string; pincode?: string; defaultRate: number; hsnRates: { prefix: string; rate: number }[];
   invoicePrefix: string; creditPrefix: string; numberFormat: string };
 export type PoPricing = { priceBase: "billing" | "mrp"; marginPct: number; productDiscounts: { scope: "item" | "category"; key: string; pct: number }[]; numberFormat: string };
-export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing };
+export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing; credit: Credit };
+export type Credit = { days: number; limit: number; onBreach: "warn" | "block" };
 export const INDUSTRIES = ["apparel", "fmcg", "pharma", "retail", "services", "custom"] as const;
 export type Industry = (typeof INDUSTRIES)[number];
 type Row = Record<string, string | number>;
-type Template = { label: string; description: string; settings: Omit<Settings, "gst" | "po">; sample: { shops: Row[]; products: Row[]; stock: Row[] } };
+type Template = { label: string; description: string; settings: Omit<Settings, "gst" | "po" | "credit">; sample: { shops: Row[]; products: Row[]; stock: Row[] } };
 
 const F = (on: FeatureKey[]): Features => Object.fromEntries(FEATURE_KEYS.map(k => [k, on.includes(k)])) as Features;
 const sel = (key: string, label: string, options: string[], required = false): CustomField => ({ key, label, type: "select", options, required });
@@ -105,9 +106,9 @@ export const defaultGst = (ind: Industry): Gst => ({ legalName: "", gstin: "", s
 const asIndustry = (ind: string): Industry => (INDUSTRIES as readonly string[]).includes(ind) ? (ind as Industry) : "custom";
 export const templateSettings = (ind: string): Settings =>
   ({ ...JSON.parse(JSON.stringify(TEMPLATES[asIndustry(ind)].settings)), gst: defaultGst(asIndustry(ind)),
-     po: { priceBase: "billing", marginPct: 0, productDiscounts: [], numberFormat: "{prefix}/{fy}/{seq:4}" } });
+     po: { priceBase: "billing", marginPct: 0, productDiscounts: [], numberFormat: "{prefix}/{fy}/{seq:4}" }, credit: { days: 0, limit: 0, onBreach: "warn" } });
 /** Fill keys added in later versions (new features, gst) from the industry template. */
 export const withDefaults = (ind: string, s: Partial<Settings>): Settings => {
   const t = templateSettings(ind);
-  return { ...t, ...s, features: { ...t.features, ...(s.features || {}) }, gst: { ...t.gst, ...(s.gst || {}) }, po: { ...t.po, ...(s.po || {}) } } as Settings;
+  return { ...t, ...s, features: { ...t.features, ...(s.features || {}) }, gst: { ...t.gst, ...(s.gst || {}) }, po: { ...t.po, ...(s.po || {}) }, credit: { ...t.credit, ...(s.credit || {}) } } as Settings;
 };

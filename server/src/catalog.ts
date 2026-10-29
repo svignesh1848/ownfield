@@ -91,6 +91,14 @@ export function validateSettings(input: any, base: Settings): Settings {
     if (!String(po.numberFormat).includes("{seq")) throw bad("PO number format must contain {seq}");
     s.po = po;
   }
+  if (input.credit) {
+    const c = { ...s.credit, ...input.credit };
+    c.days = Number(c.days); c.limit = Number(c.limit);
+    if (!(Number.isInteger(c.days) && c.days >= 0)) throw bad("credit days must be a whole number ≥ 0 (0 = no limit)");
+    if (!(c.limit >= 0)) throw bad("credit limit must be ≥ 0 (0 = no limit)");
+    if (!["warn", "block"].includes(c.onBreach)) throw bad("onBreach must be warn or block");
+    s.credit = c;
+  }
   if (input.gst) {
     const g = { ...s.gst, ...input.gst };
     g.gstin = String(g.gstin || "").toUpperCase().trim(); g.stateCode = String(g.stateCode || "").trim();
@@ -271,7 +279,10 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
     if (!shop) throw bad("shop not found", 404);
     const custom = req.body?.custom ? JSON.stringify(cleanCustom(settings.customFields.outlet, req.body.custom)) : shop.custom;
     const dl = req.body?.drugLicence !== undefined ? String(req.body.drugLicence || "") || null : shop.drug_licence;
-    res.json((await db.query("UPDATE shops SET custom=$1, drug_licence=$2 WHERE id=$3 RETURNING *", [custom, dl, shop.id])).rows[0]);
+    const lim = (k: string, col: string, int: boolean) => { const v = req.body?.[k]; if (v === undefined) return shop[col]; if (v === null || v === "") return null;
+      const n = Number(v); if (!(n >= 0) || (int && !Number.isInteger(n))) throw bad(`${k} must be ≥ 0`); return n; };
+    res.json((await db.query("UPDATE shops SET custom=$1, drug_licence=$2, credit_days=$3, credit_limit=$4 WHERE id=$5 RETURNING *",
+      [custom, dl, lim("creditDays", "credit_days", true), lim("creditLimit", "credit_limit", false), shop.id])).rows[0]);
   }));
 
   app.get("/api/stock", auth("company_admin", "manager", "distributor"), wrap(async (req, res) => {

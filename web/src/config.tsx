@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { GstSettings } from "./step4";
 import { PoSettings, poForSave } from "./po";
+import { CreditSettings } from "./collect";
 
 type P = { s: Session; cfg: Cfg; reload: () => void; onUsage?: (u: any) => void };
 const FEATURES: [string, string][] = [["stock", "Stock tracking"], ["batches", "Batch & expiry (FEFO)"], ["sizeGrid", "Size-grid ordering"], ["gps", "GPS check-in required"],
@@ -75,6 +76,7 @@ export function SettingsPage({ s, cfg, reload }: P) {
   const [features, setFeatures] = useState({ ...st.features }); const [attrs, setAttrs] = useState(st.attributes.join(", ")); const [units, setUnits] = useState(unitsText(st.uoms));
   const [cf, setCf] = useState<Record<string, string>>({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) });
   const [msg, setMsg] = useState(""); const [gst, setGst] = useState<any>({ ...(st as any).gst }); const [po, setPo] = useState<any>({ ...(st as any).po });
+  const [credit, setCredit] = useState<any>({ days: 0, limit: 0, onBreach: "warn", ...(st as any).credit });
   useEffect(() => { api(null, "/api/templates").then(setTpl); }, []);
   useEffect(() => { setFeatures({ ...st.features }); setAttrs(st.attributes.join(", ")); setUnits(unitsText(st.uoms)); setCf({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) }); setGst({ ...(st as any).gst }); setPo({ ...(st as any).po }); }, [cfg]);
   const put = async (body: any, ok: string) => { try { await api(s, "/api/company/settings", { method: "PUT", body: JSON.stringify(body) }); setMsg(ok); reload(); } catch (x: any) { setMsg(x.message); } };
@@ -93,7 +95,8 @@ export function SettingsPage({ s, cfg, reload }: P) {
     {(["outlet", "product", "visit"] as const).map(e => <label key={e} className="fld"><span>{label(e)} fields</span><textarea rows={3} value={cf[e]} onChange={x => setCf({ ...cf, [e]: x.target.value })} /></label>)}
     {features.invoicing && <GstSettings g={gst} onChange={setGst} />}
     {features.purchaseOrders && <PoSettings po={po} onChange={setPo} />}
-    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, ...(features.invoicing ? { gst: { ...gst, defaultRate: Number(gst.defaultRate) } } : {}), ...(features.purchaseOrders ? { po: poForSave(po) } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, "Settings saved")}>Save settings</button>
+    {features.invoicing && <CreditSettings c={credit} onChange={setCredit} />}
+    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, ...(features.invoicing ? { gst: { ...gst, defaultRate: Number(gst.defaultRate) } } : {}), ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, "Settings saved")}>Save settings</button>
     <p>{msg}</p></>;
 }
 

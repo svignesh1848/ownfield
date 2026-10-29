@@ -10,6 +10,7 @@ import { registerBillingRoutes } from "./billing.js";
 import { registerInsightRoutes } from "./insights.js";
 import { registerPurchaseRoutes } from "./purchase.js";
 import { registerSchemeRoutes } from "./schemes.js";
+import { registerCollectionRoutes } from "./collections.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor"] as const;
@@ -124,6 +125,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerInsightRoutes({ app, db, auth, wrap, tenant });
   registerPurchaseRoutes({ app, db, auth, wrap, tenant });
   registerSchemeRoutes({ app, db, auth, wrap, tenant });
+  registerCollectionRoutes({ app, db, auth, wrap, tenant });
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {

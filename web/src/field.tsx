@@ -98,6 +98,9 @@ export function OrderForm({ s, cfg }: { s: Session; cfg: Cfg }) {
     const t = setTimeout(() => api(s, "/api/orders/preview", { method: "POST", body: JSON.stringify({ shopId: Number(shopId), lines }) }).then(setPv).catch(() => setPv(null)), 400);
     return () => clearTimeout(t);
   }, [qty, unit, shopId]);
+  const [credit, setCredit] = useState<any>(null);
+  useEffect(() => { if (!shopId || !f.invoicing || !navigator.onLine) return setCredit(null);
+    api(s, `/api/credit-check?shopId=${shopId}&amount=${pv ? pv.total : total}`).then(setCredit).catch(() => setCredit(null)); }, [shopId, pv]);
   const submit = async () => {
     const lines = items.flatMap(i => i.variants.filter((v: any) => Number(qty[v.sku]) > 0).map((v: any) => ({ sku: v.sku, qty: Number(qty[v.sku]), ...(unit[i.id] ? { uom: unit[i.id] } : {}) })));
     if (!shopId || !lines.length) return setMsg("Pick an outlet and enter quantities");
@@ -127,6 +130,7 @@ export function OrderForm({ s, cfg }: { s: Session; cfg: Cfg }) {
       </div>; })}
     {pv?.savings > 0 && <div className="row savings"><b>Scheme savings ₹{pv.savings.toLocaleString("en-IN")}</b>
       {pv.lines.filter((l: any) => l.scheme).map((l: any, k: number) => <div className="small" key={k}>{l.sku}: {l.free ? `${l.qty} free` : `−₹${l.saving.toLocaleString("en-IN")}`} ({l.scheme})</div>)}</div>}
+    {credit && !credit.ok && <p className={credit.action === "block" ? "err" : "warn"}>{credit.action === "block" ? "Credit hold — order will be refused: " : "Credit warning: "}{credit.reasons.join("; ")}</p>}
     <div className="total">Total ₹{(pv ? pv.total : total).toLocaleString("en-IN", { maximumFractionDigits: 2 })}<button onClick={submit}>Place order</button></div>
     <p className="muted small">{f.schemes && "Schemes are applied on the server. "}{f.stock && "Stock is checked when the order syncs."}</p><p>{msg}</p></>;
 }

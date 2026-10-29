@@ -4,6 +4,7 @@ import { withTx, type Db } from "./db.js";
 import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
 import type { Uom } from "./templates.js";
 import { activeSchemes, applySchemes } from "./schemes.js";
+import { creditCheck } from "./collections.js";
 
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void; tenant: (req: any, res: Response) => number | null };
 const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
@@ -137,6 +138,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
     }
     const total = Math.round(priced.reduce((a, l) => a + l.amount, 0) * 100) / 100;
+    const credit = await creditCheck(db, cid, settings, shop, total);
+    if (!credit.ok && credit.action === "block") throw Object.assign(bad(`credit hold: ${credit.reasons.join("; ")}`, 409), { credit });
     const savings = Math.round(priced.reduce((a, l) => a + l.saving, 0) * 100) / 100;
     const o = await withTx(db, async tx => {
       const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
@@ -145,7 +148,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
       return o;
     });
-    res.status(201).json(o);
+    res.status(201).json(credit.ok ? o : { ...o, creditWarning: credit.reasons });
   }));
   // Preview: price a cart (schemes applied) without placing it — the rep app shows savings before submitting.
   app.post("/api/orders/preview", auth("sales_rep", "company_admin", "manager"), wrap(async (req, res) => {
