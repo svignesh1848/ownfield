@@ -1,0 +1,4 @@
+Item Code,Item Name,Category,HSN,SKU,Strength,Form,MRP,Billing Price,Schedule,Composition,Units
+SAMPLE-PARA,Sample Paracetamol Tablets,Analgesic,3004,SPARA-500,500mg,Tablet,30,22,OTC,Paracetamol (sample),
+SAMPLE-PARA,Sample Paracetamol Tablets,Analgesic,3004,SPARA-650,650mg,Tablet,35,26,OTC,Paracetamol (sample),
+SAMPLE-SYRUP,Sample Cough Syrup,Respiratory,3004,SSYR-100ML,100ml,Syrup,110,85,H,Sample composition,BOTTLE=1|BOX=20

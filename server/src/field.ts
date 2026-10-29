@@ -1,6 +1,8 @@
 // Step 2: beats, visits (GPS check-in/out), orders, distributor inbox, manager dashboard.
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Db } from "./db.js";
+import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
+import type { Uom } from "./templates.js";
 
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void; tenant: (req: any, res: Response) => number | null };
 const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
@@ -9,6 +11,7 @@ const coord = (lat: unknown, lng: unknown) => {
   if (lat == null || lng == null || !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a) > 90 || Math.abs(b) > 180) throw bad("valid lat/lng required");
   return [a, b];
 };
+const coordOpt = (on: boolean, lat: unknown, lng: unknown) => on || (lat != null && lng != null) ? coord(lat, lng) : [null, null];
 export const TRANSITIONS: Record<string, string[]> = { placed: ["accepted", "rejected"], accepted: ["fulfilled"] };
 export const dayKey = (d: Date | string, tz = process.env.REPORT_TZ || "Asia/Kolkata") => new Date(d).toLocaleDateString("en-CA", { timeZone: tz });
 
@@ -60,7 +63,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   // ---- Visits ----
   app.post("/api/visits/checkin", auth("sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const [lat, lng] = coord(req.body?.lat, req.body?.lng);
+    const { settings } = await getCompany(db, cid);
+    const [lat, lng] = coordOpt(settings.features.gps, req.body?.lat, req.body?.lng);
     if (!(await shopIn(cid, req.body?.shopId))) throw bad("shop not found", 404);
     const open = (await db.query("SELECT id FROM visits WHERE rep_id=$1 AND check_out_at IS NULL", [req.user.uid])).rows[0];
     if (open) throw bad("check out of the current visit first", 409);
@@ -69,9 +73,11 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
   app.post("/api/visits/:id/checkout", auth("sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const [lat, lng] = coord(req.body?.lat, req.body?.lng);
-    const r = await db.query(`UPDATE visits SET check_out_at=NOW(), out_lat=$1, out_lng=$2, notes=$3
-      WHERE id=$4 AND company_id=$5 AND rep_id=$6 AND check_out_at IS NULL RETURNING *`, [lat, lng, req.body?.notes ?? null, Number(req.params.id), cid, req.user.uid]);
+    const { settings } = await getCompany(db, cid);
+    const [lat, lng] = coordOpt(settings.features.gps, req.body?.lat, req.body?.lng);
+    const custom = JSON.stringify(cleanCustom(settings.customFields.visit, req.body?.custom || {}));
+    const r = await db.query(`UPDATE visits SET check_out_at=NOW(), out_lat=$1, out_lng=$2, notes=$3, custom=$4
+      WHERE id=$5 AND company_id=$6 AND rep_id=$7 AND check_out_at IS NULL RETURNING *`, [lat, lng, req.body?.notes ?? null, custom, Number(req.params.id), cid, req.user.uid]);
     if (!r.rows[0]) throw bad("open visit not found", 404);
     res.json(r.rows[0]);
   }));
@@ -79,7 +85,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     const mine = req.user.role === "sales_rep";
     res.json((await db.query(`SELECT v.*, s.name AS shop_name, u.name AS rep_name FROM visits v JOIN shops s ON s.id=v.shop_id JOIN users u ON u.id=v.rep_id
-      WHERE v.company_id=$1 ${mine ? "AND v.rep_id=$2" : ""} ORDER BY v.id DESC`, mine ? [cid, req.user.uid] : [cid])).rows);
+      WHERE v.company_id=$1 ${mine ? "AND v.rep_id=$2" : ""} ORDER BY v.id DESC`, mine ? [cid, req.user.uid] : [cid])).rows.map(v => ({ ...v, custom: parseJson(v.custom, {}) })));
   }));
 
   // ---- Orders (idempotent on clientRef so the offline queue can safely retry) ----
@@ -92,17 +98,34 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const shop = await shopIn(cid, shopId); if (!shop) throw bad("shop not found", 404);
     const items = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.qty) > 0);
     if (!items.length) throw bad("at least one line with qty > 0");
-    const priced = [] as { pid: number; qty: number; price: number }[];
+    const { settings } = await getCompany(db, cid);
+    const f = settings.features, loc: number | null = shop.distributor_id ?? null;
+    const schemes = f.schemes ? (await db.query("SELECT * FROM schemes WHERE company_id=$1 AND active=TRUE", [cid])).rows : [];
+    const priced = [] as { vid: number; uom: string; qty: number; base: number; price: number; disc: number; amount: number }[];
+    const need = new Map<number, { sku: string; n: number }>();
     for (const l of items) {
-      if (!Number.isInteger(Number(l.qty))) throw bad("qty must be an integer");
-      const p = (await db.query("SELECT id,billing_price FROM products WHERE company_id=$1 AND (id=$2 OR sku=$3)", [cid, Number(l.productId) || 0, String(l.sku ?? "")])).rows[0];
-      if (!p) throw bad(`product ${l.sku ?? l.productId} not found`, 404);
-      priced.push({ pid: p.id, qty: Number(l.qty), price: Number(p.billing_price) });
+      const qty = Number(l.qty);
+      if (!Number.isInteger(qty)) throw bad("qty must be an integer");
+      const v = (await db.query(`SELECT v.id, v.sku, v.billing_price, i.id AS item_id, i.kind, i.uoms FROM variants v JOIN items i ON i.id=v.item_id
+        WHERE v.company_id=$1 AND (v.id=$2 OR v.sku=$3)`, [cid, Number(l.productId ?? l.variantId) || 0, String(l.sku ?? "")])).rows[0];
+      if (!v) throw bad(`product ${l.sku ?? l.productId} not found`, 404);
+      const uoms = parseJson<Uom[]>(v.uoms, settings.uoms);
+      const u = l.uom ? uoms.find(x => x.code === String(l.uom).toUpperCase()) : uoms.find(x => x.factor === 1);
+      if (!u) throw bad(`unit ${l.uom} not defined for ${v.sku}`);
+      const base = qty * u.factor, price = Number(v.billing_price);
+      const disc = Math.max(0, ...schemes.filter(sc => (sc.item_id == null || sc.item_id === v.item_id) && base >= Number(sc.min_qty)).map(sc => Number(sc.discount_pct)));
+      priced.push({ vid: v.id, uom: u.code, qty, base, price, disc, amount: Math.round(base * price * (100 - disc)) / 100 });
+      if (f.stock && v.kind === "goods") need.set(v.id, { sku: v.sku, n: (need.get(v.id)?.n ?? 0) + base });
     }
-    const total = priced.reduce((a, l) => a + l.qty * l.price, 0);
+    for (const [vid, { sku, n }] of need) {
+      const avail = (await fefoRows(db, cid, loc, vid)).reduce((a, r) => a + r.qty, 0);
+      if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
+    }
+    const total = Math.round(priced.reduce((a, l) => a + l.amount, 0) * 100) / 100;
     const o = (await db.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
-      [cid, String(clientRef), req.user.uid, shop.id, shop.distributor_id ?? null, total])).rows[0];
-    for (const l of priced) await db.query("INSERT INTO order_lines (order_id,product_id,qty,price) VALUES ($1,$2,$3,$4)", [o.id, l.pid, l.qty, l.price]);
+      [cid, String(clientRef), req.user.uid, shop.id, loc, total])).rows[0];
+    for (const l of priced) await db.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount]);
     res.status(201).json(o);
   }));
   app.get("/api/orders", auth("company_admin", "manager", "sales_rep", "distributor"), wrap(async (req, res) => {
@@ -110,7 +133,11 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2" : "";
     const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
       WHERE o.company_id=$1 ${scope} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
-    for (const o of orders) o.lines = (await db.query(`SELECT l.qty,l.price,p.sku,p.style,p.size FROM order_lines l JOIN products p ON p.id=l.product_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
+    for (const o of orders) {
+      o.lines = (await db.query(`SELECT l.id,l.qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
+        JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows.map(l => ({ ...l, attrs: parseJson(l.attrs, {}) }));
+      for (const l of o.lines) l.allocations = (await db.query("SELECT batch_no, expiry, qty FROM order_allocations WHERE order_line_id=$1 ORDER BY id", [l.id])).rows;
+    }
     res.json(orders);
   }));
   app.post("/api/orders/:id/status", auth("distributor", "company_admin"), wrap(async (req, res) => {
@@ -119,6 +146,32 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!o || (req.user.role === "distributor" && o.distributor_id !== req.user.uid)) throw bad("order not found", 404);
     const to = String(req.body?.status || "");
     if (!(TRANSITIONS[o.status] || []).includes(to)) throw bad(`cannot move ${o.status} -> ${to}`, 409);
+    const { settings } = await getCompany(db, cid);
+    if (to === "accepted" && settings.features.stock) {
+      // FEFO allocation: plan everything first so a shortfall changes nothing, then apply.
+      const lines = (await db.query(`SELECT l.id, l.variant_id, l.base_qty, v.sku, i.kind FROM order_lines l JOIN variants v ON v.id=l.variant_id
+        JOIN items i ON i.id=v.item_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
+      const pools = new Map<number, any[]>(), plan: { line: number; row: any; take: number }[] = [], orig = new Map<number, number>();
+      for (const l of lines.filter(l => l.kind === "goods")) {
+        if (!pools.has(l.variant_id)) {
+          const rows = await fefoRows(db, cid, o.distributor_id ?? null, l.variant_id);
+          rows.forEach(r => orig.set(r.id, r.qty)); pools.set(l.variant_id, rows);
+        }
+        let left = Number(l.base_qty);
+        for (const r of pools.get(l.variant_id)!) { const take = Math.min(r.qty, left); if (take > 0) { plan.push({ line: l.id, row: r, take }); r.qty -= take; left -= take; } }
+        if (left > 0) throw bad(`insufficient stock for ${l.sku}: short by ${left}`, 409);
+      }
+      // Compare-and-set on the quantity we read, so a concurrent change is detected instead of overselling.
+      const after = new Map<number, number>();
+      for (const p of plan) after.set(p.row.id, (after.get(p.row.id) ?? orig.get(p.row.id)!) - p.take);
+      for (const [id, q] of after) {
+        const ok = (await db.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [q, id, orig.get(id)])).rows[0];
+        if (!ok) throw bad("stock changed while allocating — please retry", 409);
+      }
+      for (const p of plan) {
+        await db.query("INSERT INTO order_allocations (order_line_id,stock_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5)", [p.line, p.row.id, p.row.batch_no, p.row.expiry, p.take]);
+      }
+    }
     res.json((await db.query("UPDATE orders SET status=$1 WHERE id=$2 RETURNING *", [to, o.id])).rows[0]);
   }));
 

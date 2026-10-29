@@ -1,0 +1,10 @@
+Item Code,Item Name,Category,HSN,SKU,Size,Colour,MRP,Billing Price,Fabric,Season
+SAMPLE-TEE,Sample Crew Tee,Tops,6109,STEE-2Y-RED,2Y,Red,399,280,Cotton,SS
+SAMPLE-TEE,Sample Crew Tee,Tops,6109,STEE-2Y-BLUE,2Y,Blue,399,280,Cotton,SS
+SAMPLE-TEE,Sample Crew Tee,Tops,6109,STEE-3Y-RED,3Y,Red,399,280,Cotton,SS
+SAMPLE-TEE,Sample Crew Tee,Tops,6109,STEE-3Y-BLUE,3Y,Blue,399,280,Cotton,SS
+SAMPLE-TEE,Sample Crew Tee,Tops,6109,STEE-4Y-RED,4Y,Red,399,280,Cotton,SS
+SAMPLE-TEE,Sample Crew Tee,Tops,6109,STEE-4Y-BLUE,4Y,Blue,399,280,Cotton,SS
+SAMPLE-ROMPER,Sample Romper,Infant,6111,SROM-0-3M,0-3M,White,599,420,Cotton,AW
+SAMPLE-ROMPER,Sample Romper,Infant,6111,SROM-3-6M,3-6M,White,599,420,Cotton,AW
+SAMPLE-ROMPER,Sample Romper,Infant,6111,SROM-6-12M,6-12M,White,599,420,Cotton,AW

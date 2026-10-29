@@ -17,3 +17,10 @@ select{display:block;width:100%;padding:10px;margin:6px 0;border:1px solid #cbd5
 .total{position:sticky;bottom:0;background:#fff;display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-weight:600}
 .pill{font-size:12px;padding:2px 8px;border-radius:10px;background:#e2e8f0}.pill.placed{background:#dbeafe}.pill.accepted{background:#fef3c7}.pill.fulfilled{background:#dcfce7}.pill.rejected{background:#fee2e2}
 button.ghost{background:#e2e8f0;color:#0f172a}
+.tpls{display:grid;gap:6px;margin:6px 0}.tpl{display:block;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px}.tpl.on{border-color:#0f766e;background:#f0fdfa}
+.tpl input{display:inline;width:auto;margin:0 6px 0 0}.tpl span{display:block;color:#64748b}
+.fld{display:block;margin:6px 0}.fld span{display:block;font-size:13px;color:#475569}textarea{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:13px}
+.small{font-size:12px}.line{display:flex;justify-content:space-between;align-items:center;gap:8px}.line input{width:80px;text-align:center}
+.gh{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.gh select.unit{width:auto;margin:0 0 0 auto;padding:4px 6px;font-size:13px}
+table.sg th,table.sg td{padding:3px;text-align:center}table.sg input{width:56px;text-align:center;padding:6px 2px;margin:0}
+.batches{color:#0f766e;font-weight:600}

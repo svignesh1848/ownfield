@@ -14,7 +14,7 @@ app.listen(port, async () => {
   const base = `http://localhost:${port}`;
   const post = (u: string, t: string | null, body: any) => fetch(base + u, { method: "POST", headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify(body) }).then(r => r.json());
   const owner = (await post("/api/auth/login", null, { companyCode: "PLATFORM", email: "owner@example.com", password: "demo" })).token;
-  await post("/api/platform/companies", owner, { code: "DEMO", name: "Demo Kidswear Co (sample)", userLimit: 5, admin: { email: "admin@example.com", name: "Demo Admin", password: "demo" } });
+  await post("/api/platform/companies", owner, { code: "DEMO", name: "Demo Kidswear Co (sample)", industry: "apparel", userLimit: 8, admin: { email: "admin@example.com", name: "Demo Admin", password: "demo" } });
   const admin = (await post("/api/auth/login", null, { companyCode: "DEMO", email: "admin@example.com", password: "demo" })).token;
   for (const k of ["users", "shops", "products"]) {
     const fd = new FormData();

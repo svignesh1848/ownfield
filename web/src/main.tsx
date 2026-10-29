@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge } from "./field";
+import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 
 export type Session = { token: string; user: { name: string; role: string; companyCode: string | null } };
 export const api = async (s: Session | null, url: string, opts: RequestInit = {}) => {
@@ -33,38 +34,48 @@ function Usage({ u }: { u: any }) {
 }
 
 function Platform({ s }: { s: Session }) {
-  const [list, setList] = useState<any[]>([]); const [msg, setMsg] = useState("");
-  const [f, setF] = useState({ code: "", name: "", userLimit: "10", email: "", adminName: "", password: "" });
+  const [list, setList] = useState<any[]>([]); const [msg, setMsg] = useState(""); const [tpl, setTpl] = useState<any[]>([]);
+  const [f, setF] = useState({ code: "", name: "", userLimit: "10", email: "", adminName: "", password: "" }); const [industry, setIndustry] = useState("apparel");
   const load = () => api(s, "/api/platform/companies").then(setList);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api(null, "/api/templates").then(setTpl); }, []);
   return <>
     <section className="card"><h2>Companies</h2>
-      {list.map(c => <div key={c.id} className="row"><b>{c.code}</b> {c.name}<Usage u={c.usage} />
+      {list.map(c => <div key={c.id} className="row"><b>{c.code}</b> {c.name} <span className="pill">{c.industry}</span><Usage u={c.usage} />
         <button className="sm" onClick={async () => { const v = prompt("New user limit", c.user_limit); if (v) { await api(s, `/api/platform/companies/${c.id}`, { method: "PATCH", body: JSON.stringify({ userLimit: Number(v) }) }); load(); } }}>Set limit</button></div>)}
     </section>
-    <form className="card" onSubmit={async e => { e.preventDefault(); try { await api(s, "/api/platform/companies", { method: "POST", body: JSON.stringify({ code: f.code, name: f.name, userLimit: Number(f.userLimit), admin: { email: f.email, name: f.adminName, password: f.password } }) }); setMsg("Created"); load(); } catch (x: any) { setMsg(x.message); } }}>
+    <form className="card" onSubmit={async e => { e.preventDefault(); try { await api(s, "/api/platform/companies", { method: "POST", body: JSON.stringify({ code: f.code, name: f.name, industry, userLimit: Number(f.userLimit), admin: { email: f.email, name: f.adminName, password: f.password } }) }); setMsg("Created"); load(); } catch (x: any) { setMsg(x.message); } }}>
       <h2>New company</h2>
+      <label>Industry template</label>
+      <div className="tpls">{tpl.map(t => <label key={t.id} className={`tpl ${industry === t.id ? "on" : ""}`}><input type="radio" name="ind" checked={industry === t.id} onChange={() => setIndustry(t.id)} /><b>{t.label}</b><span>{t.description}</span></label>)}</div>
       {Object.keys(f).map(k => <input key={k} placeholder={k} value={(f as any)[k]} type={k === "password" ? "password" : "text"} onChange={e => setF({ ...f, [k]: e.target.value })} />)}
       <button>Create</button><p>{msg}</p></form></>;
 }
 
+export type Cfg = { industry: string; settings: { features: Record<string, boolean>; attributes: string[]; uoms: { code: string; factor: number }[]; customFields: Record<string, any[]> } };
+export const label = (k: string) => k.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+
 function Company({ s }: { s: Session }) {
   const role = s.user.role, admin = role === "company_admin", mgr = admin || role === "manager";
-  const tabs = mgr ? ["dashboard", "beats", "orders", "users", "shops", "products", ...(admin ? ["import"] : [])]
-    : role === "sales_rep" ? ["beat", "order", "orders"] : ["inbox", "products"];
-  const [tab, setTab] = useState(tabs[0]); const [rows, setRows] = useState<any[]>([]); const [usage, setUsage] = useState<any>(null); const [msg, setMsg] = useState("");
-  const custom: Record<string, any> = { dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: mgr ? ShopsMap : null };
-  useEffect(() => { setMsg(""); if (!custom[tab] && tab !== "import") api(s, `/api/${tab}`).then(setRows).catch(e => setMsg(e.message)); if (mgr) api(s, "/api/company/usage").then(setUsage); }, [tab]);
-  const cols: Record<string, string[]> = { users: ["name", "email", "role", "active"], products: ["style", "sku", "size", "hsn", "mrp", "billing_price"] };
-  const C = custom[tab];
+  const [cfg, setCfg] = useState<Cfg | null>(null); const [usage, setUsage] = useState<any>(null); const [tab, setTab] = useState("");
+  const reload = () => api(s, "/api/company/settings").then(setCfg);
+  useEffect(() => { reload(); if (mgr) api(s, "/api/company/usage").then(setUsage); }, []);
+  if (!cfg) return <p className="muted">Loading…</p>;
+  const f = cfg.settings.features;
+  const tabs = mgr ? ["dashboard", "beats", "orders", "catalog", "shops", ...(f.stock ? ["stock"] : []), ...(f.schemes ? ["schemes"] : []), "users", ...(admin ? ["settings", "import"] : [])]
+    : role === "sales_rep" ? ["beat", "order", "orders", "catalog"] : ["inbox", ...(f.stock ? ["stock"] : []), "catalog"];
+  const cur = tabs.includes(tab) ? tab : tabs[0];
+  const views: Record<string, any> = { dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
+    catalog: Catalog, stock: Stock, schemes: Schemes, settings: SettingsPage, import: ImportPage, users: Users };
+  const C = views[cur];
   return <>
     {mgr && <Usage u={usage} />}<OfflineBadge s={s} />
-    <nav>{tabs.map(t => <button key={t} className={t === tab ? "on" : ""} onClick={() => setTab(t)}>{t}</button>)}</nav>
-    <section className="card">{C ? <C s={s} /> : tab === "import"
-      ? <>{["shops", "products", "users"].map(k => <form key={k} className="row" onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.currentTarget); try { const r = await api(s, `/api/import/${k}`, { method: "POST", body: fd }); setMsg(`${k}: ${r.inserted} added, ${r.updated} updated, ${r.errors.length} errors ${r.errors.map((x: any) => `[row ${x.row}: ${x.error}]`).join(" ")}`); setUsage(r.usage); } catch (x: any) { setMsg(x.message); } }}>
-          <label>Upload {k} (.xlsx / .csv)</label><input name="file" type="file" accept=".xlsx,.xls,.csv" required /><button className="sm">Upload</button></form>)}
-        <p className="muted">Templates: see <code>sample-data/</code> in the repo. Shops may include a "Distributor Email" column.</p></>
-      : <Table rows={rows} cols={cols[tab]} />}<p>{msg}</p></section></>;
+    <nav>{tabs.map(t => <button key={t} className={t === cur ? "on" : ""} onClick={() => setTab(t)}>{t}</button>)}</nav>
+    <section className="card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} /></section></>;
+}
+
+function Users({ s, cfg }: { s: Session; cfg: Cfg }) {
+  const [rows, setRows] = useState<any[]>([]); useEffect(() => { api(s, "/api/users").then(setRows); }, []);
+  return <><h2>Users</h2><Table rows={rows} cols={["name", "email", "role", ...(cfg.settings.features.drugLicence ? ["drug_licence"] : []), "active"]} /></>;
 }
 
 function App() {

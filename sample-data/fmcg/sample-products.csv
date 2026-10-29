@@ -1,0 +1,4 @@
+Item Code,Item Name,Category,HSN,SKU,Pack Size,Flavour,MRP,Billing Price,Units,Shelf life days
+SAMPLE-BISCUIT,Sample Glucose Biscuits,Biscuits,1905,SBIS-100G,100g,Classic,10,8.5,PCS=1|BOX=24|CASE=96,180
+SAMPLE-BISCUIT,Sample Glucose Biscuits,Biscuits,1905,SBIS-250G,250g,Classic,30,25,PCS=1|BOX=12|CASE=48,180
+SAMPLE-DRINK,Sample Mango Drink,Beverages,2202,SDRK-200ML,200ml,Mango,20,16,PCS=1|CASE=30,120

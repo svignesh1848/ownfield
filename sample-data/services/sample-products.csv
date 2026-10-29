@@ -1,0 +1,4 @@
+Item Code,Item Name,Type,Category,HSN,SKU,Plan,MRP,Billing Price,SLA hours
+SAMPLE-AMC,Sample Annual Maintenance Contract,service,AMC,998719,SAMC-BASIC,Basic,5000,4500,48
+SAMPLE-AMC,Sample Annual Maintenance Contract,service,AMC,998719,SAMC-PREMIUM,Premium,9000,8000,8
+SAMPLE-VISIT,Sample Service Visit,service,Visit,998719,SVIS-STD,Standard,,750,24
