@@ -109,3 +109,26 @@ export function Inventory({ s, cfg }: ViewProps) {
       <button onClick={async () => { if (await run(() => api(s, "/api/inventory/moves", { method: "POST", body: JSON.stringify({ kind, distributorId: d || undefined, note, lines: lines.filter(l => l.sku).map(l => ({ ...l, batch_no: batch, expiry })) }) }))) { setLines([{ sku: "", qty: 1 }]); reload(); reloadMoves(); } }}>Save</button></div>}
     <h3>Movements</h3><Table rows={moves} cols={["created_at", "kind", "sku", "batch_no", "qty", "ref", "note"]} empty={{ title: "No movements yet" }} /></>;
 }
+
+// ---------- Claims ----------
+const openHtml = async (s: Session, url: string) => { const r = await fetch(url, { headers: { Authorization: `Bearer ${s.token}` } }); if (!r.ok) return toast("Could not open", "err"); const w = window.open(""); w?.document.write(await r.text()); };
+export function Claims({ s, cfg }: ViewProps) {
+  const dist = s.user.role === "distributor";
+  const [rows, reload] = useData<any[]>(s, "/api/claims");
+  const [kind, setKind] = useState("damage"), [desc, setDesc] = useState(""), [amount, setAmount] = useState(""), [lines, setLines] = useState<any[]>([]);
+  return <><h2>Claims</h2>
+    {dist && <div className="card"><h3>New claim</h3>
+      <Field label="Type"><select value={kind} onChange={e => setKind(e.target.value)}><option value="damage">Damaged goods</option><option value="expiry">Expired goods</option><option value="scheme">Scheme payout</option></select></Field>
+      <Field label="What happened"><input value={desc} onChange={e => setDesc(e.target.value)} /></Field>
+      {kind !== "scheme" && <Lines s={s} lines={lines} setLines={setLines} scan={!!cfg.settings.features.barcode} />}
+      <Field label="Amount (₹)" help={kind !== "scheme" ? "Leave blank to use product prices" : undefined}><input type="number" value={amount} onChange={e => setAmount(e.target.value)} /></Field>
+      <button onClick={async () => { if (await run(() => api(s, "/api/claims", { method: "POST", body: JSON.stringify({ kind, description: desc, amount: amount || undefined, lines: lines.filter(l => l.sku) }) }))) { setDesc(""); setAmount(""); setLines([]); reload(); } }}>Submit claim</button></div>}
+    {!rows ? <Loading /> : !rows.length ? <p className="muted">No claims yet.</p> : rows.map(c => <div key={c.id} className="card">
+      <b>#{c.id} {c.kind}</b> · {c.distributor} · {inr0(c.amount)}{c.approved_amount != null && ` → ${inr0(c.approved_amount)}`} · <b>{c.status}</b>{c.credit_note_no && ` · ${c.credit_note_no}`}
+      <div className="muted">{c.description}{c.reason && ` — ${c.reason}`}</div>
+      <div className="row-btns">
+        {!dist && c.status === "submitted" && <><button className="sm" onClick={async () => { const a = prompt("Approve amount (₹)", String(c.amount)); if (a && await run(() => api(s, `/api/claims/${c.id}/decide`, { method: "POST", body: JSON.stringify({ approve: true, amount: Number(a) }) }))) reload(); }}>Approve</button>
+          <button className="sm ghost" onClick={async () => { const r = prompt("Reason for rejecting"); if (r && await run(() => api(s, `/api/claims/${c.id}/decide`, { method: "POST", body: JSON.stringify({ approve: false, reason: r }) }))) reload(); }}>Reject</button></>}
+        {!dist && c.status === "approved" && <button className="sm" onClick={async () => { if (await run(() => api(s, `/api/claims/${c.id}/settle`, { method: "POST" }))) reload(); }}>Settle (credit note)</button>}
+        {c.status === "settled" && <button className="sm ghost" onClick={() => openHtml(s, `/api/claims/${c.id}/print`)}>Credit note</button>}</div></div>)}</>;
+}

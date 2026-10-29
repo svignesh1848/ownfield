@@ -62,3 +62,24 @@ describe("distributor inventory", () => {
     expect((await request(app).get(`/api/inventory?distributorId=${id.dist}`).set(as("adm")).expect(200)).body.rows[0].qty).toBe(21);
   });
 });
+
+describe("claims", () => {
+  it("submit, approve a lower amount, settle as claim credit note and take damaged stock out", async () => {
+    await request(app).post("/api/claims").set(as("dist")).send({ kind: "damage", description: "x", amount: 10 }).expect(403);
+    await on({ claims: true });
+    await request(app).post("/api/claims").set(as("dist")).send({ kind: "nope", description: "x", amount: 10 }).expect(400);
+    const c = (await request(app).post("/api/claims").set(as("dist")).send({ kind: "damage", description: "Sample: damaged in transit", lines: [{ sku: T.sku, qty: 2, batch_no: "B1" }] }).expect(201)).body;
+    expect(c.amount).toBeGreaterThan(0); expect(c.status).toBe("submitted");
+    await request(app).post(`/api/claims/${c.id}/settle`).set(as("adm")).expect(409);
+    await request(app).post(`/api/claims/${c.id}/decide`).set(as("adm")).send({ approve: true, amount: c.amount * 2 }).expect(400);
+    const a = (await request(app).post(`/api/claims/${c.id}/decide`).set(as("adm")).send({ approve: true, amount: 1 }).expect(200)).body;
+    expect(a).toMatchObject({ status: "approved", approved_amount: 1 });
+    const st = (await request(app).post(`/api/claims/${c.id}/settle`).set(as("adm")).expect(200)).body;
+    expect(st.credit_note_no).toMatch(/^CCN\//);
+    expect((await request(app).get(`/api/claims/${c.id}/print`).set(as("dist")).expect(200)).text).toContain("CLAIM CREDIT NOTE");
+    expect((await request(app).get(`/api/inventory?distributorId=${id.dist}`).set(as("adm"))).body.rows[0].qty).toBe(19);
+    const r = (await request(app).post("/api/claims").set(as("dist")).send({ kind: "scheme", description: "Sample scheme payout", amount: 50 }).expect(201)).body;
+    await request(app).post(`/api/claims/${r.id}/decide`).set(as("adm")).send({ approve: false }).expect(400);
+    expect((await request(app).post(`/api/claims/${r.id}/decide`).set(as("adm")).send({ approve: false, reason: "Not eligible" }).expect(200)).body.status).toBe("rejected");
+  });
+});

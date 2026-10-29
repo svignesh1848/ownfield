@@ -187,6 +187,10 @@ CREATE TABLE IF NOT EXISTS stock_moves (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER REFERENCES users(id), variant_id INTEGER NOT NULL REFERENCES variants(id),
   batch_no TEXT NOT NULL DEFAULT '', qty INTEGER NOT NULL, kind TEXT NOT NULL, ref TEXT, note TEXT, user_id INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS stock_moves_loc ON stock_moves (company_id, distributor_id, id);
+CREATE TABLE IF NOT EXISTS claims (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER NOT NULL REFERENCES users(id), kind TEXT NOT NULL,
+  scheme_id INTEGER REFERENCES schemes(id), description TEXT NOT NULL, lines TEXT, amount NUMERIC NOT NULL, approved_amount NUMERIC, status TEXT NOT NULL DEFAULT 'submitted',
+  reason TEXT, decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ, credit_note_no TEXT, settled_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {
