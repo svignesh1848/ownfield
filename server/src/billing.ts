@@ -5,7 +5,7 @@ import { withTx, type Db } from "./db.js";
 import { bad, getCompany, parseJson, parseDate, today } from "./catalog.js";
 import type { Gst } from "./templates.js";
 
-const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+export const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export const fyOf = (date: string) => { const [y, m] = date.split("-").map(Number); const s = m >= 4 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, "0")}`; };
 export const rateFor = (g: Gst, hsn: string | null) => {
   const h = String(hsn || ""); let best: { prefix: string; rate: number } | undefined;
@@ -18,7 +18,7 @@ export function formatNumber(fmt: string, prefix: string, fy: string, seq: numbe
   return out;
 }
 /** Next gapless number for (company, kind, FY). Must run inside the same transaction as the document insert. */
-async function nextNumber(tx: Db, cid: number, kind: string, fy: string) {
+export async function nextNumber(tx: Db, cid: number, kind: string, fy: string) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const row = (await tx.query("SELECT next_no FROM doc_series WHERE company_id=$1 AND kind=$2 AND fy=$3", [cid, kind, fy])).rows[0];
     if (!row) { await tx.query("INSERT INTO doc_series (company_id,kind,fy,next_no) VALUES ($1,$2,$3,2)", [cid, kind, fy]); return 1; }
@@ -27,7 +27,7 @@ async function nextNumber(tx: Db, cid: number, kind: string, fy: string) {
   }
   throw bad("could not allocate a document number — retry", 409);
 }
-const split = (taxable: number, rate: number, intra: boolean) => {
+export const split = (taxable: number, rate: number, intra: boolean) => {
   const tax = r2(taxable * rate / 100);
   if (!intra) return { cgst: 0, sgst: 0, igst: tax };
   const c = r2(tax / 2); return { cgst: c, sgst: r2(tax - c), igst: 0 };
@@ -61,8 +61,8 @@ export async function loadInvoice(db: Db, cid: number, id: number) {
     lines: lines.map(l => num(l, ["rate", "taxable", "gst_rate", "cgst", "sgst", "igst", "total", "base_qty"])) };
 }
 
-const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-const inr = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+export const inr = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export function invoiceHtml(inv: any, ref?: string) {
   const title = inv.kind === "invoice" ? "TAX INVOICE" : "CREDIT NOTE";
   const hsn = new Map<string, any>();

@@ -78,6 +78,29 @@ CREATE TABLE IF NOT EXISTS targets (
 CREATE TABLE IF NOT EXISTS visit_photos (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), visit_id INTEGER NOT NULL REFERENCES visits(id),
   file TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, caption TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS distributor_profiles (
+  distributor_id INTEGER PRIMARY KEY REFERENCES users(id), company_id INTEGER NOT NULL REFERENCES companies(id),
+  margin_pct NUMERIC, discount_pct NUMERIC NOT NULL DEFAULT 0, legal_name TEXT, gstin TEXT, state_code TEXT, address TEXT, city TEXT, pincode TEXT,
+  invoice_prefix TEXT, credit_prefix TEXT, number_format TEXT, credit_days INTEGER, credit_limit NUMERIC);
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER NOT NULL REFERENCES users(id),
+  number TEXT, fy TEXT, status TEXT NOT NULL DEFAULT 'draft', notes TEXT, reject_reason TEXT, intra_state BOOLEAN,
+  taxable NUMERIC NOT NULL DEFAULT 0, tax NUMERIC NOT NULL DEFAULT 0, total NUMERIC NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), submitted_at TIMESTAMPTZ, decided_at TIMESTAMPTZ, decided_by INTEGER REFERENCES users(id));
+CREATE TABLE IF NOT EXISTS po_lines (
+  id SERIAL PRIMARY KEY, po_id INTEGER NOT NULL REFERENCES purchase_orders(id), variant_id INTEGER NOT NULL REFERENCES variants(id),
+  uom TEXT NOT NULL, qty_requested INTEGER NOT NULL, qty_approved INTEGER, qty_dispatched INTEGER NOT NULL DEFAULT 0, qty_received INTEGER NOT NULL DEFAULT 0,
+  base_price NUMERIC NOT NULL, margin_pct NUMERIC NOT NULL, product_disc_pct NUMERIC NOT NULL, dist_disc_pct NUMERIC NOT NULL,
+  computed_rate NUMERIC NOT NULL, rate NUMERIC NOT NULL, gst_rate NUMERIC NOT NULL, taxable NUMERIC NOT NULL, tax NUMERIC NOT NULL, total NUMERIC NOT NULL);
+CREATE TABLE IF NOT EXISTS po_price_audit (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), po_line_id INTEGER NOT NULL REFERENCES po_lines(id),
+  old_rate NUMERIC NOT NULL, new_rate NUMERIC NOT NULL, reason TEXT NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id), at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS po_dispatches (
+  id SERIAL PRIMARY KEY, po_id INTEGER NOT NULL REFERENCES purchase_orders(id), created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), received_at TIMESTAMPTZ, received_by INTEGER REFERENCES users(id));
+CREATE TABLE IF NOT EXISTS po_dispatch_lines (
+  id SERIAL PRIMARY KEY, dispatch_id INTEGER NOT NULL REFERENCES po_dispatches(id), po_line_id INTEGER NOT NULL REFERENCES po_lines(id),
+  qty INTEGER NOT NULL, batch_no TEXT NOT NULL DEFAULT '', expiry TEXT);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

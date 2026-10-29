@@ -79,6 +79,18 @@ export function validateSettings(input: any, base: Settings): Settings {
     });
     if (new Set(s.customFields[e].map(f => f.key)).size !== s.customFields[e].length) throw bad(`duplicate ${e} custom field`);
   }
+  if (input.po) {
+    const po = { ...s.po, ...input.po };
+    if (!["billing", "mrp"].includes(po.priceBase)) throw bad("PO price base must be billing or mrp");
+    const pct = (v: unknown, what: string) => { const n = Number(v); if (!(n >= 0 && n < 100)) throw bad(`${what} must be 0–99.99 %`); return n; };
+    po.marginPct = pct(po.marginPct, "margin");
+    po.productDiscounts = (Array.isArray(po.productDiscounts) ? po.productDiscounts : []).map((d: any) => {
+      if (!["item", "category"].includes(d.scope) || !String(d.key || "").trim()) throw bad("product discount needs scope item/category and a key");
+      return { scope: d.scope, key: String(d.key).trim(), pct: pct(d.pct, "product discount") };
+    });
+    if (!String(po.numberFormat).includes("{seq")) throw bad("PO number format must contain {seq}");
+    s.po = po;
+  }
   if (input.gst) {
     const g = { ...s.gst, ...input.gst };
     g.gstin = String(g.gstin || "").toUpperCase().trim(); g.stateCode = String(g.stateCode || "").trim();

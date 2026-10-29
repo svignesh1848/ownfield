@@ -1,6 +1,6 @@
 // Industry templates. Each one presets features, variant attributes, units and custom fields.
 // Everything stays editable per company afterwards. All sample data is fictitious and labelled "Sample".
-export const FEATURE_KEYS = ["stock", "batches", "sizeGrid", "gps", "schemes", "drugLicence", "services", "photos", "invoicing"] as const;
+export const FEATURE_KEYS = ["stock", "batches", "sizeGrid", "gps", "schemes", "drugLicence", "services", "photos", "invoicing", "purchaseOrders"] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type Features = Record<FeatureKey, boolean>;
 export const FIELD_TYPES = ["text", "number", "date", "select"] as const;
@@ -9,11 +9,12 @@ export const ENTITIES = ["outlet", "product", "visit"] as const;
 export type Uom = { code: string; factor: number }; // factor = base units per unit; the base unit has factor 1
 export type Gst = { legalName: string; gstin: string; stateCode: string; address: string; defaultRate: number; hsnRates: { prefix: string; rate: number }[];
   invoicePrefix: string; creditPrefix: string; numberFormat: string };
-export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst };
+export type PoPricing = { priceBase: "billing" | "mrp"; marginPct: number; productDiscounts: { scope: "item" | "category"; key: string; pct: number }[]; numberFormat: string };
+export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing };
 export const INDUSTRIES = ["apparel", "fmcg", "pharma", "retail", "services", "custom"] as const;
 export type Industry = (typeof INDUSTRIES)[number];
 type Row = Record<string, string | number>;
-type Template = { label: string; description: string; settings: Omit<Settings, "gst">; sample: { shops: Row[]; products: Row[]; stock: Row[] } };
+type Template = { label: string; description: string; settings: Omit<Settings, "gst" | "po">; sample: { shops: Row[]; products: Row[]; stock: Row[] } };
 
 const F = (on: FeatureKey[]): Features => Object.fromEntries(FEATURE_KEYS.map(k => [k, on.includes(k)])) as Features;
 const sel = (key: string, label: string, options: string[], required = false): CustomField => ({ key, label, type: "select", options, required });
@@ -24,7 +25,7 @@ const shops = (extra: (i: number) => Row = () => ({})) => ["Chennai", "Coimbator
 export const TEMPLATES: Record<Industry, Template> = {
   apparel: {
     label: "Apparel / Kidswear", description: "Styles with size × colour variants, size-grid ordering, schemes.",
-    settings: { features: F(["sizeGrid", "gps", "schemes", "photos", "invoicing"]), attributes: ["size", "colour"], uoms: [{ code: "PCS", factor: 1 }, { code: "BOX", factor: 6 }],
+    settings: { features: F(["sizeGrid", "gps", "schemes", "photos", "invoicing", "purchaseOrders"]), attributes: ["size", "colour"], uoms: [{ code: "PCS", factor: 1 }, { code: "BOX", factor: 6 }],
       customFields: { outlet: [sel("store_type", "Store type", ["Kids store", "Multi-brand", "Department store"])],
         product: [fld("fabric", "Fabric", "text"), sel("season", "Season", ["SS", "AW"])], visit: [sel("display_ok", "Display OK", ["Yes", "No"])] } },
     sample: {
@@ -37,7 +38,7 @@ export const TEMPLATES: Record<Industry, Template> = {
       stock: [] } },
   fmcg: {
     label: "FMCG", description: "Pack size / flavour variants, piece-box-case units, stock tracking, schemes.",
-    settings: { features: F(["stock", "gps", "schemes", "photos", "invoicing"]), attributes: ["pack_size", "flavour"], uoms: [{ code: "PCS", factor: 1 }, { code: "BOX", factor: 12 }, { code: "CASE", factor: 144 }],
+    settings: { features: F(["stock", "gps", "schemes", "photos", "invoicing", "purchaseOrders"]), attributes: ["pack_size", "flavour"], uoms: [{ code: "PCS", factor: 1 }, { code: "BOX", factor: 12 }, { code: "CASE", factor: 144 }],
       customFields: { outlet: [sel("outlet_class", "Outlet class", ["A", "B", "C"])], product: [fld("shelf_life_days", "Shelf life days", "number")],
         visit: [fld("competitor_activity", "Competitor activity", "text")] } },
     sample: {
@@ -49,7 +50,7 @@ export const TEMPLATES: Record<Industry, Template> = {
       stock: [{ SKU: "SBIS-100G", Qty: 20, Unit: "CASE" }, { SKU: "SBIS-250G", Qty: 10, Unit: "CASE" }, { SKU: "SDRK-200ML", Qty: 15, Unit: "CASE" }] } },
   pharma: {
     label: "Pharma", description: "Strength / form variants, strip-box units, batch + expiry with FEFO, drug licence numbers.",
-    settings: { features: F(["stock", "batches", "gps", "drugLicence", "photos", "invoicing"]), attributes: ["strength", "form"], uoms: [{ code: "STRIP", factor: 1 }, { code: "BOX", factor: 10 }],
+    settings: { features: F(["stock", "batches", "gps", "drugLicence", "photos", "invoicing", "purchaseOrders"]), attributes: ["strength", "form"], uoms: [{ code: "STRIP", factor: 1 }, { code: "BOX", factor: 10 }],
       customFields: { outlet: [sel("chemist_type", "Chemist type", ["Retail", "Hospital", "Wholesale"])],
         product: [sel("schedule", "Schedule", ["OTC", "H", "H1"]), fld("composition", "Composition", "text")],
         visit: [fld("doctor_met", "Doctor met", "text"), fld("next_visit", "Next visit", "date")] } },
@@ -67,7 +68,7 @@ export const TEMPLATES: Record<Industry, Template> = {
         { SKU: "SSYR-100ML", Batch: "SB-SY01", Expiry: "2027-03-31", Qty: 5, Unit: "BOX" } ] } },
   retail: {
     label: "Retail / Consumer durables", description: "Model / colour variants, serial-free stock tracking, schemes.",
-    settings: { features: F(["stock", "gps", "schemes", "photos", "invoicing"]), attributes: ["model", "colour"], uoms: [{ code: "PCS", factor: 1 }],
+    settings: { features: F(["stock", "gps", "schemes", "photos", "invoicing", "purchaseOrders"]), attributes: ["model", "colour"], uoms: [{ code: "PCS", factor: 1 }],
       customFields: { outlet: [fld("showroom_sqft", "Showroom sqft", "number")], product: [fld("warranty_months", "Warranty months", "number")], visit: [fld("demo_units", "Demo units on display", "number")] } },
     sample: {
       shops: shops(i => ({ "Showroom sqft": [800, 1500, 2500][i] })),
@@ -103,9 +104,10 @@ export const defaultGst = (ind: Industry): Gst => ({ legalName: "", gstin: "", s
   hsnRates: SAMPLE_RATES[ind][1], invoicePrefix: "INV", creditPrefix: "CN", numberFormat: "{prefix}/{fy}/{seq:4}" });
 const asIndustry = (ind: string): Industry => (INDUSTRIES as readonly string[]).includes(ind) ? (ind as Industry) : "custom";
 export const templateSettings = (ind: string): Settings =>
-  ({ ...JSON.parse(JSON.stringify(TEMPLATES[asIndustry(ind)].settings)), gst: defaultGst(asIndustry(ind)) });
+  ({ ...JSON.parse(JSON.stringify(TEMPLATES[asIndustry(ind)].settings)), gst: defaultGst(asIndustry(ind)),
+     po: { priceBase: "billing", marginPct: 0, productDiscounts: [], numberFormat: "{prefix}/{fy}/{seq:4}" } });
 /** Fill keys added in later versions (new features, gst) from the industry template. */
 export const withDefaults = (ind: string, s: Partial<Settings>): Settings => {
   const t = templateSettings(ind);
-  return { ...t, ...s, features: { ...t.features, ...(s.features || {}) }, gst: { ...t.gst, ...(s.gst || {}) } } as Settings;
+  return { ...t, ...s, features: { ...t.features, ...(s.features || {}) }, gst: { ...t.gst, ...(s.gst || {}) }, po: { ...t.po, ...(s.po || {}) } } as Settings;
 };

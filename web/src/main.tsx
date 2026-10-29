@@ -4,8 +4,9 @@ import "./style.css";
 import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge } from "./field";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 import { Invoices, Targets, Reports, Visits } from "./step4";
+import { PurchaseOrders, DistributorTerms } from "./po";
 
-export type Session = { token: string; user: { name: string; role: string; companyCode: string | null } };
+export type Session = { token: string; user: { id: number; name: string; role: string; companyCode: string | null } };
 export const api = async (s: Session | null, url: string, opts: RequestInit = {}) => {
   const r = await fetch(url, { ...opts, headers: { ...(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(s ? { Authorization: `Bearer ${s.token}` } : {}) } });
   const j = await r.json().catch(() => ({}));
@@ -52,7 +53,7 @@ function Platform({ s }: { s: Session }) {
       <button>Create</button><p>{msg}</p></form></>;
 }
 
-export type Cfg = { industry: string; settings: { features: Record<string, boolean>; attributes: string[]; uoms: { code: string; factor: number }[]; customFields: Record<string, any[]> } };
+export type Cfg = { industry: string; settings: { features: Record<string, boolean>; attributes: string[]; uoms: { code: string; factor: number }[]; customFields: Record<string, any[]>; po?: any; gst?: any } };
 export const label = (k: string) => k.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
 
 function Company({ s }: { s: Session }) {
@@ -62,11 +63,11 @@ function Company({ s }: { s: Session }) {
   useEffect(() => { reload(); if (mgr) api(s, "/api/company/usage").then(setUsage); }, []);
   if (!cfg) return <p className="muted">Loading…</p>;
   const f = cfg.settings.features;
-  const tabs = mgr ? ["dashboard", "beats", "orders", ...(f.invoicing ? ["invoices"] : []), "visits", "targets", "reports", "catalog", "shops", ...(f.stock ? ["stock"] : []), ...(f.schemes ? ["schemes"] : []), "users", ...(admin ? ["settings", "import"] : [])]
-    : role === "sales_rep" ? ["beat", "order", "orders", "targets", "catalog"] : ["inbox", ...(f.stock ? ["stock"] : []), "catalog"];
+  const tabs = mgr ? ["dashboard", "beats", "orders", ...(f.invoicing ? ["invoices"] : []), "visits", "targets", "reports", "catalog", "shops", ...(f.stock ? ["stock"] : []), ...(f.schemes ? ["schemes"] : []), ...(f.purchaseOrders ? ["POs"] : []), "distributors", "users", ...(admin ? ["settings", "import"] : [])]
+    : role === "sales_rep" ? ["beat", "order", "orders", "targets", "catalog"] : ["inbox", ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : []), "profile", "catalog"];
   const cur = tabs.includes(tab) ? tab : tabs[0];
   const views: Record<string, any> = { dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
-    catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, schemes: Schemes, settings: SettingsPage, import: ImportPage, users: Users };
+    catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes, settings: SettingsPage, import: ImportPage, users: Users };
   const C = views[cur];
   return <>
     {mgr && <Usage u={usage} />}<OfflineBadge s={s} />
