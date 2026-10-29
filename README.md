@@ -119,3 +119,10 @@ Next (proposed): offline photo queue, a real GSP adapter for e-invoicing (needs 
 | ![](docs/ui-1-login.png) | ![](docs/ui-2-rep-home.png) | ![](docs/ui-3-order.png) | ![](docs/ui-4-admin-home.png) |
 
 Screenshots use the in-memory DEMO company (`npm run demo -w server`). All of its data is sample data.
+
+## Security & privacy
+- Sign-in: per-IP rate limit and per-account lockout (5 failures → 15 min), optional TOTP two-step sign-in (admins can require it), optional one-phone binding for sales reps, idle sign-out (default 60 min, per company), one-time admin reset codes (plug a mailer in with `setMailer()`).
+- Tokens are revoked at once when a user is disabled, deleted, or changes/resets their password.
+- Helmet headers (HSTS, CSP, frame deny, nosniff), same-origin CORS (`CORS_ORIGINS` to allow more), app binds to `127.0.0.1` (`HOST` to change), `trust proxy` = 1.
+- Activity log of sign-ins, alerts (new device/IP, failures, lockouts) and admin changes under **Security & privacy**; data export (JSON/CSV) and user/company deletion by anonymisation; privacy notice at `/privacy.html`.
+- Nightly gzip `pg_dump` at 02:30 into `~/backups` (7 kept; `BACKUP_DIR`, `BACKUP_KEEP`, optional `BACKUP_S3_BUCKET`).
