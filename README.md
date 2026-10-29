@@ -87,6 +87,20 @@ Open-source, **industry-agnostic** field sales and distributor management for FM
 Photos are shrunk on the phone (about 1280px JPEG) before upload; the server accepts images up to 1 MB (`PHOTO_MAX_BYTES`).
 On start the server adds labelled sample data for these features to the company with code DEMO only, if missing.
 
+## Field operations (each is a company feature toggle; DEMO has sample data for all)
+
+- **Van sales**: load a van, sell and print the invoice on the spot, count and close the day (van stock is its own ledger).
+- **Distributor inventory**: stock per distributor with a movement log (receipts, sales, adjustments).
+- **Claims**: distributors claim damage/scheme amounts; approve, part-approve or reject; settle with a credit note (CCN-…).
+- **Two-way sync**: through Integrations (connectors push events, pull masters).
+- **Barcode / QR**: scan with the phone camera (BarcodeDetector) or type the code.
+- **Leads**: prospects with follow-ups, converted into outlets.
+- **Location trail & geofence**: light GPS pings while the rep app is open (working hours, 30 days kept); check-in warns when far from the outlet.
+- **Coverage**: planned vs visited outlets per rep and beat.
+- **Languages & offline**: English, Hindi, Tamil, Kannada (picked per phone); lists are cached and orders, payments, van sales, visits and surveys are queued offline and deduped on the server.
+- **Surveys**: build forms (text, number, yes/no, choice, competitor price); competitor price report.
+- **WhatsApp / SMS**: mock provider by default — messages are only logged. Real sends happen only after an admin sets an HTTP gateway URL and key.
+
 ## Stack
 Node 20 + TypeScript + Express + PostgreSQL. React + Vite on the front end. Tests use Vitest + Supertest against in-memory Postgres (pg-mem).
 

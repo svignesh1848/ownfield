@@ -152,5 +152,9 @@ describe("DEMO sample data", () => {
     const st = (await request(app).get("/api/company/settings").set(H("demo"))).body.settings.features;
     expect([st.audits, st.expenses, st.leave, st.incentives, st.retailerApp]).toEqual([true, true, true, true, true]);
     expect((await request(app).get("/api/incentive-rules").set(H("demo"))).body[0].name).toMatch(/sample/);
+    expect([st.vanSales, st.claims, st.leads, st.tracking, st.surveys, st.messaging]).toEqual([true, true, true, true, true, true]);
+    const sv = (await request(app).get("/api/surveys/forms").set(H("demo")).expect(200)).body; expect(sv).toHaveLength(1); expect(sv[0].name).toMatch(/sample/);
+    expect((await request(app).get("/api/leads").set(H("demo")).expect(200)).body.every((l: any) => /Sample/.test(l.name))).toBe(true);
+    expect((await request(app).get("/api/messages/log").set(H("demo")).expect(200)).body.every((m: any) => m.status === "mock")).toBe(true);
   });
 });

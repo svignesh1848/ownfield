@@ -76,4 +76,36 @@ export async function seedDemo(db: Db, code = "DEMO") {
     if (shop) await db.query("INSERT INTO users (company_id,email,name,role,password_hash,shop_id) VALUES ($1,'retailer@example.com','Sample Retailer','retailer',$2,$3)", [cid, await bcrypt.hash("Demo@2026", 10), shop.id]);
   }
   });
+  // 6) Field-ops modules (van sales, distributor inventory, claims, barcode, leads, tracking, coverage, surveys, messaging), all labelled sample.
+  await step("fieldops", async () => {
+  await enable(db, cid, ["vanSales", "distInventory", "claims", "barcode", "leads", "tracking", "coverage", "surveys", "messaging"]);
+  const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const vars = (await db.query("SELECT v.id FROM variants v JOIN items i ON i.id=v.item_id WHERE i.company_id=$1 ORDER BY v.id LIMIT 3", [cid])).rows;
+  await db.query("UPDATE variants SET barcode=CAST(8900000000000 + id AS TEXT) WHERE barcode IS NULL AND company_id=$1", [cid]);
+  if (rep && vars.length && !(await one(db, "SELECT id FROM van_loads WHERE company_id=$1", [cid]))) {
+    const l = await one(db, "INSERT INTO van_loads (company_id,rep_id,day) VALUES ($1,$2,$3) RETURNING id", [cid, rep.id, day]);
+    for (const v of vars) await db.query("INSERT INTO van_lines (load_id,variant_id,loaded) VALUES ($1,$2,$3)", [l.id, v.id, 24]);
+  }
+  const dist = await one(db, "SELECT id FROM users WHERE company_id=$1 AND role='distributor' ORDER BY id", [cid]);
+  if (dist && !(await one(db, "SELECT id FROM claims WHERE company_id=$1", [cid])))
+    await db.query("INSERT INTO claims (company_id,distributor_id,kind,description,amount) VALUES ($1,$2,'damage',$3,$4)", [cid, dist.id, "Sample claim — 6 damaged cartons in transit", 540]);
+  if (!(await one(db, "SELECT id FROM leads WHERE company_id=$1", [cid]))) {
+    await db.query("INSERT INTO leads (company_id,name,kind,owner_name,phone,city,next_follow_up,notes,assigned_to,created_by) VALUES ($1,$2,'outlet',$3,$4,$5,$6,$7,$8,$8)", [cid, "Sample New Mart", "Sample Owner", "9000000001", "Chennai", day, "Sample lead — wants a price list", rep?.id ?? null]);
+    await db.query("INSERT INTO leads (company_id,name,kind,city,status,notes,created_by) VALUES ($1,$2,'dealer',$3,'contacted',$4,$5)", [cid, "Sample Traders (dealer)", "Madurai", "Sample dealer lead", rep?.id ?? null]);
+  }
+  if (rep && !(await one(db, "SELECT id FROM location_pings WHERE company_id=$1", [cid]))) {
+    const base = new Date(`${day}T10:00:00+05:30`).getTime();
+    for (let i = 0; i < 8; i++) await db.query("INSERT INTO location_pings (company_id,user_id,at,lat,lng,acc) VALUES ($1,$2,$3,$4,$5,20)", [cid, rep.id, new Date(base + i * 15 * 60_000).toISOString(), 13.0827 + i * 0.002, 80.2707 + i * 0.0015]);
+  }
+  if (!(await one(db, "SELECT id FROM survey_forms WHERE company_id=$1", [cid]))) {
+    const qs = [{ key: "rival_price", label: "Rival brand 1 kg price", type: "price", brand: "Sample Rival Brand", required: true }, { key: "rival_offer", label: "Rival running an offer?", type: "yesno" },
+      { key: "shelf", label: "Where is our product?", type: "select", options: ["Eye level", "Lower shelf", "Not on shelf"] }, { key: "notes", label: "Competitor activity", type: "text" }];
+    const f = await one(db, "INSERT INTO survey_forms (company_id,name,questions) VALUES ($1,$2,$3) RETURNING id", [cid, "Competitor price check (sample)", JSON.stringify(qs)]);
+    const shops = (await db.query("SELECT id FROM shops WHERE company_id=$1 ORDER BY id LIMIT 3", [cid])).rows;
+    for (const [i, sh] of shops.entries()) await db.query("INSERT INTO survey_responses (company_id,form_id,shop_id,user_id,answers) VALUES ($1,$2,$3,$4,$5)",
+      [cid, f.id, sh.id, rep?.id ?? null, JSON.stringify({ rival_price: [92, 95, 89][i], rival_offer: i === 0, shelf: ["Eye level", "Lower shelf", "Eye level"][i], notes: "Sample response" })]);
+  }
+  if (!(await one(db, "SELECT id FROM message_log WHERE company_id=$1", [cid])))
+    await db.query("INSERT INTO message_log (company_id,channel,to_phone,template,body,status,provider,sent_at) VALUES ($1,'whatsapp','919000000001','order_confirmed',$2,'mock','mock',NOW())", [cid, "Hi Sample Outlet, your order #SAMPLE-1 for ₹1250.00 is received. Thank you (sample, not sent)"]);
+  });
 }

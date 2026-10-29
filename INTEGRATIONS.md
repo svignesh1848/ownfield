@@ -40,7 +40,7 @@ curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
 ## 2. Outgoing webhooks
 
 Events: `order.created`, `order.approved` (order accepted), `order.status_changed`, `invoice.created`,
-`credit_note.created`, `collection.created`, `stock.low`, `van.closed`, `claim.submitted`, `claim.settled`, `lead.converted` (stock at or below the company low-stock level, default 10).
+`credit_note.created`, `collection.created`, `stock.low`, `van.closed`, `claim.submitted`, `claim.settled`, `lead.converted`, `survey.submitted` (stock at or below the company low-stock level, default 10).
 
 Every POST carries `X-FieldForce-Event`, `X-FieldForce-Delivery`, `X-FieldForce-Timestamp` and
 `X-FieldForce-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + raw body)>`. Check it like this:
