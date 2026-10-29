@@ -13,5 +13,14 @@ services:
       OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
       OWNER_PASSWORD: ${OWNER_PASSWORD:-change-me-now}
       UPLOAD_DIR: /data/uploads
+      # Photos: local disk by default. Set PHOTO_STORAGE=s3 + the S3_* values to use an S3-compatible bucket.
+      PHOTO_STORAGE: ${PHOTO_STORAGE:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PREFIX: ${S3_PREFIX:-}
+      DISK_ALERT_PCT: ${DISK_ALERT_PCT:-15}
     volumes: [uploads:/data/uploads]
 volumes: { dbdata: {}, uploads: {} }

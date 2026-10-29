@@ -118,6 +118,25 @@ OWNER_EMAIL=you@example.com OWNER_PASSWORD=strong JWT_SECRET=random docker compo
 # open http://localhost:8080 , sign in with company code PLATFORM
 ```
 
+### Photo storage and disk space
+
+All photos (visit photos, day-start selfies, store audit photos, expense bills) go through one photo store.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PHOTO_STORAGE` | `local` | `local` = files in `UPLOAD_DIR`; `s3` = an S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Wasabi…) |
+| `UPLOAD_DIR` | `./uploads` | Folder for local photos (a Docker volume) |
+| `S3_BUCKET` | – | Bucket name (required for `s3`) |
+| `S3_REGION` | `us-east-1` | Bucket region (`auto` for R2) |
+| `S3_ENDPOINT` | AWS | Custom endpoint for non-AWS providers, e.g. `https://<account>.r2.cloudflarestorage.com` |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | – | Keys with read + write on the bucket (required for `s3`) |
+| `S3_PREFIX` | – | Optional folder inside the bucket |
+| `DISK_ALERT_PCT` | `15` | Warn when free disk is below this % |
+| `TEMP_DIR` | `<tmp>/ownfield` | Temp folder; files older than a day are removed hourly |
+
+If `s3` is chosen but a value is missing, the server logs it and keeps using local disk. After switching, old local photos still open (reads fall back to disk).
+Every hour the server checks free disk: below `DISK_ALERT_PCT` it logs `LOW DISK` and shows a red banner to the platform owner and company admins. The hourly cleanup only deletes old files in `TEMP_DIR` — never photos, backups or the database.
+
 ## Develop
 ```bash
 npm install
