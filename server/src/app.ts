@@ -33,6 +33,7 @@ import { registerCoverageRoutes } from "./coverage.js";
 import { registerApiV1 } from "./integrations/api.js";
 import { registerIntegrationRoutes, registerInbound } from "./integrations/admin.js";
 import "./connectors/service.js";
+import { diskStatus } from "./disk.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor", "retailer"] as const;
 export type Role = (typeof ROLES)[number];
@@ -119,6 +120,10 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   }
 
   app.get("/api/health", (_q, res) => res.json({ ok: true }));
+  // Low-disk warning for the admin dashboard (server-wide; company admins on self-hosted installs need it too).
+  app.get("/api/system/disk", auth("platform_owner", "company_admin"), (_q, res) => {
+    const d = diskStatus(); res.json(d ? { freePct: d.freePct, freeMB: Math.round(d.freeBytes / 1e6), alertPct: d.alertPct, low: d.low } : { low: false });
+  });
 
   app.post("/api/auth/login", guard.ipLimiter, wrap(async (req, res) => {
     const { companyCode, email, password, totp, deviceId } = req.body || {};

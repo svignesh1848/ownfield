@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import { Toasts, toast, Empty, Loading, Field, fmtCell, ICONS } from "./ui";
-import { SetupChecklist, RepHome, DistributorHome, ManagerHome } from "./home";
+import { SetupChecklist, RepHome, DistributorHome, ManagerHome, DiskAlert } from "./home";
 import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge, queue } from "./field";
 import { Collections } from "./collect";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
@@ -169,6 +169,7 @@ function Platform({ s }: { s: Session }) {
   const load = () => api(s, "/api/platform/companies").then(setList);
   useEffect(() => { load(); api(null, "/api/templates").then(setTpl); }, []);
   return <>
+    <DiskAlert s={s} />
     <section className="card"><h2>{t("Companies")}</h2>
       {list.map(c => <div key={c.id} className="row"><b>{c.code}</b> {c.name} <span className="pill">{c.industry}</span><Usage u={c.usage} />
         <button className="sm" onClick={async () => { const v = prompt(t("New user limit"), c.user_limit); if (v) { await api(s, `/api/platform/companies/${c.id}`, { method: "PATCH", body: JSON.stringify({ userLimit: Number(v) }) }); load(); } }}>{t("Set limit")}</button></div>)}

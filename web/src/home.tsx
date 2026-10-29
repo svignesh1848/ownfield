@@ -56,6 +56,13 @@ export function DistributorHome({ s, cfg, go }: ViewProps) {
     </div></>;
 }
 
+/** Admin-only banner when the server's free disk drops below the alert level (default 15%). */
+export function DiskAlert({ s }: { s: any }) {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => { safe(api(s, "/api/system/disk"), null).then(setD); }, []);
+  return d?.low ? <div className="banner bad" role="alert">⚠️ {t("Low disk space on the server: only {0}% free. Delete old files or move photos to S3 storage (see README).", d.freePct)}</div> : null;
+}
+
 export function ManagerHome(p: ViewProps) {
   const { s, cfg, go } = p, f = cfg.settings.features;
   const [d, setD] = useState<any>(null);
@@ -63,7 +70,7 @@ export function ManagerHome(p: ViewProps) {
     setD({ visits: dash.reduce((a: number, r: any) => a + r.visits, 0), orders: dash.reduce((a: number, r: any) => a + r.orders, 0), value: dash.reduce((a: number, r: any) => a + r.value, 0),
       approve: o.filter((x: any) => x.status === "placed" && !x.distributor_id).length, pos: po.filter((x: any) => ["submitted", "approved", "partially_dispatched"].includes(x.status)).length,
       due: out.reduce((a: number, r: any) => a + r.outstanding, 0), overdue: out.reduce((a: number, r: any) => a + r.overdue, 0) })); }, []);
-  return <>{s.user.role === "company_admin" && <SetupChecklist {...p} />}
+  return <>{s.user.role === "company_admin" && <><DiskAlert s={s} /><SetupChecklist {...p} /></>}
     <h2 className="hello">{hello(s.user.name)}</h2>
     {!d ? <Loading /> : <>
       <h3>{t("Today")}</h3>

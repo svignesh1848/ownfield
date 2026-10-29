@@ -975,5 +975,6 @@
  "📷 Scan": "📷 Scan",
  "Own your sales.": "Own your sales.",
  "Privacy": "Privacy",
- "OwnField — Own your sales.": "OwnField — Own your sales."
+ "OwnField — Own your sales.": "OwnField — Own your sales.",
+ "Low disk space on the server: only {0}% free. Delete old files or move photos to S3 storage (see README).": "Low disk space on the server: only {0}% free. Delete old files or move photos to S3 storage (see README)."
 }
