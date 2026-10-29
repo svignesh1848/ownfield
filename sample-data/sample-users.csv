@@ -1,0 +1,4 @@
+Name,Email,Phone,Role,Password
+Sample Manager,manager@example.com,9000000010,manager,changeme123
+Sample Rep,rep@example.com,9000000011,sales_rep,changeme123
+Sample Distributor,distributor@example.com,9000000012,distributor,changeme123

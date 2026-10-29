@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: fieldforce, POSTGRES_PASSWORD: fieldforce, POSTGRES_DB: fieldforce }
+    volumes: [dbdata:/var/lib/postgresql/data]
+  app:
+    build: .
+    depends_on: [db]
+    ports: ["8080:8080"]
+    environment:
+      DATABASE_URL: postgres://fieldforce:fieldforce@db:5432/fieldforce
+      JWT_SECRET: ${JWT_SECRET:-please-change-me}
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-change-me-now}
+volumes: { dbdata: {} }
