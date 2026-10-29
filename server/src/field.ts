@@ -5,6 +5,7 @@ import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
 import type { Uom } from "./templates.js";
 import { activeSchemes, applySchemes } from "./schemes.js";
 import { creditCheck } from "./collections.js";
+import { onLeave } from "./leave.js";
 
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void; tenant: (req: any, res: Response) => number | null };
 const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
@@ -87,8 +88,12 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const mine = req.user.role === "sales_rep";
     const beats = (await db.query(`SELECT b.*, u.name AS rep_name FROM beats b LEFT JOIN users u ON u.id=b.rep_id
       WHERE b.company_id=$1 ${mine ? "AND b.rep_id=$2" : ""} ORDER BY b.id`, mine ? [cid, req.user.uid] : [cid])).rows;
-    for (const b of beats) b.shops = (await db.query(`SELECT s.id,s.code,s.name,s.city,bs.seq FROM beat_shops bs JOIN shops s ON s.id=bs.shop_id
+    const leaveCache = new Map<number, boolean>();
+    for (const b of beats) {
+      b.shops = (await db.query(`SELECT s.id,s.code,s.name,s.city,bs.seq FROM beat_shops bs JOIN shops s ON s.id=bs.shop_id
       WHERE bs.beat_id=$1 ORDER BY bs.seq`, [b.id])).rows;
+      if (b.rep_id) { if (!leaveCache.has(b.rep_id)) leaveCache.set(b.rep_id, !!(await onLeave(db, cid, b.rep_id))); if (leaveCache.get(b.rep_id)) b.onLeaveToday = true; }
+    }
     res.json(beats);
   }));
 
@@ -98,6 +103,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const { settings } = await getCompany(db, cid);
     const [lat, lng] = coordOpt(settings.features.gps, req.body?.lat, req.body?.lng);
     if (!(await shopIn(cid, req.body?.shopId))) throw bad("shop not found", 404);
+    if (await onLeave(db, cid, req.user.uid)) throw bad("You are on approved leave today, so visits are paused.", 409);
     const open = (await db.query("SELECT id FROM visits WHERE rep_id=$1 AND check_out_at IS NULL", [req.user.uid])).rows[0];
     if (open) throw bad("check out of the current visit first", 409);
     res.status(201).json((await db.query("INSERT INTO visits (company_id,rep_id,shop_id,in_lat,in_lng) VALUES ($1,$2,$3,$4,$5) RETURNING *",

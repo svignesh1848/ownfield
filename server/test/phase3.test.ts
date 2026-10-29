@@ -82,6 +82,27 @@ describe("expenses", () => {
   });
 });
 
+describe("leave & attendance", () => {
+  it("rep applies, manager approves, beat shows on-leave and check-in is blocked; attendance counts days", async () => {
+    const d = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    await request(app).post("/api/leaves").set(H("r1")).send({ from: d }).expect(403);
+    await features("a", { leave: true }).expect(200);
+    await request(app).post(`/api/visits/${ids.v1}/checkout`).set(H("r1")).send({}).expect(200);
+    await request(app).post("/api/beats").set(H("a")).send({ name: "Sample beat", repId: ids.r1, shopIds: [ids.s1] }).expect(201);
+    await request(app).post("/api/leaves").set(H("r1")).send({ from: "2026-05-10", to: "2026-05-09" }).expect(400);
+    const l = (await request(app).post("/api/leaves").set(H("r1")).send({ from: d, to: d, kind: "sick", reason: "Fever" }).expect(201)).body;
+    await request(app).post("/api/leaves").set(H("r1")).send({ from: d }).expect(409);
+    await request(app).post(`/api/leaves/${l.id}/decision`).set(H("r1")).send({ status: "approved" }).expect(403);
+    expect((await request(app).get("/api/beats").set(H("r1"))).body[0].onLeaveToday).toBeUndefined();
+    await request(app).post(`/api/leaves/${l.id}/decision`).set(H("m")).send({ status: "approved" }).expect(200);
+    expect((await request(app).get("/api/beats").set(H("r1"))).body[0].onLeaveToday).toBe(true);
+    await request(app).post("/api/visits/checkin").set(H("r1")).send({ shopId: ids.s1 }).expect(409);
+    const a = (await request(app).get(`/api/attendance?month=${d.slice(0, 7)}`).set(H("m")).expect(200)).body.reps;
+    expect(a.find((r: any) => r.rep === "Rep One")).toMatchObject({ present: 1, leave: 1, leaveDays: [d] });
+    expect((await request(app).get("/api/leaves").set(H("r2"))).body).toHaveLength(0);
+  });
+});
+
 describe("DEMO sample data", () => {
   it("seeds labelled sample data idempotently", async () => {
     await seedDemo(db); await seedDemo(db);

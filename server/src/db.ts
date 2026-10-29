@@ -123,6 +123,9 @@ CREATE TABLE IF NOT EXISTS expenses (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), rep_id INTEGER NOT NULL REFERENCES users(id), spent_on TEXT NOT NULL,
   amount NUMERIC NOT NULL, category TEXT NOT NULL, note TEXT, receipt_file TEXT, receipt_mime TEXT, status TEXT NOT NULL DEFAULT 'pending', reason TEXT,
   decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS leaves (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), rep_id INTEGER NOT NULL REFERENCES users(id), from_date TEXT NOT NULL, to_date TEXT NOT NULL,
+  kind TEXT NOT NULL, reason TEXT, status TEXT NOT NULL DEFAULT 'pending', note TEXT, decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

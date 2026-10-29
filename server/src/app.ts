@@ -14,6 +14,7 @@ import { registerCollectionRoutes } from "./collections.js";
 import { registerEinvoiceRoutes } from "./einvoice.js";
 import { registerAuditRoutes } from "./audits.js";
 import { registerExpenseRoutes } from "./expenses.js";
+import { registerLeaveRoutes } from "./leave.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor"] as const;
@@ -192,6 +193,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerEinvoiceRoutes({ app, db, auth, wrap, tenant });
   registerAuditRoutes({ app, db, auth, wrap, tenant });
   registerExpenseRoutes({ app, db, auth, wrap, tenant });
+  registerLeaveRoutes({ app, db, auth, wrap, tenant });
 
   const webDir = process.env.WEB_DIR || path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDir)) {

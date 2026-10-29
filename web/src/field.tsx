@@ -69,7 +69,7 @@ export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
   const open = visits.find(v => !v.check_out_at), gpsOn = cfg.settings.features.gps, vdefs = cfg.settings.customFields.visit;
   const act = async (fn: (p: { lat?: number; lng?: number }) => Promise<unknown>) => {
     try { let p = {}; if (gpsOn) { setMsg("Getting GPS…"); p = await gps(); } else p = await gps().catch(() => ({})); await fn(p); setMsg(""); setVc({}); load(); } catch (e: any) { setMsg(e.message); } };
-  return <><h2>My beat</h2>{open && <div className="usage warn">In visit: <b>{open.shop_name}</b> since {fmtDate(open.check_in_at, true).slice(11)}
+  return <><h2>My beat</h2>{beats.some(b => b.onLeaveToday) && <div className="banner">🌴 You are on approved leave today. Visits are paused — enjoy your day off.</div>}{open && <div className="usage warn">In visit: <b>{open.shop_name}</b> since {fmtDate(open.check_in_at, true).slice(11)}
       {cfg.settings.features.photos && <VisitPhotos s={s} visitId={open.id} canAdd />}
       {vdefs.length > 0 && <CustomInputs defs={vdefs} value={vc} onChange={setVc} />}
       <button className="sm" onClick={() => act(p => api(s, `/api/visits/${open.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc }) }))}>Check out</button></div>}

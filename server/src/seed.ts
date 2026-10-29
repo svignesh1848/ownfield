@@ -42,4 +42,10 @@ export async function seedDemo(db: Db, code = "DEMO") {
       await db.query("INSERT INTO expenses (company_id,rep_id,spent_on,amount,category,note,receipt_file,receipt_mime,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", [cid, rep.id, d, amt, cat, note, p.file, p.mime, st]);
     }
   }
+  // 3) Leave
+  await enable(db, cid, ["leave"]);
+  if (rep && !(await one(db, "SELECT id FROM leaves WHERE company_id=$1", [cid]))) {
+    const d = new Date(Date.now() + 7 * 864e5).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    await db.query("INSERT INTO leaves (company_id,rep_id,from_date,to_date,kind,reason) VALUES ($1,$2,$3,$3,'Casual',$4)", [cid, rep.id, d, "Sample leave request"]);
+  }
 }

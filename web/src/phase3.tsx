@@ -122,3 +122,39 @@ export function ExpenseApprovals({ s }: ViewProps) {
       cols={["rep_name", "approved", "pending", "rejected", "by_category"]} empty={{ title: "No claims this month" }} />}</>;
 }
 
+
+// ---------- 3) Leave & attendance ----------
+const LSTATUS: Record<string, string> = { pending: "Waiting", approved: "Approved", rejected: "Not approved" };
+const pillOf = (st: string) => st === "pending" ? "placed" : st === "approved" ? "fulfilled" : "rejected";
+const range = (l: any) => l.from_date === l.to_date ? fmtDate(l.from_date) : `${fmtDate(l.from_date)} to ${fmtDate(l.to_date)}`;
+export function MyLeave({ s }: ViewProps) {
+  const [list, setList] = useState<any[] | null>(null); const [f, setF] = useState({ from: today(), to: today(), kind: "Casual", reason: "" });
+  const load = () => api(s, "/api/leaves").then(setList).catch(e => { setList([]); toast(e.message, "err"); }); useEffect(() => { load(); }, []);
+  const apply = async () => { try { await api(s, "/api/leaves", { method: "POST", body: JSON.stringify(f) }); setF({ ...f, reason: "" }); load(); } catch (e: any) { toast(e.message, "err"); } };
+  return <><h2>My leave</h2>
+    <div className="card sub"><h3>Apply for leave</h3>
+      <div className="two"><Field label="First day"><input type="date" value={f.from} onChange={e => setF({ ...f, from: e.target.value, to: f.to < e.target.value ? e.target.value : f.to })} /></Field>
+        <Field label="Last day"><input type="date" min={f.from} value={f.to} onChange={e => setF({ ...f, to: e.target.value })} /></Field></div>
+      <Field label="Type"><select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })}>{["Casual", "Sick", "Other"].map(k => <option key={k}>{k}</option>)}</select></Field>
+      <Field label="Reason (optional)"><input value={f.reason} onChange={e => setF({ ...f, reason: e.target.value })} /></Field>
+      <button className="block" onClick={apply}>Send to manager</button></div>
+    {list == null ? <Loading /> : !list.length ? <Empty icon="🌴" title="No leave yet" text="Your leave requests show here." />
+      : list.map(l => <div className="row" key={l.id}><b>{range(l)}</b> <span className="muted">· {l.kind} · {l.days} day{l.days > 1 ? "s" : ""}</span> <span className={`pill ${pillOf(l.status)}`}>{LSTATUS[l.status]}</span>
+        {l.status === "pending" && <button className="link" onClick={() => api(s, `/api/leaves/${l.id}/cancel`, { method: "POST" }).then(load)}>Cancel</button>}</div>)}</>;
+}
+export function LeaveApprovals({ s }: ViewProps) {
+  const [list, setList] = useState<any[] | null>(null); const [month, setMonth] = useState(month0()); const [att, setAtt] = useState<any>(null);
+  const load = () => api(s, "/api/leaves").then(setList).catch(e => { setList([]); toast(e.message, "err"); });
+  useEffect(() => { load(); }, []); useEffect(() => { api(s, `/api/attendance?month=${month}`).then(setAtt).catch(() => {}); }, [month, list]);
+  const decide = (id: number, status: string) => api(s, `/api/leaves/${id}/decision`, { method: "POST", body: JSON.stringify({ status }) }).then(load).catch(e => toast(e.message, "err"));
+  const pending = (list || []).filter(l => l.status === "pending");
+  return <><h2>Leave & attendance</h2>
+    <h3>Waiting for you ({pending.length})</h3>
+    {list == null ? <Loading /> : !pending.length ? <p className="muted">No leave requests waiting.</p> : pending.map(l => <div className="row" key={l.id}><b>{l.rep_name}</b> · {range(l)} <span className="muted">· {l.kind}{l.reason ? ` · ${l.reason}` : ""}</span>
+      <div className="row-btns"><button className="sm" onClick={() => decide(l.id, "approved")}>Approve</button><button className="sm ghost" onClick={() => decide(l.id, "rejected")}>Reject</button></div></div>)}
+    <h3>Leave calendar</h3>
+    {(list || []).filter(l => l.status === "approved").slice(0, 20).map(l => <div className="row" key={l.id}>🌴 <b>{l.rep_name}</b> · {range(l)} <span className="muted">· {l.kind}</span></div>)}
+    <h3>Attendance</h3><Field label="Month"><input type="month" value={month} onChange={e => setMonth(e.target.value)} /></Field>
+    {att && <Table rows={att.reps.map((r: any) => ({ rep_name: r.rep, days_worked: r.present, days_on_leave: r.leave }))} cols={["rep_name", "days_worked", "days_on_leave"]} empty={{ title: "No sales reps yet" }} />}
+    <p className="muted small">Days worked = days with at least one outlet visit.</p></>;
+}
