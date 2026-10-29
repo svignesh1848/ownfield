@@ -240,7 +240,7 @@ export function registerPurchaseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
           let left = q;
           for (const r of await fefoRows(tx, cid, null, l.variant_id)) {
             const take = Math.min(r.qty, left); if (take <= 0) continue;
-            if (!(await tx.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [r.qty - take, r.id, r.qty])).rows[0]) throw bad("stock changed — retry", 409);
+            if (!(await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [r.qty - take, r.id, r.qty])).rows[0]) throw bad("stock changed — retry", 409);
             await tx.query("INSERT INTO po_dispatch_lines (dispatch_id,po_line_id,qty,batch_no,expiry) VALUES ($1,$2,$3,$4,$5)", [d.id, l.id, take, r.batch_no, r.expiry]);
             left -= take; if (!left) break;
           }
@@ -270,7 +270,7 @@ export function registerPurchaseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         l.qty_received += dl.qty;
         if (!s.features.stock) continue;
         const ex = (await tx.query("SELECT id, qty FROM stock WHERE company_id=$1 AND distributor_id=$2 AND variant_id=$3 AND batch_no=$4", [cid, po.distributor_id, l.variant_id, dl.batch_no])).rows[0];
-        if (ex) { if (!(await tx.query("UPDATE stock SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(ex.qty) + dl.qty, ex.id, ex.qty])).rows[0]) throw bad("stock changed — retry", 409); }
+        if (ex) { if (!(await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(ex.qty) + dl.qty, ex.id, ex.qty])).rows[0]) throw bad("stock changed — retry", 409); }
         else await tx.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, po.distributor_id, l.variant_id, dl.batch_no, dl.expiry, dl.qty]);
       }
       const ls = (await tx.query("SELECT qty_approved, qty_received FROM po_lines WHERE po_id=$1", [po.id])).rows;

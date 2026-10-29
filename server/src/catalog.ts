@@ -140,7 +140,7 @@ export async function fefoRows(db: Db, cid: number, loc: number | null, variantI
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; tenant: (req: any, res: Response) => number | null;
   wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void;
   addUser: (cid: number, u: any) => Promise<any>; companyUsage: (cid: number) => Promise<any> };
-type Imp = { db: Db; cid: number; s: Settings; role: string; uid: number; addUser: Ctx["addUser"] };
+export type Imp = { db: Db; cid: number; s: Settings; role: string; uid: number; addUser: Ctx["addUser"] };
 
 async function importShop({ db, cid, s }: Imp, r: any) {
   if (empty(r.code) || empty(r.name)) throw bad("code and name required");
@@ -160,7 +160,7 @@ async function importShop({ db, cid, s }: Imp, r: any) {
   const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, gstin, dl, custom, state, pin];
   const ex = (await db.query("SELECT id, distributor_id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
   if (ex) {
-    await db.query("UPDATE shops SET name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,pincode=$10,distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
+    await db.query("UPDATE shops SET updated_at=NOW(), name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,pincode=$10,distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
     return "updated";
   }
   await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [...vals, dist, cid, String(r.code)]);
@@ -181,11 +181,11 @@ async function importProduct({ db, cid, s }: Imp, r: any) {
   const custom = JSON.stringify(cleanCustom(s.customFields.product, r));
   const name = String(r.item_name ?? r.product_name ?? r.name ?? code).trim() || code;
   let item = (await db.query("SELECT id FROM items WHERE company_id=$1 AND code=$2", [cid, code])).rows[0];
-  if (item) await db.query("UPDATE items SET name=$1,category=$2,kind=$3,hsn=$4,uoms=$5,custom=$6 WHERE id=$7", [name, r.category || null, kind, String(r.hsn ?? "") || null, uoms, custom, item.id]);
+  if (item) await db.query("UPDATE items SET updated_at=NOW(), name=$1,category=$2,kind=$3,hsn=$4,uoms=$5,custom=$6 WHERE id=$7", [name, r.category || null, kind, String(r.hsn ?? "") || null, uoms, custom, item.id]);
   else item = (await db.query("INSERT INTO items (company_id,code,name,category,kind,hsn,uoms,custom) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
     [cid, code, name, r.category || null, kind, String(r.hsn ?? "") || null, uoms, custom])).rows[0];
   const v = (await db.query("SELECT id FROM variants WHERE company_id=$1 AND sku=$2", [cid, sku])).rows[0];
-  if (v) { await db.query("UPDATE variants SET item_id=$1,attrs=$2,mrp=$3,billing_price=$4 WHERE id=$5", [item.id, JSON.stringify(attrs), mrp, bp, v.id]); return "updated"; }
+  if (v) { await db.query("UPDATE variants SET updated_at=NOW(), item_id=$1,attrs=$2,mrp=$3,billing_price=$4 WHERE id=$5", [item.id, JSON.stringify(attrs), mrp, bp, v.id]); return "updated"; }
   await db.query("INSERT INTO variants (company_id,item_id,sku,attrs,mrp,billing_price) VALUES ($1,$2,$3,$4,$5,$6)", [cid, item.id, sku, JSON.stringify(attrs), mrp, bp]);
   return "inserted";
 }
@@ -210,7 +210,7 @@ async function importStock({ db, cid, s, role, uid }: Imp, r: any) {
   if (s.features.batches && (!batch || !expiry)) throw bad("batch and expiry required");
   const ex = (await db.query(`SELECT id FROM stock WHERE company_id=$1 AND variant_id=$2 AND batch_no=$3 AND ${loc == null ? "distributor_id IS NULL" : "distributor_id=$4"}`,
     loc == null ? [cid, v.id, batch] : [cid, v.id, batch, loc])).rows[0];
-  if (ex) { await db.query("UPDATE stock SET qty=$1, expiry=$2 WHERE id=$3", [qty * unit.factor, expiry, ex.id]); return "updated"; }
+  if (ex) { await db.query("UPDATE stock SET updated_at=NOW(), qty=$1, expiry=$2 WHERE id=$3", [qty * unit.factor, expiry, ex.id]); return "updated"; }
   await db.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, loc, v.id, batch, expiry, qty * unit.factor]);
   return "inserted";
 }
@@ -222,6 +222,11 @@ const IMPORTERS: Record<string, (c: Imp, r: any) => Promise<string>> = {
 };
 const normRow = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [norm(k), typeof v === "string" ? v.trim() : v]));
 
+/** Run one importer on one already-normalised row (used by the public API upserts). */
+export async function importOne(c: Imp, kind: string, row: Record<string, unknown>) {
+  const fn = IMPORTERS[kind]; if (!fn) throw bad("unknown import type", 404);
+  return fn(c, normRow(row)) as Promise<"inserted" | "updated">;
+}
 export async function runImport(c: Imp, kind: string, rows: Record<string, unknown>[]) {
   const fn = IMPORTERS[kind]; if (!fn) throw bad("unknown import type", 404);
   const result = { inserted: 0, updated: 0, errors: [] as { row: number; error: string }[] };
@@ -286,7 +291,7 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
     const dl = req.body?.drugLicence !== undefined ? String(req.body.drugLicence || "") || null : shop.drug_licence;
     const lim = (k: string, col: string, int: boolean) => { const v = req.body?.[k]; if (v === undefined) return shop[col]; if (v === null || v === "") return null;
       const n = Number(v); if (!(n >= 0) || (int && !Number.isInteger(n))) throw bad(`${k} must be ≥ 0`); return n; };
-    res.json((await db.query("UPDATE shops SET custom=$1, drug_licence=$2, credit_days=$3, credit_limit=$4 WHERE id=$5 RETURNING *",
+    res.json((await db.query("UPDATE shops SET updated_at=NOW(), custom=$1, drug_licence=$2, credit_days=$3, credit_limit=$4 WHERE id=$5 RETURNING *",
       [custom, dl, lim("creditDays", "credit_days", true), lim("creditLimit", "credit_limit", false), shop.id])).rows[0]);
   }));
 

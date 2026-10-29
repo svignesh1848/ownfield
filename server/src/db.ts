@@ -143,6 +143,36 @@ CREATE TABLE IF NOT EXISTS security_audit_log (
   id SERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT NOW(), company_id INTEGER, user_id INTEGER, action TEXT NOT NULL,
   target TEXT, detail TEXT, ip TEXT);
 CREATE INDEX IF NOT EXISTS security_audit_log_company ON security_audit_log (company_id, id);
+ALTER TABLE items ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE variants ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE variants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE stock ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_id TEXT;
+CREATE TABLE IF NOT EXISTS api_keys (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL, prefix TEXT NOT NULL UNIQUE, key_hash TEXT NOT NULL,
+  scopes TEXT NOT NULL, created_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_used_at TIMESTAMPTZ, revoked_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS webhooks (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), url TEXT NOT NULL, events TEXT NOT NULL, secret TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS connectors (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL, type TEXT NOT NULL, preset TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT FALSE, mode TEXT NOT NULL DEFAULT 'sample', config TEXT NOT NULL DEFAULT '{}', mapping TEXT NOT NULL DEFAULT '{}',
+  inbound_token TEXT UNIQUE, last_run_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL, webhook_id INTEGER REFERENCES webhooks(id), connector_id INTEGER REFERENCES connectors(id), event TEXT NOT NULL, payload TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, next_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), response_code INTEGER, last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), delivered_at TIMESTAMPTZ);
+ALTER TABLE webhook_deliveries ADD COLUMN IF NOT EXISTS detail TEXT;
+CREATE INDEX IF NOT EXISTS webhook_deliveries_due ON webhook_deliveries (status, next_at);
+CREATE INDEX IF NOT EXISTS webhook_deliveries_company ON webhook_deliveries (company_id, id);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

@@ -173,7 +173,7 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
     const c = (await db.query("SELECT code FROM companies WHERE id=$1", [cid])).rows[0];
     if (String(req.body?.confirm || "").toUpperCase() !== c.code) return res.status(400).json({ error: "Type your company code to confirm" });
     for (const u of (await db.query("SELECT id FROM users WHERE company_id=$1", [cid])).rows) await anonymiseUser(db, u.id);
-    await db.query("UPDATE shops SET owner_name=NULL, phone=NULL, address=NULL, gstin=NULL, drug_licence=NULL, custom=NULL WHERE company_id=$1", [cid]);
+    await db.query("UPDATE shops SET updated_at=NOW(), owner_name=NULL, phone=NULL, address=NULL, gstin=NULL, drug_licence=NULL, custom=NULL WHERE company_id=$1", [cid]);
     await db.query("UPDATE companies SET name='Deleted company', code=$1, user_limit=0 WHERE id=$2", [`DEL${cid}X`, cid]);
     await db.query("UPDATE security_audit_log SET ip=NULL, detail=NULL, target=NULL WHERE company_id=$1", [cid]);
     await log(req, "company.delete", `company#${cid}`); res.json({ ok: true });
