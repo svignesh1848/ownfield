@@ -36,7 +36,7 @@ export const split = (taxable: number, rate: number, intra: boolean) => {
   const c = r2(tax / 2); return { cgst: c, sgst: r2(tax - c), igst: 0 };
 };
 
-async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "invoice" | "credit_note"; issuer: string; date: string; g: Gst; shop: any; orderId: number | null; refId: number | null; reason?: string | null;
+export async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "invoice" | "credit_note"; issuer: string; date: string; g: Gst; shop: any; orderId: number | null; refId: number | null; reason?: string | null;
   lines: { orderLineId?: number | null; refLineId?: number | null; variantId: number; description: string; hsn: string | null; baseQty: number; uom: string; rate: number; taxable: number; gstRate: number }[] }) {
   const sellerState = d.g.stateCode, pos = d.shop.state_code || String(d.shop.gstin || "").slice(0, 2) || sellerState;
   const intra = pos === sellerState;
@@ -54,6 +54,17 @@ async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "invoice" 
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [inv.id, l.orderLineId ?? null, l.refLineId ?? null, l.variantId, l.description, l.hsn, l.baseQty, l.uom, l.rate, l.taxable, l.gstRate, l.cgst, l.sgst, l.igst, l.total]);
   await emit(tx, cid, d.kind === "invoice" ? "invoice.created" : "credit_note.created", { id: inv.id, number: inv.number, kind: inv.kind, order_id: inv.order_id, shop_id: inv.shop_id, total: Number(inv.total) });
   return inv;
+}
+
+/** Build the tax invoice for an order (inside the caller's transaction). */
+export async function invoiceOrder(tx: Db, cid: number, uid: number, settings: Settings, issuer: { key: string; g: Gst }, o: any, date: string) {
+  const shop = (await tx.query("SELECT * FROM shops WHERE id=$1", [o.shop_id])).rows[0];
+  const lines = (await tx.query(`SELECT l.*, v.sku, v.attrs, i.name, i.hsn, sc.name AS scheme FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
+    LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
+  return createDoc(tx, cid, uid, { kind: "invoice", issuer: issuer.key, date, g: issuer.g, shop, orderId: o.id, refId: null, lines: lines.map(l => ({
+    orderLineId: l.id, variantId: l.variant_id, description: `${l.name} ${Object.values(parseJson<Record<string, string>>(l.attrs, {})).join(" / ")} (${l.sku})${l.free ? ` — FREE under scheme: ${l.scheme}` : l.scheme ? ` — scheme: ${l.scheme} (${Number(l.discount_pct)}% off ₹${r2(Number(l.gross))})` : ""}`.replace(/\s+/g, " "),
+    hsn: l.hsn, baseQty: Number(l.base_qty), uom: l.uom, rate: Number(l.base_qty) ? r2(Number(l.amount) / Number(l.base_qty)) : 0,
+    taxable: Number(l.amount), gstRate: rateFor(settings.gst, l.hsn) })) });
 }
 
 export async function loadInvoice(db: Db, cid: number, id: number) {
@@ -133,13 +144,7 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       if (issuer.key === "company" && settings.features.distributorBilling && o.distributor_id) throw bad("this order is billed by its distributor", 409);
       if (!["accepted", "fulfilled"].includes(o.status)) throw bad("only accepted or fulfilled orders can be invoiced", 409);
       if ((await tx.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order already invoiced", 409);
-      const shop = (await tx.query("SELECT * FROM shops WHERE id=$1", [o.shop_id])).rows[0];
-      const lines = (await tx.query(`SELECT l.*, v.sku, v.attrs, i.name, i.hsn, sc.name AS scheme FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
-        LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
-      return createDoc(tx, cid, req.user.uid, { kind: "invoice", issuer: issuer.key, date, g: issuer.g, shop, orderId: o.id, refId: null, lines: lines.map(l => ({
-        orderLineId: l.id, variantId: l.variant_id, description: `${l.name} ${Object.values(parseJson<Record<string, string>>(l.attrs, {})).join(" / ")} (${l.sku})${l.free ? ` — FREE under scheme: ${l.scheme}` : l.scheme ? ` — scheme: ${l.scheme} (${Number(l.discount_pct)}% off ₹${r2(Number(l.gross))})` : ""}`.replace(/\s+/g, " "),
-        hsn: l.hsn, baseQty: Number(l.base_qty), uom: l.uom, rate: Number(l.base_qty) ? r2(Number(l.amount) / Number(l.base_qty)) : 0,
-        taxable: Number(l.amount), gstRate: rateFor(settings.gst, l.hsn) })) });
+      return invoiceOrder(tx, cid, req.user.uid, settings, issuer, o, date);
     });
     res.status(201).json(await loadInvoice(db, cid, inv.id));
   }));
@@ -197,9 +202,10 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   app.get("/api/invoices/:id", auth(...BILL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return; res.json(await visible(req, cid, Number(req.params.id)));
   }));
-  app.get("/api/invoices/:id/print", auth(...BILL), wrap(async (req, res) => {
+  app.get("/api/invoices/:id/print", auth(...BILL, "sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const inv = await visible(req, cid, Number(req.params.id));
+    if (req.user.role === "sales_rep" && inv.created_by !== req.user.uid) throw bad("forbidden", 403); // reps print their own van invoices
     const ref = inv.ref_invoice_id ? (await db.query("SELECT number FROM invoices WHERE id=$1", [inv.ref_invoice_id])).rows[0]?.number : undefined;
     res.type("html").send(invoiceHtml(inv, ref, await einvBlock(inv)));
   }));

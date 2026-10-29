@@ -9,6 +9,7 @@ import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 import { Invoices, Targets, Reports, Visits } from "./step4";
 import { PurchaseOrders, DistributorTerms } from "./po";
 import { Integrations } from "./integrations";
+import { VanRep, VanAdmin } from "./ops";
 import { UsersAdmin, SecurityPage, MyAccount, ResetPassword, useIdleLogout, deviceId } from "./security";
 import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives, RetailerHome } from "./phase3";
 
@@ -166,7 +167,7 @@ export const label = (k: string) => WORDS[k] || k.replace(/_/g, " ").replace(/^.
 
 export const TAB_LABEL: Record<string, string> = { home: "Home", beat: "Today's beat", order: "New order", orders: "Orders", collect: "Collect", targets: "Targets", catalog: "Products",
   inbox: "New orders", invoices: "Invoices", collections: "Collections", POs: "Purchase orders", stock: "Stock", profile: "My profile", dashboard: "Team activity", beats: "Beat plans",
-  visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", security: "Security & privacy", integrations: "Integrations", account: "My account", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules" };
+  visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", security: "Security & privacy", integrations: "Integrations", van: "My van", vans: "Van sales", account: "My account", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules" };
 export type Go = (tab: string) => void;
 export type ViewProps = { s: Session; cfg: Cfg; reload: () => void; onUsage: (u: any) => void; go: Go };
 
@@ -181,12 +182,12 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   if (!cfg) return err ? <Empty icon="⚠️" title="Couldn't load your company" text={err} action="Try again" onAction={reload} /> : <Loading text="Loading your workspace…" />;
   const f = cfg.settings.features;
   const groups: [string, string[]][] = mgr ? [
-    ["Sales", ["home", "dashboard", "orders", "beats", "visits", "targets", "shops", ...(f.schemes ? ["schemes"] : []), ...(f.audits ? ["audits"] : []), ...(f.leave ? ["leave"] : []), ...(f.incentives ? ["incentives"] : [])]],
+    ["Sales", ["home", "dashboard", "orders", "beats", "visits", "targets", "shops", ...(f.schemes ? ["schemes"] : []), ...(f.audits ? ["audits"] : []), ...(f.leave ? ["leave"] : []), ...(f.incentives ? ["incentives"] : []), ...(f.vanSales ? ["vans"] : [])]],
     ["Distributors", ["distributors", ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : [])]],
     ["Finance", [...(f.invoicing ? ["invoices", "collections"] : []), ...(f.expenses ? ["expenses"] : []), "reports"]],
     ["Setup", ["catalog", "users", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : []), "integrations", "security"] : []), "account"]]]
     : role === "retailer" ? [["Menu", ["home", "order", "orders", "catalog", "account"]]]
-    : role === "sales_rep" ? [["Menu", ["home", "beat", "order", "orders", ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "catalog", "account"]]]
+    : role === "sales_rep" ? [["Menu", ["home", "beat", "order", "orders", ...(f.vanSales ? ["van"] : []), ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "catalog", "account"]]]
     : [["Menu", ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "catalog", "account"]]];
   const tabs = groups.flatMap(g => g[1]);
   const primary = (mgr ? ["home", "orders", f.invoicing ? "collections" : "dashboard", "reports"] : role === "retailer" ? ["home", "order", "orders", "catalog"] : role === "sales_rep" ? ["home", "beat", "order", f.invoicing ? "collect" : "orders"]
@@ -194,7 +195,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   const cur = s.enrollTotp ? "account" : tabs.includes(tab) ? tab : "home";
   const views: Record<string, any> = { home: mgr ? ManagerHome : role === "retailer" ? RetailerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
-    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, account: (p: ViewProps) => <MyAccount s={p.s} onSignedOut={onLogout} />, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
+    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, account: (p: ViewProps) => <MyAccount s={p.s} onSignedOut={onLogout} />, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules };
   const C = views[cur];
   const Item = ({ t }: { t: string }) => <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{TAB_LABEL[t] || t}</span></button>;
   return <div className="shell">

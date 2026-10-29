@@ -266,7 +266,7 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
       stock: settings.features.stock ? await runImport(c, "stock", t.sample.stock) : null });
   }));
 
-  const variantRows = async (cid: number) => (await db.query(`SELECT v.id, v.sku, v.attrs, v.mrp, v.billing_price, i.id AS item_id, i.code AS item_code, i.name AS item_name,
+  const variantRows = async (cid: number) => (await db.query(`SELECT v.id, v.sku, v.barcode, v.attrs, v.mrp, v.billing_price, i.id AS item_id, i.code AS item_code, i.name AS item_name,
       i.category, i.kind, i.hsn, i.uoms, i.custom FROM variants v JOIN items i ON i.id=v.item_id WHERE v.company_id=$1 ORDER BY i.code, v.id`, [cid])).rows
     .map(r => ({ ...r, attrs: parseJson(r.attrs, {}), uoms: parseJson(r.uoms, []), custom: parseJson(r.custom, {}), mrp: Number(r.mrp), billing_price: Number(r.billing_price) }));
   app.get("/api/products", auth(...ANY), wrap(async (req, res) => {

@@ -173,6 +173,15 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 ALTER TABLE webhook_deliveries ADD COLUMN IF NOT EXISTS detail TEXT;
 CREATE INDEX IF NOT EXISTS webhook_deliveries_due ON webhook_deliveries (status, next_at);
 CREATE INDEX IF NOT EXISTS webhook_deliveries_company ON webhook_deliveries (company_id, id);
+CREATE TABLE IF NOT EXISTS company_kv (company_id INTEGER NOT NULL REFERENCES companies(id), k TEXT NOT NULL, v TEXT NOT NULL, PRIMARY KEY (company_id, k));
+CREATE TABLE IF NOT EXISTS van_loads (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), rep_id INTEGER NOT NULL REFERENCES users(id), day TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open', loaded_by INTEGER REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), closed_at TIMESTAMPTZ, closed_by INTEGER REFERENCES users(id));
+CREATE TABLE IF NOT EXISTS van_lines (
+  id SERIAL PRIMARY KEY, load_id INTEGER NOT NULL REFERENCES van_loads(id), variant_id INTEGER NOT NULL REFERENCES variants(id),
+  loaded INTEGER NOT NULL DEFAULT 0, sold INTEGER NOT NULL DEFAULT 0, counted INTEGER, UNIQUE (load_id, variant_id));
+ALTER TABLE variants ADD COLUMN IF NOT EXISTS barcode TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS van_load_id INTEGER REFERENCES van_loads(id);
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

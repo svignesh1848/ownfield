@@ -4,7 +4,7 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import type { Db } from "../db.js";
 
-export const EVENTS = ["order.created", "order.approved", "order.status_changed", "invoice.created", "credit_note.created", "collection.created", "stock.low", "test.ping"] as const;
+export const EVENTS = ["order.created", "order.approved", "order.status_changed", "invoice.created", "credit_note.created", "collection.created", "stock.low", "van.closed", "claim.submitted", "claim.settled", "lead.converted", "test.ping"] as const;
 export const MAX_ATTEMPTS = 8;
 /** Backoff after the n-th failed attempt: 30s, 1m, 2m, 4m ... capped at 6h. */
 export const backoffMs = (attempt: number) => Math.min(30_000 * 2 ** Math.max(0, attempt - 1), 6 * 3600_000);
@@ -54,8 +54,8 @@ export async function emit(db: Db, companyId: number, event: string, data: unkno
 /** Queue stock.low for any of the given variants whose total stock at the location fell to or below the company threshold. */
 export async function checkLowStock(db: Db, companyId: number, variantIds: number[], distributorId: number | null) {
   if (!variantIds.length) return;
-  const c = (await db.query("SELECT settings FROM companies WHERE id=$1", [companyId])).rows[0];
-  let threshold = 10; try { const s = JSON.parse(c?.settings || "{}"); if (Number.isFinite(Number(s.integrations?.lowStockQty))) threshold = Number(s.integrations.lowStockQty); } catch { /* default */ }
+  const k = (await db.query("SELECT v FROM company_kv WHERE company_id=$1 AND k='integrations'", [companyId])).rows[0];
+  let threshold = 10; try { const s = JSON.parse(k?.v || "{}"); if (Number.isFinite(Number(s.lowStockQty))) threshold = Number(s.lowStockQty); } catch { /* default */ }
   for (const vid of [...new Set(variantIds)]) {
     const r = (await db.query(`SELECT v.sku, v.external_id, COALESCE(SUM(s.qty),0) AS qty FROM variants v LEFT JOIN stock s ON s.variant_id=v.id AND ${distributorId == null ? "s.distributor_id IS NULL" : "s.distributor_id=$3"}
       WHERE v.id=$1 AND v.company_id=$2 GROUP BY v.sku, v.external_id`, distributorId == null ? [vid, companyId] : [vid, companyId, distributorId])).rows[0];
