@@ -116,6 +116,51 @@ Works out of the box from your own order history — rules and simple statistics
 
 Optional: to have an LLM re-word the summary into a short paragraph, set `AI_PROVIDER=openai-compatible`, `AI_BASE_URL` (e.g. `https://api.openai.com/v1` or a local Ollama `http://localhost:11434/v1`), `AI_MODEL` and `AI_API_KEY`. Only the summary sentences are sent; the facts and numbers always come from the built-in rules. If the call fails, the built-in sentences are shown.
 
+## Custom reports (build your own, no code)
+
+Admins and managers open **Reports → + New report**: pick the data (orders, order lines, visits, beat plan vs visits, attendance,
+collections, outstanding/ageing, returns, invoices, stock, outlets, sales reps), dates (today … this financial year, or custom),
+filters (rep, distributor, outlet, area, beat, product, category, plus simple conditions), up to two group-by fields (or day/week/month),
+numbers (count, total, average, lowest, highest, distinct count), sort, and a view (table, bar, line, pie, KPI card). The preview updates live.
+Compare with the previous period or the same period last year. Save, name, share with managers / sales reps / distributors
+(reps and distributors only ever see their own rows), pin to the home dashboard, download Excel/CSV.
+**Ready-made** reports (sales by rep / distributor / product / category, daily trend, visits planned vs done, productive calls,
+collections ageing and by mode, at-risk outlets) can be copied and edited. The old fixed exports are under **Standard exports**.
+
+**Scheduled email** is stored per report (daily / weekly / monthly at an India-time hour). When due, the file is written to
+`REPORT_OUTBOX` (default `server/data/report-outbox/<company>/`). Nothing is emailed unless `SMTP_HOST` is set **and** the optional
+`nodemailer` package is installed (`npm i -w server nodemailer`); also `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE=1`.
+Turn the scheduler off with `REPORT_SCHEDULES_DISABLED=1`.
+
+**Safe by design.** Users never write SQL. A report is JSON naming a source, field keys and options; the server checks every key against a
+whitelist, runs fixed SQL with the company id and bound parameters, then groups in code. Limits: `REPORT_MAX_ROWS` (50 000 rows loaded),
+5 000 rows returned, `REPORT_TIMEOUT_MS` (20 s, also a Postgres `statement_timeout`), `REPORT_RUNS_PER_MIN` (60 per user), 200 saved reports per company.
+
+**API** (JWT): `GET /api/report-builder/catalog`, `POST /api/report-builder/preview {def}`, `POST /api/report-builder/export?format=csv|xlsx {def,name}`,
+`GET|POST /api/custom-reports`, `GET|PUT|DELETE /api/custom-reports/:id`, `PATCH /api/custom-reports/:id/pin`, `GET /api/custom-reports/:id/run?preset=`,
+`GET /api/custom-reports/:id/export?format=`, `GET /api/custom-reports/:id/json`, `GET /api/custom-reports/export` (all, JSON),
+`POST /api/custom-reports/import` (`{reports:[{name, description, def, roles}]}`), `POST /api/custom-reports/from-template/:key`, `GET /api/custom-reports/pinned`.
+
+A definition looks like:
+```json
+{ "version": 1, "source": "orders", "filters": { "dateRange": { "preset": "this_month" }, "rep": [12] },
+  "conditions": [{ "field": "status", "op": "neq", "value": "rejected" }], "groupBy": ["rep"],
+  "metrics": [{ "fn": "sum", "field": "value" }, { "fn": "count" }], "columns": [], "sort": { "by": "sum_value", "dir": "desc" },
+  "view": { "type": "bar" }, "compare": "prev" }
+```
+
+### Adding a data source or field (developers)
+Everything lives in `server/src/reports/`: `sources.ts` (data sources), `engine.ts` (validation, grouping, comparisons),
+`templates.ts` (ready-made reports), `routes.ts` (API), `schedule.ts` (scheduled delivery).
+1. In `sources.ts` add an entry to `SOURCES`: a fixed `sql` that ends in `WHERE <table>.company_id=$1` (and, if it has dates,
+   `AND <col>>=$2 AND <col><$3`; set `dateKind` to `"ts"` for timestamps or `"text"` for `YYYY-MM-DD` columns, and `dateField`).
+   Never build SQL from user input.
+2. List `fields`: `key: col("Label", "text" | "number" | "money" | "date" | "bool", "sql_alias")` or `f("Label", type, row => value)` for computed values.
+3. Map standard filters in `dims` (`rep`, `distributor`, `shop`, `area`, `beat`, `product`, `category`) to the SQL column; sales reps and
+   distributors are restricted through `rep` / `distributor`, so a source without them can't be shared with those roles.
+4. Optional: `enrich()` to add computed values with extra company-scoped queries, or `load()` to build rows in code (see `beat_plan`).
+5. Add the new labels to `web/src/locales/en.json` (and other languages), add a test in `server/test/reports.test.ts`.
+
 ## Stack
 Node 20 + TypeScript + Express + PostgreSQL. React + Vite on the front end. Tests use Vitest + Supertest against in-memory Postgres (pg-mem).
 
