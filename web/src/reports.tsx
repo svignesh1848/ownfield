@@ -55,7 +55,7 @@ export function ReportResult({ r, view, compact }: { r: Result; view?: string; c
         <path d={path(vals)} fill="none" stroke={COLORS[0]} strokeWidth="3" />{rows.map((x, i) => <circle key={i} cx={i * step} cy={y(vals[i])} r="3" fill={COLORS[0]}><title>{lbl(x)}: {cell(vals[i], m.type)}</title></circle>)}</svg>
         <div className="row muted small"><span>{lbl(rows[0])}</span><span>{lbl(rows[rows.length - 1])}</span></div></div>;
     }
-    return <div>{legend}{rows.map((x, i) => <div key={i} style={{ margin: "6px 0" }}><div className="row small"><span>{lbl(x)}</span><b>{cell(vals[i], m.type)}</b></div>
+    return <div>{legend}{rows.map((x, i) => <div key={i} style={{ margin: "6px 0" }}><div className="row small" style={{ gap: 8, justifyContent: "space-between" }}><span>{lbl(x)}</span><b>{cell(vals[i], m.type)}</b></div>
       <div className="bar"><span style={{ width: `${(vals[i] / max) * 100}%`, background: COLORS[0] }} /></div>
       {hasPrev && <div className="bar"><span style={{ width: `${(prev[i] / max) * 100}%`, background: "#94a3b8" }} /></div>}</div>)}</div>;
   }
