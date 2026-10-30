@@ -113,7 +113,7 @@ export function registerSchemeRoutes({ app, db, auth, wrap, tenant }: { app: Exp
 /** Scheme cost rows for the reports endpoint: discount given + value of free goods, per scheme. */
 export async function schemeCost(db: any, cid: number, inRange: (d: string) => boolean, dayKey: (d: any) => string) {
   const rows = (await db.query(`SELECT l.order_id, l.scheme_id, l.free, l.base_qty, l.price, l.gross, l.amount, o.created_at, o.status, s.name, s.type, s.config, s.discount_pct
-    FROM order_lines l JOIN orders o ON o.id=l.order_id JOIN schemes s ON s.id=l.scheme_id WHERE o.company_id=$1 AND o.status<>'rejected' ORDER BY s.id`, [cid])).rows
+    FROM order_lines l JOIN orders o ON o.id=l.order_id JOIN schemes s ON s.id=l.scheme_id WHERE o.company_id=$1 AND o.status NOT IN ('rejected','cancelled') ORDER BY s.id`, [cid])).rows
     .filter((r: any) => inRange(dayKey(r.created_at)));
   const m = new Map<number, any>();
   for (const r of rows) {

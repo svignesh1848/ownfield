@@ -1296,5 +1296,10 @@
  "🌴 You are on approved leave today. Visits are paused — enjoy your day off.": "🌴 तुस अज्ज मंजूर छुट्टी उप्पर ओ। दौरे रुके दे न — अपने छुट्टी दे दिन दा मजा लैओ।",
  "🏆 Earned this month": "🏆 इस महीने कमाई",
  "🏪 From the shop": "🏪 दुकान से",
- "📷 Scan": "📷 स्कैन करना"
+ "📷 Scan": "📷 स्कैन करना",
+ "Cancelled": "रद्द कर दी गई",
+ "Cancel order": "आर्डर रद्द करो",
+ "Why cancel this order?": "इस आर्डर गी क्यों रद्द करना?",
+ "Why reject this order?": "इस हुक्म गी क्यों खारिज करना?",
+ "Reason: {0}": "कारण: {0}"
 }

@@ -19,7 +19,7 @@ export function registerCoverageRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const beats = (await db.query("SELECT b.id, b.rep_id, b.weekday, bs.shop_id, s.name AS shop_name FROM beats b JOIN beat_shops bs ON bs.beat_id=b.id JOIN shops s ON s.id=bs.shop_id WHERE b.company_id=$1", [cid])).rows;
     const lo = new Date(Date.parse(from + "T00:00:00+05:30")).toISOString(), hi = new Date(Date.parse(to + "T00:00:00+05:30") + 864e5).toISOString();
     const visits = (await db.query("SELECT rep_id, shop_id, check_in_at, no_order_reason FROM visits WHERE company_id=$1 AND check_in_at>=$2 AND check_in_at<$3", [cid, lo, hi])).rows;
-    const orders = (await db.query("SELECT rep_id, shop_id, created_at FROM orders WHERE company_id=$1 AND created_at>=$2 AND created_at<$3 AND status<>'rejected'", [cid, lo, hi])).rows;
+    const orders = (await db.query("SELECT rep_id, shop_id, created_at FROM orders WHERE company_id=$1 AND created_at>=$2 AND created_at<$3 AND status NOT IN ('rejected','cancelled')", [cid, lo, hi])).rows;
     const leave = (await db.query("SELECT rep_id, from_date, to_date FROM leaves WHERE company_id=$1 AND status='approved' AND from_date<=$3 AND to_date>=$2", [cid, from, to])).rows;
     const out = reps.map(r => {
       let planned = 0, visitedPlanned = 0, calls = 0, productive = 0, unplanned = 0; const missed: any[] = []; const reasons: Record<string, number> = {};

@@ -1296,5 +1296,10 @@
  "🌴 You are on approved leave today. Visits are paused — enjoy your day off.": "🌴 ꯉꯁꯤ ꯑꯗꯣꯝ ꯑꯦꯞꯔꯨꯕ ꯇꯧꯔꯕꯥ ꯁꯨꯇꯤꯗꯥ ꯂꯩꯔꯤ꯫ ꯚꯤꯖꯤꯠꯁꯤꯡ ꯑꯁꯤ ꯊꯃꯖꯤꯜꯂꯤ — ꯅꯍꯥꯛꯀꯤ ꯁꯨꯇꯤꯒꯤ ꯅꯨꯃꯤꯠ ꯑꯗꯨ ꯅꯨꯡꯉꯥꯏꯅꯥ ꯄꯥꯡꯊꯣꯀꯎ꯫",
  "🏆 Earned this month": "🏆 ꯊꯥ ꯑꯁꯤꯗꯥ ꯐꯪꯂꯦ꯫",
  "🏪 From the shop": "🏪 ꯗꯨꯀꯥꯅꯗꯒꯤ꯫",
- "📷 Scan": "📷 ꯁ꯭ꯀꯦꯟ ꯇꯧꯕꯥ꯫"
+ "📷 Scan": "📷 ꯁ꯭ꯀꯦꯟ ꯇꯧꯕꯥ꯫",
+ "Cancelled": "ꯀꯦꯟꯁꯦꯜ ꯇꯧꯈ꯭ꯔꯦ꯫",
+ "Cancel order": "ꯑꯣꯔꯗꯔ ꯀꯦꯟꯁꯦꯜ ꯇꯧꯕꯥ꯫",
+ "Why cancel this order?": "ꯀꯔꯤꯒꯤꯗꯃꯛ ꯑꯣꯔꯗꯔ ꯑꯁꯤ ꯀꯦꯟꯁꯦꯜ ꯇꯧꯔꯤꯕꯅꯣ?",
+ "Why reject this order?": "ꯀꯔꯤꯒꯤꯗꯃꯛ ꯑꯣꯔꯗꯔ ꯑꯁꯤ ꯌꯥꯗ꯭ꯔꯤꯕꯅꯣ?",
+ "Reason: {0}": "ꯃꯔꯝ: {0}"
 }

@@ -18,7 +18,7 @@ const monthOk = (m: unknown) => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m));
 export async function achievement(db: Db, cid: number, month: string, repId?: number) {
   const reps = (await db.query(`SELECT id, name, email FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${repId ? "AND id=$2" : ""} ORDER BY name`, repId ? [cid, repId] : [cid])).rows;
   const tg = (await db.query("SELECT rep_id, metric, target FROM targets WHERE company_id=$1 AND month=$2", [cid, month])).rows;
-  const orders = (await db.query("SELECT rep_id, total, created_at FROM orders WHERE company_id=$1 AND status<>'rejected'", [cid])).rows.filter(o => dayKey(o.created_at).startsWith(month));
+  const orders = (await db.query("SELECT rep_id, total, created_at FROM orders WHERE company_id=$1 AND status NOT IN ('rejected','cancelled')", [cid])).rows.filter(o => dayKey(o.created_at).startsWith(month));
   const visits = (await db.query("SELECT rep_id, check_in_at FROM visits WHERE company_id=$1", [cid])).rows.filter(v => dayKey(v.check_in_at).startsWith(month));
   return reps.map(r => {
     const mine = orders.filter(o => o.rep_id === r.id);

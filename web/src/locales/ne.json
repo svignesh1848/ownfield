@@ -1296,5 +1296,10 @@
  "🌴 You are on approved leave today. Visits are paused — enjoy your day off.": "🌴 तपाई आज स्वीकृत बिदामा हुनुहुन्छ। भ्रमणहरू रोकिएका छन् — आफ्नो दिनको आनन्द लिनुहोस्।",
  "🏆 Earned this month": "🏆 यो महिना कमाएको",
  "🏪 From the shop": "🏪 पसल बाट",
- "📷 Scan": "📷 स्क्यान"
+ "📷 Scan": "📷 स्क्यान",
+ "Cancelled": "रद्द गरियो",
+ "Cancel order": "अर्डर रद्द गर्नुहोस्",
+ "Why cancel this order?": "यो आदेश किन रद्द गर्ने?",
+ "Why reject this order?": "यो आदेश किन अस्वीकार?",
+ "Reason: {0}": "कारण: {0}"
 }

@@ -234,11 +234,12 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
     if (!o || (req.user.role === "distributor" && o.distributor_id !== req.user.uid)) throw bad("order not found", 404);
     const to = String(req.body?.status || "");
+    const reason = String(req.body?.reason || "").trim().slice(0, 300) || null;
     if (!(TRANSITIONS[o.status] || []).includes(to)) throw bad(`cannot move ${o.status} -> ${to}`, 409);
     const { settings } = await getCompany(db, cid);
     const updated = await withTx(db, async tx => {
       // Status compare-and-set + stock allocation commit together or not at all.
-      const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status=$1 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status])).rows[0];
+      const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status=$1, status_reason=COALESCE($4, status_reason), status_by=$5 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status, reason, req.user.uid])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
       if (to === "accepted" && settings.features.stock) await allocateStock(tx, cid, o);
       const ev = { id: u.id, client_ref: u.client_ref, from: o.status, status: to, total: Number(u.total) };
@@ -253,13 +254,42 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     res.json(updated);
   }));
 
+  // Cancel: the order taker (rep / retailer) while it is still new; the distributor or admin/manager until it is delivered.
+  // Stock already picked for an accepted order goes back to the same batches. Invoiced orders need a credit note instead.
+  app.post("/api/orders/:id/cancel", auth("sales_rep", "retailer", "distributor", "company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const own = await retailerShop(req, cid);
+    const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
+    const role = req.user.role;
+    const mine = !o ? false : role === "sales_rep" ? o.rep_id === req.user.uid : role === "retailer" ? o.shop_id === own : role === "distributor" ? o.distributor_id === req.user.uid : true;
+    if (!o || !mine) throw bad("order not found", 404);
+    const allowed = ["sales_rep", "retailer"].includes(role) ? ["placed"] : ["placed", "accepted"];
+    if (!allowed.includes(o.status)) throw bad(o.status === "accepted" ? "already accepted — ask the distributor to cancel it" : `cannot cancel a ${o.status} order`, 409);
+    if ((await db.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order is invoiced — issue a credit note instead", 409);
+    const reason = String(req.body?.reason || "").trim().slice(0, 300);
+    if (!reason) throw bad("reason required");
+    const u = await withTx(db, async tx => {
+      const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status='cancelled', status_reason=$1, status_by=$2 WHERE id=$3 AND status=$4 RETURNING *", [reason, req.user.uid, o.id, o.status])).rows[0];
+      if (!u) throw bad("order changed meanwhile — reload", 409);
+      const al = (await tx.query("SELECT a.id, a.stock_id, a.qty, a.batch_no, l.variant_id FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1", [o.id])).rows;
+      for (const a of al) {
+        await tx.query("UPDATE stock SET updated_at=NOW(), qty=qty+$1 WHERE id=$2", [a.qty, a.stock_id]);
+        await logMove(tx, cid, o.distributor_id ?? null, a.variant_id, a.batch_no || "", a.qty, "cancel", `order:${o.client_ref}`, req.user.uid, reason);
+        await tx.query("DELETE FROM order_allocations WHERE id=$1", [a.id]);
+      }
+      await emit(tx, cid, "order.status_changed", { id: u.id, client_ref: u.client_ref, from: o.status, status: "cancelled", total: Number(u.total), reason });
+      return u;
+    });
+    res.json(u);
+  }));
+
   // ---- Manager dashboard: visits & orders by rep/day ----
   app.get("/api/dashboard", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
     const since = new Date(Date.now() - days * 864e5);
     const vs = (await db.query("SELECT v.rep_id, u.name, v.check_in_at FROM visits v JOIN users u ON u.id=v.rep_id WHERE v.company_id=$1 AND v.check_in_at>=$2", [cid, since])).rows;
-    const os = (await db.query("SELECT o.rep_id, u.name, o.created_at, o.total FROM orders o JOIN users u ON u.id=o.rep_id WHERE o.company_id=$1 AND o.created_at>=$2 AND u.role='sales_rep'", [cid, since])).rows;
+    const os = (await db.query("SELECT o.rep_id, u.name, o.created_at, o.total FROM orders o JOIN users u ON u.id=o.rep_id WHERE o.company_id=$1 AND o.created_at>=$2 AND u.role='sales_rep' AND o.status NOT IN ('rejected','cancelled')", [cid, since])).rows;
     const m = new Map<string, any>();
     const row = (rep: number, name: string, d: Date) => {
       const k = `${dayKey(d)}|${rep}`;

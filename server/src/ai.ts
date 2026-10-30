@@ -19,7 +19,7 @@ const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 
 type Hist = { id: number; shop: number; rep: number; day: number; total: number; lines: Map<number, number> };
 async function history(db: Db, cid: number): Promise<Hist[]> {
-  const os = (await db.query("SELECT id, shop_id, rep_id, total, created_at FROM orders WHERE company_id=$1 AND status<>'rejected' ORDER BY created_at, id", [cid])).rows;
+  const os = (await db.query("SELECT id, shop_id, rep_id, total, created_at FROM orders WHERE company_id=$1 AND status NOT IN ('rejected','cancelled') ORDER BY created_at, id", [cid])).rows;
   const by = new Map<number, Hist>(os.map(o => [o.id, { id: o.id, shop: o.shop_id, rep: o.rep_id, day: dnum(dayKey(o.created_at)), total: Number(o.total), lines: new Map() }]));
   const ls = (await db.query("SELECT l.order_id, l.variant_id, l.base_qty, l.free FROM order_lines l JOIN orders o ON o.id=l.order_id WHERE o.company_id=$1", [cid])).rows;
   for (const l of ls) { const h = by.get(l.order_id); if (h && !l.free) h.lines.set(l.variant_id, (h.lines.get(l.variant_id) ?? 0) + Number(l.base_qty)); }

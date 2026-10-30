@@ -85,7 +85,7 @@ export function registerFlowRoutes({ app, db, auth, wrap, tenant }: Ctx) {
 }
 // Suggested order: average quantity over the outlet's last 3 orders, minus the shelf stock the rep counts. The rep can accept or edit.
 export async function suggestOrder(db: Db, cid: number, shopId: number, shelf: Record<string, number>) {
-  const last = (await db.query("SELECT id FROM orders WHERE company_id=$1 AND shop_id=$2 AND status<>'rejected' ORDER BY created_at DESC, id DESC LIMIT 3", [cid, shopId])).rows.map(r => r.id);
+  const last = (await db.query("SELECT id FROM orders WHERE company_id=$1 AND shop_id=$2 AND status NOT IN ('rejected','cancelled') ORDER BY created_at DESC, id DESC LIMIT 3", [cid, shopId])).rows.map(r => r.id);
   if (!last.length) return { orders: 0, lines: [] as any[] };
   const rows = (await db.query(`SELECT v.sku, i.name, l.base_qty AS q, l.free FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
     WHERE l.order_id IN (${last.map((_, k) => `$${k + 1}`).join(",")})`, last)).rows.filter(r => !r.free);
@@ -154,7 +154,7 @@ export const mustSellFor = (f: Flow, type: string | null) => [...new Set([...(f.
 export async function mustSellStats(db: Db, cid: number, lo: string, hi: string) {
   const f = await getFlow(db, cid); if (!Object.keys(f.mustSell).length) return new Map<number, { orders: number; complete: number; missing: Record<string, number> }>();
   const rows = (await db.query(`SELECT o.id, o.rep_id, s.outlet_type, v.sku FROM orders o JOIN shops s ON s.id=o.shop_id JOIN order_lines l ON l.order_id=o.id JOIN variants v ON v.id=l.variant_id
-    WHERE o.company_id=$1 AND o.created_at>=$2 AND o.created_at<$3 AND o.status<>'rejected' AND o.rep_id IS NOT NULL`, [cid, lo, hi])).rows;
+    WHERE o.company_id=$1 AND o.created_at>=$2 AND o.created_at<$3 AND o.status NOT IN ('rejected','cancelled') AND o.rep_id IS NOT NULL`, [cid, lo, hi])).rows;
   const byOrder = new Map<number, { rep: number; type: string | null; skus: Set<string> }>();
   for (const r of rows) { const o = byOrder.get(r.id) || { rep: r.rep_id, type: r.outlet_type, skus: new Set<string>() }; o.skus.add(r.sku); byOrder.set(r.id, o); }
   const out = new Map<number, { orders: number; complete: number; missing: Record<string, number> }>();

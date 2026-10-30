@@ -77,7 +77,7 @@ export const SOURCES: Record<string, Source> = {
       productive: f("Productive call (1 = yes)", "number", r => r._productive ? 1 : 0), no_order_reason: f("No-order reason", "text", r => r.no_order_reason || "") },
     enrich: async (db, cid, rows, range) => {
       if (!rows.length || !range) return;
-      const o = (await db.query("SELECT rep_id, shop_id, created_at FROM orders WHERE company_id=$1 AND created_at>=$2 AND created_at<$3 AND status<>'rejected'", [cid, range.lo, range.hi])).rows;
+      const o = (await db.query("SELECT rep_id, shop_id, created_at FROM orders WHERE company_id=$1 AND created_at>=$2 AND created_at<$3 AND status NOT IN ('rejected','cancelled')", [cid, range.lo, range.hi])).rows;
       const sold = new Set(o.map(x => `${x.rep_id}|${x.shop_id}|${dayKey(x.created_at)}`));
       for (const r of rows) r._productive = !r.no_order_reason && sold.has(`${r.rep_id}|${r.shop_id}|${dayKey(r.check_in_at)}`);
     },
@@ -166,7 +166,7 @@ export const SOURCES: Record<string, Source> = {
     enrich: async (db, cid, rows) => {
       if (!rows.length) return;
       const lo = new Date(Date.now() - 90 * 864e5).toISOString();
-      const o = (await db.query("SELECT shop_id, created_at, total FROM orders WHERE company_id=$1 AND status<>'rejected'", [cid])).rows;
+      const o = (await db.query("SELECT shop_id, created_at, total FROM orders WHERE company_id=$1 AND status NOT IN ('rejected','cancelled')", [cid])).rows;
       const m = new Map<number, any>(rows.map(r => [r.id, r]));
       for (const x of o) { const r = m.get(x.shop_id); if (!r) continue; const d = dayKey(x.created_at); if (!r._last || d > r._last) r._last = d;
         if (new Date(x.created_at).toISOString() >= lo) { r._n90 = (r._n90 || 0) + 1; r._v90 = (r._v90 || 0) + Number(x.total); } }
@@ -183,7 +183,7 @@ export const SOURCES: Record<string, Source> = {
       if (!rows.length) return;
       const lo = range?.lo ?? new Date(Date.now() - 30 * 864e5).toISOString(), hi = range?.hi ?? new Date(Date.now() + 864e5).toISOString();
       const m = new Map<number, any>(rows.map(r => [r.id, r]));
-      for (const x of (await db.query("SELECT rep_id, shop_id, total FROM orders WHERE company_id=$1 AND created_at>=$2 AND created_at<$3 AND status<>'rejected'", [cid, lo, hi])).rows) {
+      for (const x of (await db.query("SELECT rep_id, shop_id, total FROM orders WHERE company_id=$1 AND created_at>=$2 AND created_at<$3 AND status NOT IN ('rejected','cancelled')", [cid, lo, hi])).rows) {
         const r = m.get(x.rep_id); if (!r) continue; r._o = (r._o || 0) + 1; r._v = (r._v || 0) + Number(x.total); (r._s ||= new Set()).add(x.shop_id); }
       for (const x of (await db.query("SELECT rep_id FROM visits WHERE company_id=$1 AND check_in_at>=$2 AND check_in_at<$3", [cid, lo, hi])).rows) { const r = m.get(x.rep_id); if (r) r._vi = (r._vi || 0) + 1; }
     },

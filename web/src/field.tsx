@@ -226,8 +226,9 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
 }
 const Steps = ({ n }: { n: number }) => <ol className="steps">{[t("Outlet"), t("Products"), t("Review")].map((t, i) => <li key={t} className={i + 1 === n ? "on" : i + 1 < n ? "done" : ""}>{i18n(t)}</li>)}</ol>;
 
-const STATUS: Record<string, string> = { placed: t("New"), accepted: t("Accepted"), fulfilled: t("Delivered"), rejected: t("Rejected") };
+const STATUS: Record<string, string> = { placed: t("New"), accepted: t("Accepted"), fulfilled: t("Delivered"), rejected: t("Rejected"), cancelled: t("Cancelled") };
 const OrderCard = ({ o, children }: { o: any; children?: any }) => <div className="row"><b>#{o.id} {o.shop_name}</b> <span className={`pill ${o.status}`}>{STATUS[o.status] || o.status}</span>{o.placed_by_role === "retailer" && <span className="pill">{t("🏪 From the shop")}</span>}
+  {o.status_reason && ["rejected", "cancelled"].includes(o.status) && <div className="muted small">{t("Reason: {0}", o.status_reason)}</div>}
   <div className="muted">{o.rep_name} · {fmtDate(o.created_at, true)} · {inr(o.total)}{Number(o.savings) > 0 ? t(" · saved {0}", inr(o.savings)) : ""}</div>
   {o.lines.map((l: any) => <div className="muted small" key={l.id}>{l.item_name} {attrText(l.attrs)} — {l.qty} {l.uom}{l.free ? t(" FREE ({0})", l.scheme) : l.discount_pct > 0 ? ` (−${l.discount_pct}%${l.scheme ? ` ${l.scheme}` : ""})` : ""} = {inr(l.amount)}
     {l.allocations?.length > 0 && <span className="batches" title={t("Batches picked, nearest expiry first")}> {l.allocations.map((a: any) => `${a.batch_no || "stock"}${a.expiry ? ` exp ${fmtDate(a.expiry)}` : ""} ×${a.qty}`).join("; ")}</span>}</div>)}{children}</div>;
@@ -242,17 +243,19 @@ export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {
     {mgr && cfg.settings.features.invoicing && ["accepted", "fulfilled"].includes(o.status) && !(cfg.settings.features.distributorBilling && o.distributor_id && !o.invoice) && (o.invoice
       ? <button className="sm ghost" onClick={() => openPrint(s, o.invoice.id).catch(e => setMsg(e.message))}>{t("Print")}{" "}{o.invoice.number}</button>
       : <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/invoice`, { method: "POST", body: "{}" }))}>{t("Create GST invoice")}</button>)}
+    {(o.status === "placed" || (mgr && o.status === "accepted" && !o.invoice)) && <button className="sm ghost" onClick={() => { const reason = prompt(t("Why cancel this order?")); if (reason?.trim()) go(() => api(s, `/api/orders/${o.id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) })); }}>{t("Cancel order")}</button>}
   </OrderCard>)}<p className="err">{msg}</p></>;
 }
 
 export function Inbox({ s, cfg }: { s: Session; cfg: Cfg }) {
   const [rows, setRows] = useState<any[]>([]); const [msg, setMsg] = useState("");
   const load = () => api(s, "/api/orders").then(setRows); useEffect(() => { load(); }, []);
-  const set = async (id: number, status: string) => { try { await api(s, `/api/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }); load(); } catch (e: any) { setMsg(e.message); } };
+  const set = async (id: number, status: string, reason?: string) => { try { await api(s, `/api/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status, reason }) }); load(); } catch (e: any) { setMsg(e.message); } };
+  const cancel = async (id: number) => { const reason = prompt(t("Why cancel this order?")); if (!reason?.trim()) return; try { await api(s, `/api/orders/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }); load(); } catch (e: any) { setMsg(e.message); } };
   return <><h2>{t("Order inbox")}</h2>{!rows.length && <Empty icon="📥" title={t("No orders for you yet")} text={t("When a sales rep takes an order at one of your outlets, it lands here for you to accept.")} />}
     {rows.map(o => <OrderCard key={o.id} o={o}>
-      {o.status === "placed" && <><button className="sm" onClick={() => set(o.id, "accepted")}>{t("Accept")}</button> <button className="sm ghost" onClick={() => set(o.id, "rejected")}>{t("Reject")}</button></>}
-      {o.status === "accepted" && <button className="sm" onClick={() => set(o.id, "fulfilled")}>{t("Mark delivered")}</button>}
+      {o.status === "placed" && <><button className="sm" onClick={() => set(o.id, "accepted")}>{t("Accept")}</button> <button className="sm ghost" onClick={() => { const r = prompt(t("Why reject this order?")); if (r !== null) set(o.id, "rejected", r); }}>{t("Reject")}</button></>}
+      {o.status === "accepted" && <><button className="sm" onClick={() => set(o.id, "fulfilled")}>{t("Mark delivered")}</button>{!o.invoice && <> <button className="sm ghost" onClick={() => cancel(o.id)}>{t("Cancel order")}</button></>}</>}
       {cfg?.settings.features.invoicing && cfg.settings.features.distributorBilling && ["accepted", "fulfilled"].includes(o.status) && (o.invoice
         ? <button className="sm ghost" onClick={() => openPrint(s, o.invoice.id).catch(e => setMsg(e.message))}>{t("Print")}{" "}{o.invoice.number}</button>
         : <button className="sm ghost" onClick={async () => { try { await api(s, `/api/orders/${o.id}/invoice`, { method: "POST", body: "{}" }); load(); } catch (e: any) { setMsg(e.message); } }}>{t("Create GST invoice")}</button>)}</OrderCard>)}<p className="err">{msg}</p></>;

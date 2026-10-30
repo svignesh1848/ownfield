@@ -1296,5 +1296,10 @@
  "🌴 You are on approved leave today. Visits are paused — enjoy your day off.": "🌴 توهان اڄ منظور ٿيل موڪل تي آهيو. دورو روڪيو ويو آهي - پنهنجي ڏينهن جي موڪل جو مزو وٺو.",
  "🏆 Earned this month": "🏆 هن مهيني ڪمايو",
  "🏪 From the shop": "🏪 دڪان تان",
- "📷 Scan": "📷 اسڪين"
+ "📷 Scan": "📷 اسڪين",
+ "Cancelled": "منسوخ ٿيل",
+ "Cancel order": "آرڊر منسوخ ڪريو",
+ "Why cancel this order?": "هن حڪم کي منسوخ ڇو؟",
+ "Why reject this order?": "هن حڪم کي رد ڇو؟",
+ "Reason: {0}": "سبب: {0}"
 }
