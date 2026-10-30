@@ -13,27 +13,27 @@ Write in simple, everyday business words. Keep product and brand terms as they a
 
 | Language | Code | Direction | Strings translated | Status |
 |---|---|---|---|---|
-| Assamese · অসমীয়া | `as` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Bengali · বাংলা | `bn` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Bodo · बड़ो | `brx` | LTR | 137 / 978 (14%) | in progress — help wanted |
-| Dogri · डोगरी | `doi` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Gujarati · ગુજરાતી | `gu` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Hindi · हिन्दी | `hi` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Kannada · ಕನ್ನಡ | `kn` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Kashmiri · کٲشُر | `ks` | RTL | 137 / 978 (14%) | in progress — help wanted |
-| Konkani · कोंकणी | `kok` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Maithili · मैथिली | `mai` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Malayalam · മലയാളം | `ml` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Manipuri (Meitei) · ꯃꯤꯇꯩꯂꯣꯟ | `mni` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Marathi · मराठी | `mr` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Nepali · नेपाली | `ne` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Odia · ଓଡ଼ିଆ | `or` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Punjabi · ਪੰਜਾਬੀ | `pa` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Sanskrit · संस्कृतम् | `sa` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Santali · ᱥᱟᱱᱛᱟᱲᱤ | `sat` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Sindhi · سنڌي | `sd` | RTL | 978 / 978 (100%) | complete, needs native review |
-| Tamil · தமிழ் | `ta` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Telugu · తెలుగు | `te` | LTR | 978 / 978 (100%) | complete, needs native review |
-| Urdu · اردو | `ur` | RTL | 978 / 978 (100%) | complete, needs native review |
+| Assamese · অসমীয়া | `as` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Bengali · বাংলা | `bn` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Bodo · बड़ो | `brx` | LTR | 137 / 1005 (13%) | in progress — help wanted |
+| Dogri · डोगरी | `doi` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Gujarati · ગુજરાતી | `gu` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Hindi · हिन्दी | `hi` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Kannada · ಕನ್ನಡ | `kn` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Kashmiri · کٲشُر | `ks` | RTL | 137 / 1005 (13%) | in progress — help wanted |
+| Konkani · कोंकणी | `kok` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Maithili · मैथिली | `mai` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Malayalam · മലയാളം | `ml` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Manipuri (Meitei) · ꯃꯤꯇꯩꯂꯣꯟ | `mni` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Marathi · मराठी | `mr` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Nepali · नेपाली | `ne` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Odia · ଓଡ଼ିଆ | `or` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Punjabi · ਪੰਜਾਬੀ | `pa` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Sanskrit · संस्कृतम् | `sa` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Santali · ᱥᱟᱱᱛᱟᱲᱤ | `sat` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Sindhi · سنڌي | `sd` | RTL | 1005 / 1005 (100%) | complete, needs native review |
+| Tamil · தமிழ் | `ta` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Telugu · తెలుగు | `te` | LTR | 1005 / 1005 (100%) | complete, needs native review |
+| Urdu · اردو | `ur` | RTL | 1005 / 1005 (100%) | complete, needs native review |
 
 Untranslated strings show in English. A test checks that every language has every key (Bodo and Kashmiri are listed as in progress).

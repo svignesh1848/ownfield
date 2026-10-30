@@ -107,6 +107,15 @@ On start the server adds labelled sample data for these features to the company 
 - **Surveys**: build forms (text, number, yes/no, choice, competitor price); competitor price report.
 - **WhatsApp / SMS**: mock provider by default — messages are only logged. Real sends happen only after an admin sets an HTTP gateway URL and key.
 
+## Built-in AI (no API key needed)
+
+Works out of the box from your own order history — rules and simple statistics, no outside calls.
+- **Smart order suggestions** (rep, Take order → Add products): products and quantities from the outlet's past orders and reorder cycle, must-sell items, what similar outlets buy, capped to stock on hand. Each has a one-line reason and a one-tap **+ Add** (or **Add all**). API: `POST /api/ai/suggest {shopId}`.
+- **Daily summary** (manager/admin Home): yesterday and today in plain sentences — orders and value vs the 7-day average, planned vs done visits, top and lowest reps, unusual orders, shops ordering less, low-stock risk. API: `GET /api/ai/summary`.
+- **Shops at risk**: outlets whose order gap is much longer than usual, or whose orders have dropped. API: `GET /api/ai/at-risk`.
+
+Optional: to have an LLM re-word the summary into a short paragraph, set `AI_PROVIDER=openai-compatible`, `AI_BASE_URL` (e.g. `https://api.openai.com/v1` or a local Ollama `http://localhost:11434/v1`), `AI_MODEL` and `AI_API_KEY`. Only the summary sentences are sent; the facts and numbers always come from the built-in rules. If the call fails, the built-in sentences are shown.
+
 ## Stack
 Node 20 + TypeScript + Express + PostgreSQL. React + Vite on the front end. Tests use Vitest + Supertest against in-memory Postgres (pg-mem).
 
@@ -132,6 +141,8 @@ All photos (visit photos, day-start selfies, store audit photos, expense bills) 
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | – | Keys with read + write on the bucket (required for `s3`) |
 | `S3_PREFIX` | – | Optional folder inside the bucket |
 | `DISK_ALERT_PCT` | `15` | Warn when free disk is below this % |
+| `AI_PROVIDER` | (empty) | Empty = built-in rules only. `openai-compatible` = also re-word the manager summary with an LLM |
+| `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY` | (empty) | OpenAI-compatible endpoint, model and key (used only when `AI_PROVIDER` is set) |
 | `TEMP_DIR` | `<tmp>/ownfield` | Temp folder; files older than a day are removed hourly |
 
 If `s3` is chosen but a value is missing, the server logs it and keeps using local disk. After switching, old local photos still open (reads fall back to disk).
