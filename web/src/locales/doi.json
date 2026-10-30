@@ -1224,7 +1224,6 @@
  "Max {0} rows, {1} s per query.": "मैक्स {0} पंक्तियां, {1} एस प्रति क्वेरी।",
  "Data analysts": "डेटा विश्लेषक ने दी",
  "These people can use the SQL editor. Admins always can.": "एह् लोक SQL एडिटर दा इस्तेमाल करी सकदे न। एडमिन हमेशा कर सकदे ने।",
- "BI tool access (Metabase, Power BI, Superset)": "बीआई टूल एक्सेस (मेटाबेस, पावर बीआई, सुपरसेट)",
  "A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.": "सिर्फ पढ़ने आह् ला डेटाबेस लॉगिन जेह् ड़ा सिर्फ तुंदी कंपनी दी तालिकाएं गी दिक्खदा ऐ। डिफ़ॉल्ट रूप कन्नै बंद। तुंदे सर्वर होस्ट गी डेटाबेस कनेक्शनें दी इजाजत देनी होग.",
  "Off": "बंद",
  "Make a new password": "इक नमां पासवर्ड बनाओ",
@@ -1239,5 +1238,19 @@
  "Only SELECT queries are allowed (start with SELECT or WITH)": "सिर्फ SELECT क्वेरी दी अनुमति ऐ (SELECT जां WITH कन्नै शुरू करो)",
  "Only one statement at a time": "इक बारी च सिर्फ इक गै बयान",
  "Write a SELECT query": "इक SELECT क्वेरी लिखो",
- "Query took too long": "क्वेरी च मता समां लग्गा"
+ "Query took too long": "क्वेरी च मता समां लग्गा",
+ "Yesterday: {0} order worth {1}.": "कल: {0} आर्डर {1} दे लायक।",
+ "Today so far: {0} order worth {1}.": "आज अजे तक: {0} {1} दी कीमत दा ऑर्डर।",
+ "Top rep this week: {0} with {1} from {2} order.": "इस हफ्ते शीर्ष प्रतिनिधि: {0} {2} आर्डर थमां {1} कन्नै।",
+ "Only {0} order in the last 30 days, down from about {1} a month": "पिछले 30 दिनें च सिर्फ {0} आर्डर करो, जेह्ड़ा महीने च लगभग {1} थमां घट्ट ऐ",
+ "{0} shop has not ordered as often as usual: {1}.": "{0} दुकान ने हमेशा दी तरह बार आर्डर नहीं कीता: {1}।",
+ "{0} order to bill": "{0} बिल करने दा हुक्म",
+ "Strong isolation: read-only database role": "मजबूत अलगाव: केवल पढ़ने आह् ली डेटाबेस भूमिका",
+ "Basic isolation: company views only": "बुनियादी अलगाव: कंपनी दे विचार ही",
+ "BI tool access (Power BI, Tableau, Metabase, Superset)": "बीआई टूल एक्सेस (पावर बीआई, टेबल्यू, मेटाबेस, सुपरसेट)",
+ "Allowed IP addresses": "अनुमति दित्ते गेदे आईपी पता",
+ "Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.": "सिर्फ एह् पते गै कनेक्ट होई सकदे न (एन्क्रिप्टेड कनेक्शन ते पासवर्ड दी लोड़ ऐ)। अपने बीआई सर्वर जां गेटवे दा सार्वजनिक आईपी दर्ज करो, जेह् ड़ा अल्पविराम कन्नै बक्ख कीता गेदा ऐ.",
+ "The server accepts BI connections from the allowed addresses (encrypted).": "सर्वर अनुमति दित्ते गेदे पते (एन्क्रिप्टेड) ​​थमां बीआई कनेक्शन स्वीकार करदा ऐ।",
+ "The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).": "सर्वर अजें तगर बाहरले डेटाबेस कनेक्शनें गी स्वीकार नेईं करदा ऐ। तुंदे सर्वर प्रशासक गी इसगी चालू करना होग (README → BI उपकरण दिक्खो)।",
+ "At most 20 addresses": "ज़्यादा तों ज़्यादा 20 पते"
 }

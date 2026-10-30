@@ -1224,7 +1224,6 @@
  "Max {0} rows, {1} s per query.": "મહત્તમ {0} પંક્તિઓ, ક્વેરી દીઠ {1} સે.",
  "Data analysts": "ડેટા વિશ્લેષકો",
  "These people can use the SQL editor. Admins always can.": "આ લોકો SQL એડિટરનો ઉપયોગ કરી શકે છે. સંચાલકો હંમેશા કરી શકે છે.",
- "BI tool access (Metabase, Power BI, Superset)": "BI ટૂલ એક્સેસ (મેટાબેઝ, પાવર BI, સુપરસેટ)",
  "A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.": "ફક્ત વાંચવા માટે ડેટાબેઝ લોગિન કે જે ફક્ત તમારી કંપનીના કોષ્ટકો જુએ છે. મૂળભૂત રીતે બંધ. તમારા સર્વર હોસ્ટે ડેટાબેઝ કનેક્શન્સને મંજૂરી આપવી આવશ્યક છે.",
  "Off": "બંધ",
  "Make a new password": "નવો પાસવર્ડ બનાવો",
@@ -1239,5 +1238,19 @@
  "Only SELECT queries are allowed (start with SELECT or WITH)": "ફક્ત SELECT ક્વેરીઝને મંજૂરી છે (SELECT અથવા WITH થી શરૂ કરો)",
  "Only one statement at a time": "એક સમયે માત્ર એક નિવેદન",
  "Write a SELECT query": "સિલેક્ટ ક્વેરી લખો",
- "Query took too long": "ક્વેરી ખૂબ લાંબો સમય લીધો"
+ "Query took too long": "ક્વેરી ખૂબ લાંબો સમય લીધો",
+ "Yesterday: {0} order worth {1}.": "ગઈકાલે: {1} મૂલ્યનો {0} ઓર્ડર.",
+ "Today so far: {0} order worth {1}.": "આજે અત્યાર સુધી: {1} મૂલ્યનો {0} ઓર્ડર.",
+ "Top rep this week: {0} with {1} from {2} order.": "આ અઠવાડિયે ટોચના પ્રતિનિધિ: {2} ઓર્ડરમાંથી {1} સાથે {0}.",
+ "Only {0} order in the last 30 days, down from about {1} a month": "છેલ્લા 30 દિવસમાં માત્ર {0} ઓર્ડર, લગભગ {1} મહિનાથી ઓછો",
+ "{0} shop has not ordered as often as usual: {1}.": "{0} દુકાને હંમેશની જેમ વારંવાર ઓર્ડર આપ્યો નથી: {1}.",
+ "{0} order to bill": "{0} બિલ માટે ઓર્ડર",
+ "Strong isolation: read-only database role": "મજબૂત અલગતા: ફક્ત વાંચવા માટે ડેટાબેઝ ભૂમિકા",
+ "Basic isolation: company views only": "મૂળભૂત અલગતા: ફક્ત કંપનીના દૃશ્યો",
+ "BI tool access (Power BI, Tableau, Metabase, Superset)": "BI ટૂલ એક્સેસ (પાવર BI, ટેબ્લો, મેટાબેઝ, સુપરસેટ)",
+ "Allowed IP addresses": "માન્ય IP સરનામાં",
+ "Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.": "ફક્ત આ સરનામાં જ કનેક્ટ કરી શકે છે (એનક્રિપ્ટેડ કનેક્શન અને પાસવર્ડ જરૂરી). તમારા BI સર્વર અથવા ગેટવેનો સાર્વજનિક IP, અલ્પવિરામથી અલગ કરીને દાખલ કરો.",
+ "The server accepts BI connections from the allowed addresses (encrypted).": "સર્વર માન્ય સરનામાંઓ (એનક્રિપ્ટેડ) માંથી BI કનેક્શન્સ સ્વીકારે છે.",
+ "The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).": "સર્વર હજી બહારના ડેટાબેઝ કનેક્શનને સ્વીકારતું નથી. તમારા સર્વર એડમિનિસ્ટ્રેટરે આને ચાલુ કરવું આવશ્યક છે (README → BI ટૂલ્સ જુઓ).",
+ "At most 20 addresses": "વધુમાં વધુ 20 સરનામાં"
 }

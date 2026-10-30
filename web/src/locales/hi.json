@@ -1224,7 +1224,6 @@
  "Max {0} rows, {1} s per query.": "अधिकतम {0} पंक्तियाँ, प्रति क्वेरी {1} सेकंड।",
  "Data analysts": "डेटा विश्लेषक",
  "These people can use the SQL editor. Admins always can.": "ये लोग SQL संपादक का उपयोग कर सकते हैं. व्यवस्थापक हमेशा कर सकते हैं.",
- "BI tool access (Metabase, Power BI, Superset)": "बीआई टूल एक्सेस (मेटाबेस, पावर बीआई, सुपरसेट)",
  "A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.": "एक रीड-ओनली डेटाबेस लॉगिन जो केवल आपकी कंपनी की तालिकाएँ देखता है। डिफ़ॉल्ट रूप से बंद. आपके सर्वर होस्ट को डेटाबेस कनेक्शन की अनुमति देनी होगी।",
  "Off": "बंद",
  "Make a new password": "नया पासवर्ड बनाएं",
@@ -1239,5 +1238,19 @@
  "Only SELECT queries are allowed (start with SELECT or WITH)": "केवल SELECT क्वेरीज़ की अनुमति है (SELECT या with से प्रारंभ करें)",
  "Only one statement at a time": "एक समय में केवल एक ही कथन",
  "Write a SELECT query": "एक चयन क्वेरी लिखें",
- "Query took too long": "क्वेरी में बहुत अधिक समय लगा"
+ "Query took too long": "क्वेरी में बहुत अधिक समय लगा",
+ "Yesterday: {0} order worth {1}.": "कल: {0} ऑर्डर मूल्य {1}।",
+ "Today so far: {0} order worth {1}.": "आज से अब तक: {0} ऑर्डर मूल्य {1}।",
+ "Top rep this week: {0} with {1} from {2} order.": "इस सप्ताह शीर्ष प्रतिनिधि: {0} {2} ऑर्डर से {1} के साथ।",
+ "Only {0} order in the last 30 days, down from about {1} a month": "पिछले 30 दिनों में केवल {0} ऑर्डर, प्रति माह लगभग {1} से कम",
+ "{0} shop has not ordered as often as usual: {1}.": "{0} दुकान ने हमेशा की तरह अक्सर ऑर्डर नहीं दिया है: {1}।",
+ "{0} order to bill": "{0} बिल करने का आदेश",
+ "Strong isolation: read-only database role": "मजबूत अलगाव: केवल पढ़ने योग्य डेटाबेस भूमिका",
+ "Basic isolation: company views only": "बुनियादी अलगाव: केवल कंपनी के विचार",
+ "BI tool access (Power BI, Tableau, Metabase, Superset)": "बीआई टूल एक्सेस (पावर बीआई, टेबलौ, मेटाबेस, सुपरसेट)",
+ "Allowed IP addresses": "अनुमत आईपी पते",
+ "Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.": "केवल ये पते ही कनेक्ट हो सकते हैं (एन्क्रिप्टेड कनेक्शन और पासवर्ड आवश्यक)। अपने बीआई सर्वर या गेटवे का सार्वजनिक आईपी, अल्पविराम से अलग करके दर्ज करें।",
+ "The server accepts BI connections from the allowed addresses (encrypted).": "सर्वर अनुमत पतों (एन्क्रिप्टेड) ​​से बीआई कनेक्शन स्वीकार करता है।",
+ "The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).": "सर्वर अभी तक बाहरी डेटाबेस कनेक्शन स्वीकार नहीं करता है। आपके सर्वर व्यवस्थापक को इसे चालू करना होगा (README → BI टूल देखें)।",
+ "At most 20 addresses": "अधिकतम 20 पते"
 }

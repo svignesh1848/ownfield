@@ -1224,7 +1224,6 @@
  "Max {0} rows, {1} s per query.": "সর্বোচ্চ {0}টি সারি, প্রতি ক্যোয়ারীতে {1} সেকেন্ড।",
  "Data analysts": "ডেটা বিশ্লেষক",
  "These people can use the SQL editor. Admins always can.": "এই মানুষ SQL সম্পাদক ব্যবহার করতে পারেন. অ্যাডমিনরা সবসময় পারে।",
- "BI tool access (Metabase, Power BI, Superset)": "BI টুল অ্যাক্সেস (মেটাবেস, পাওয়ার বিআই, সুপারসেট)",
  "A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.": "একটি শুধুমাত্র পঠনযোগ্য ডাটাবেস লগইন যা শুধুমাত্র আপনার কোম্পানির টেবিল দেখতে পায়। ডিফল্টরূপে বন্ধ। আপনার সার্ভার হোস্টকে অবশ্যই ডাটাবেস সংযোগের অনুমতি দিতে হবে।",
  "Off": "বন্ধ",
  "Make a new password": "একটি নতুন পাসওয়ার্ড তৈরি করুন",
@@ -1239,5 +1238,19 @@
  "Only SELECT queries are allowed (start with SELECT or WITH)": "শুধুমাত্র SELECT প্রশ্ন অনুমোদিত (SELECT বা WITH দিয়ে শুরু করুন)",
  "Only one statement at a time": "এক সময়ে শুধুমাত্র একটি বিবৃতি",
  "Write a SELECT query": "একটি SELECT প্রশ্ন লিখুন",
- "Query took too long": "ক্যোয়ারী অনেক বেশি সময় নিয়েছে"
+ "Query took too long": "ক্যোয়ারী অনেক বেশি সময় নিয়েছে",
+ "Yesterday: {0} order worth {1}.": "গতকাল: {1} মূল্যের {0} অর্ডার।",
+ "Today so far: {0} order worth {1}.": "আজ এ পর্যন্ত: {1} মূল্যের {0} অর্ডার।",
+ "Top rep this week: {0} with {1} from {2} order.": "এই সপ্তাহের শীর্ষ প্রতিনিধি: {2} অর্ডার থেকে {1} সহ {0}৷",
+ "Only {0} order in the last 30 days, down from about {1} a month": "গত 30 দিনে শুধুমাত্র {0}টি অর্ডার, প্রতি মাসে প্রায় {1} থেকে কম৷",
+ "{0} shop has not ordered as often as usual: {1}.": "{0} দোকান যথারীতি অর্ডার করেনি: {1}।",
+ "{0} order to bill": "বিল করার জন্য {0} অর্ডার করুন",
+ "Strong isolation: read-only database role": "শক্তিশালী বিচ্ছিন্নতা: শুধুমাত্র পঠনযোগ্য ডাটাবেস ভূমিকা",
+ "Basic isolation: company views only": "মৌলিক বিচ্ছিন্নতা: শুধুমাত্র কোম্পানির মতামত",
+ "BI tool access (Power BI, Tableau, Metabase, Superset)": "BI টুল অ্যাক্সেস (পাওয়ার BI, মূকনাটক, মেটাবেস, সুপারসেট)",
+ "Allowed IP addresses": "অনুমোদিত আইপি ঠিকানা",
+ "Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.": "শুধুমাত্র এই ঠিকানাগুলি সংযোগ করতে পারে (এনক্রিপ্ট করা সংযোগ এবং পাসওয়ার্ড প্রয়োজন)। আপনার BI সার্ভার বা গেটওয়ের সর্বজনীন আইপি লিখুন, কমা দ্বারা বিভক্ত।",
+ "The server accepts BI connections from the allowed addresses (encrypted).": "সার্ভার অনুমোদিত ঠিকানা (এনক্রিপ্ট করা) থেকে BI সংযোগ গ্রহণ করে।",
+ "The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).": "সার্ভার এখনও বাইরের ডাটাবেস সংযোগ গ্রহণ করে না। আপনার সার্ভার অ্যাডমিনিস্ট্রেটরকে অবশ্যই এটি চালু করতে হবে (README → BI টুল দেখুন)।",
+ "At most 20 addresses": "সর্বাধিক 20টি ঠিকানা"
 }

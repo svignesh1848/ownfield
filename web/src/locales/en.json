@@ -1224,7 +1224,6 @@
  "Max {0} rows, {1} s per query.": "Max {0} rows, {1} s per query.",
  "Data analysts": "Data analysts",
  "These people can use the SQL editor. Admins always can.": "These people can use the SQL editor. Admins always can.",
- "BI tool access (Metabase, Power BI, Superset)": "BI tool access (Metabase, Power BI, Superset)",
  "A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.": "A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.",
  "Off": "Off",
  "Make a new password": "Make a new password",
@@ -1239,5 +1238,19 @@
  "Only SELECT queries are allowed (start with SELECT or WITH)": "Only SELECT queries are allowed (start with SELECT or WITH)",
  "Only one statement at a time": "Only one statement at a time",
  "Write a SELECT query": "Write a SELECT query",
- "Query took too long": "Query took too long"
+ "Query took too long": "Query took too long",
+ "Yesterday: {0} order worth {1}.": "Yesterday: {0} order worth {1}.",
+ "Today so far: {0} order worth {1}.": "Today so far: {0} order worth {1}.",
+ "Top rep this week: {0} with {1} from {2} order.": "Top rep this week: {0} with {1} from {2} order.",
+ "Only {0} order in the last 30 days, down from about {1} a month": "Only {0} order in the last 30 days, down from about {1} a month",
+ "{0} shop has not ordered as often as usual: {1}.": "{0} shop has not ordered as often as usual: {1}.",
+ "{0} order to bill": "{0} order to bill",
+ "Strong isolation: read-only database role": "Strong isolation: read-only database role",
+ "Basic isolation: company views only": "Basic isolation: company views only",
+ "BI tool access (Power BI, Tableau, Metabase, Superset)": "BI tool access (Power BI, Tableau, Metabase, Superset)",
+ "Allowed IP addresses": "Allowed IP addresses",
+ "Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.": "Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.",
+ "The server accepts BI connections from the allowed addresses (encrypted).": "The server accepts BI connections from the allowed addresses (encrypted).",
+ "The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).": "The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).",
+ "At most 20 addresses": "At most 20 addresses"
 }
