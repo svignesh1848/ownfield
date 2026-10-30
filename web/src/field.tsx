@@ -126,6 +126,17 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
             <td><input inputMode="numeric" style={{ width: 70 }} value={shelf[l.sku] ?? ""} placeholder="0" onChange={e => setShelf({ ...shelf, [l.sku]: e.target.value.replace(/\D/g, "") })} /></td>
             <td><b>{Math.max(0, Math.ceil(l.avg - (Number(shelf[l.sku]) || 0)))}</b></td></tr>)}</tbody></table></div>
         <div className="row-btns"><button className="sm" onClick={useSug}>{t("Use these quantities")}</button><button className="sm ghost" onClick={() => setSug(null)}>{t("Close")}</button></div></>}</div>;
+  const [ai, setAi] = useState<any>(null);
+  useEffect(() => { setAi(null); if (shopId && step === "items" && navigator.onLine) api(s, "/api/ai/suggest", { method: "POST", body: JSON.stringify({ shopId: Number(shopId) }) }).then(setAi).catch(() => {}); }, [shopId, step]);
+  const addAi = (ls: any[]) => { const nq = { ...qty }, nu = { ...unit };
+    for (const l of ls) { const it = items.find(i => i.variants.some((v: any) => v.sku === l.sku)); if (!it) continue; const base = it.uoms.find((u: any) => u.factor === 1); if (base) nu[it.id] = base.code; nq[l.sku] = String(l.qty); }
+    setUnit(nu); setQty(nq); toast(ls.length > 1 ? t("Added {0} suggested products", ls.length) : t("Added {0}", ls[0]?.name)); };
+  const AiCard = () => { const ls = (ai?.lines || []).filter((l: any) => !(Number(qty[l.sku]) > 0)); if (!ls.length) return null;
+    return <div className="card"><b>✨ {t("Suggested for this shop")}</b>
+      {ls.map((l: any) => <div className="row" key={l.sku} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+        <div><b>{l.qty}</b> × {l.name} <span className="muted small">{l.sku}</span><br /><span className="muted small">{t(l.why.key, ...l.why.args)}{l.note ? " · " + t(l.note.key, ...l.note.args) : ""}</span></div>
+        <button className="sm" onClick={() => addAi([l])} aria-label={t("Add")}>+ {t("Add")}</button></div>)}
+      {ls.length > 1 && <div className="row-btns"><button className="sm ghost" onClick={() => addAi(ls)}>{t("Add all")}</button></div>}</div>; };
   const mustMissing = must.filter(k => !(Number(qty[k]) > 0));
   const MustBanner = () => must.length ? <div className={`banner ${mustMissing.length ? "warnb" : ""}`}>⭐ {mustMissing.length ? t("Must-sell not in this order yet: {0}", mustMissing.join(", ")) : t("All must-sell products are in this order")}</div> : null;
   const st = cfg.settings, f = st.features;
@@ -189,7 +200,7 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
       <div className="cartbar"><button className="ghost" onClick={() => setStep("items")}>{t("← Edit")}</button><button disabled={busy} onClick={submit}>{busy ? t("Placing…") : t("Place order · {0}", inr0(shownTotal))}</button></div></>;
   }
 
-  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>{MustBanner()}{SugCard()}
+  return <><Steps n={2} /><h2>{t("Add products")}</h2><p className="muted">{t("For")}{" "}<b>{shop?.name}</b> <button className="link" onClick={() => setStep("shop")}>change</button></p>{MustBanner()}{AiCard()}{SugCard()}
     <div className="searchbar"><input type="search" placeholder={t("Search products or codes")} value={q} onChange={e => setQ(e.target.value)} />
       {f.barcode && <ScanButton onCode={c => { const v = items.flatMap(i => i.variants).find((v: any) => v.barcode === c || v.sku === c); if (!v) return toast(t("No product for {0}", c), "err"); setQty({ ...qty, [v.sku]: String((Number(qty[v.sku]) || 0) + 1) }); toast(t("Added {0}", v.sku)); }} />}</div>
     {cats.length > 1 && <div className="chiprow">{["", ...cats].map(c => <button key={c || "all"} className={`chip ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>{c || t("All")}</button>)}</div>}

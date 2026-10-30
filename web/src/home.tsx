@@ -63,6 +63,20 @@ export function DiskAlert({ s }: { s: any }) {
   return d?.low ? <div className="banner bad" role="alert">⚠️ {t("Low disk space on the server: only {0}% free. Delete old files or move photos to S3 storage (see README).", d.freePct)}</div> : null;
 }
 
+/** Daily summary: built-in rules on order history (an optional LLM only rewords it). */
+export function DailySummary({ s }: { s: any }) {
+  const [d, setD] = useState<any>(null); const [risk, setRisk] = useState(false);
+  useEffect(() => { safe(api(s, "/api/ai/summary"), null).then(setD); }, []);
+  if (!d) return null;
+  const tone = (l: any) => l.tone === "bad" ? "🔴" : l.tone === "warn" ? "🟠" : l.tone === "good" ? "🟢" : "•";
+  return <div className="card"><b>✨ {t("Daily summary")}</b>
+    {d.aiText && <p>{d.aiText}</p>}
+    <ul style={{ paddingLeft: 4, listStyle: "none", margin: "8px 0" }}>{d.lines.map((l: any, i: number) => <li key={i} style={{ margin: "4px 0" }}>{tone(l)} {t(l.key, ...l.args)}</li>)}</ul>
+    {d.atRisk?.length > 0 && <><button className="sm ghost" onClick={() => setRisk(!risk)}>{risk ? t("Hide") : t("Shops at risk ({0})", d.atRisk.length)}</button>
+      {risk && <ul style={{ paddingLeft: 4, listStyle: "none" }}>{d.atRisk.map((r: any) => <li key={r.shopId} style={{ margin: "6px 0" }}><b>{r.shop}</b> <span className="muted small">{r.city || ""}</span><br /><span className="small">{t(r.why.key, ...r.why.args)}</span></li>)}</ul>}</>}
+  </div>;
+}
+
 export function ManagerHome(p: ViewProps) {
   const { s, cfg, go } = p, f = cfg.settings.features;
   const [d, setD] = useState<any>(null);
@@ -72,6 +86,7 @@ export function ManagerHome(p: ViewProps) {
       due: out.reduce((a: number, r: any) => a + r.outstanding, 0), overdue: out.reduce((a: number, r: any) => a + r.overdue, 0) })); }, []);
   return <>{s.user.role === "company_admin" && <><DiskAlert s={s} /><SetupChecklist {...p} /></>}
     <h2 className="hello">{hello(s.user.name)}</h2>
+    <DailySummary s={s} />
     {!d ? <Loading /> : <>
       <h3>{t("Today")}</h3>
       <div className="kpis"><button onClick={() => go("visits")}><b>{d.visits}</b>{t("Visits")}</button><button onClick={() => go("orders")}><b>{d.orders}</b>{t("Orders")}</button><button onClick={() => go("dashboard")}><b>{inr0(d.value)}</b>{t("Order value")}</button>
