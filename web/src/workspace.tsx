@@ -38,6 +38,7 @@ export function DataWorkspace({ s }: ViewProps) {
             <button className="sm ghost" onClick={async () => { if (confirm(t("Delete dataset \"{0}\"?", d.name))) { await api(s, `/api/data-workspace/datasets/${d.id}`, { method: "DELETE" }); loadDs(); } }}>{t("Delete")}</button></span></div>)}</>}
       </div>
       <div><b>{t("Tables")}</b><p className="muted small">{t("Max {0} rows, {1} s per query.", schema.limits.maxRows, Math.round(schema.limits.timeoutMs / 1000))}</p>
+        <p className="muted small">{schema.isolation === "role+views" ? "🔒 " + t("Strong isolation: read-only database role") : t("Basic isolation: company views only")}</p>
         {schema.tables.map((tb: any) => <details key={tb.name}><summary><code>{tb.name}</code></summary><p className="muted small">{tb.doc}</p>
           {tb.columns.map((c: any) => <div key={c.name} className="small"><code style={{ cursor: "pointer" }} onClick={() => setSql(sql + " " + c.name)}>{c.name}</code> <span className="muted">{c.doc}</span></div>)}</details>)}</div>
     </div>}
@@ -47,18 +48,23 @@ export function DataWorkspace({ s }: ViewProps) {
 }
 
 function Access({ p }: { p: ViewProps }) {
-  const { s } = p; const [users, setUsers] = useState<any[]>([]); const [sel, setSel] = useState<number[]>([]); const [bi, setBi] = useState<any>(null); const [cred, setCred] = useState<any>(null); const [msg, setMsg] = useState("");
-  useEffect(() => { api(s, "/api/users").then(setUsers); api(s, "/api/data-workspace/analysts").then(setSel); api(s, "/api/data-workspace/bi-access").then(setBi).catch(() => {}); }, []);
+  const { s } = p; const [users, setUsers] = useState<any[]>([]); const [sel, setSel] = useState<number[]>([]); const [bi, setBi] = useState<any>(null); const [cred, setCred] = useState<any>(null); const [msg, setMsg] = useState(""); const [ips, setIps] = useState("");
+  useEffect(() => { api(s, "/api/users").then(setUsers); api(s, "/api/data-workspace/analysts").then(setSel); api(s, "/api/data-workspace/bi-access").then(b => { setBi(b); setIps((b.allowlist || []).join(", ")); }).catch(() => {}); }, []);
+  const saveIps = async () => { try { const r = await api(s, "/api/data-workspace/bi-allowlist", { method: "PUT", body: JSON.stringify({ ips }) }); setIps(r.allowlist.join(", ")); setBi({ ...bi, allowlist: r.allowlist }); setMsg(""); } catch (e: any) { setMsg(e.message); } };
   const toggleBi = async (on: boolean) => { try { const r = await api(s, "/api/data-workspace/bi-access", { method: "PUT", body: JSON.stringify({ enabled: on }) }); setBi({ ...bi, enabled: r.enabled }); setCred(on ? r : null); setMsg(""); } catch (e: any) { setMsg(e.message); } };
   return <div>
     <Field label={t("Data analysts")} help={t("These people can use the SQL editor. Admins always can.")}><div className="chips">{users.filter(u => ["manager", "sales_rep", "distributor"].includes(u.role)).map(u =>
       <label key={u.id} className="chk"><input type="checkbox" checked={sel.includes(u.id)} onChange={e => setSel(e.target.checked ? [...sel, u.id] : sel.filter(x => x !== u.id))} /> {u.name}</label>)}</div></Field>
     <button onClick={() => api(s, "/api/data-workspace/analysts", { method: "PUT", body: JSON.stringify({ userIds: sel }) }).then(setSel)}>{t("Save")}</button>
-    <h3>{t("BI tool access (Metabase, Power BI, Superset)")}</h3>
+    <h3>{t("BI tool access (Power BI, Tableau, Metabase, Superset)")}</h3>
     <p className="muted small">{t("A read-only database login that sees only your company's tables. Off by default. Your server host must allow database connections.")}</p>
     {bi && <label className="chk"><input type="checkbox" checked={!!bi.enabled} onChange={e => toggleBi(e.target.checked)} /> {bi.enabled ? t("On") : t("Off")}</label>}
     {bi?.enabled && !cred && <button className="sm ghost" onClick={() => toggleBi(true)}>{t("Make a new password")}</button>}
-    {cred && <div className="hint"><b>{t("Copy now — the password is shown only once.")}</b><br />Host: {cred.host}<br />Port: {cred.port}<br />Database: {cred.database}<br />User: <code>{cred.user}</code><br />Password: <code>{cred.password}</code><br />Schema: <code>{cred.schema}</code></div>}
+    <Field label={t("Allowed IP addresses")} help={t("Only these addresses can connect (encrypted connection and password required). Enter the public IP of your BI server or gateway, separated by commas.")}>
+      <input value={ips} onChange={e => setIps(e.target.value)} placeholder="203.0.113.10, 198.51.100.0/24" /></Field>
+    <button className="sm" onClick={saveIps}>{t("Save")}</button>
+    {bi && <p className="muted small">{bi.server?.exposed ? t("The server accepts BI connections from the allowed addresses (encrypted).") : t("The server does not accept outside database connections yet. Your server administrator must turn this on (see README → BI tools).")}</p>}
+    {cred && <div className="hint"><b>{t("Copy now — the password is shown only once.")}</b><br />Host: {cred.host}<br />Port: {cred.port}<br />Database: {cred.database}<br />User: <code>{cred.user}</code><br />Password: <code>{cred.password}</code><br />Schema: <code>{cred.schema}</code><br />SSL: <code>{cred.sslmode || "require"}</code></div>}
     {msg && <p className="err">{msg}</p>}
   </div>;
 }
