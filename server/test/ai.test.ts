@@ -85,10 +85,10 @@ describe("at-risk shops and daily summary", () => {
     expect(s.provider).toBe("built-in"); expect(s.aiText).toBeNull();
     expect(s.yesterday.orders).toBe(1);
     const text = s.lines.map((l: any) => l.text).join(" ");
-    expect(text).toMatch(/Yesterday: 1 orders worth ₹80/);
+    expect(text).toMatch(/Yesterday: 1 order worth ₹80/);
     expect(text).toMatch(/Top rep this week: Rep B/);
     expect(text).toMatch(/Rep A has no orders this week/);
-    expect(text).toMatch(/shops have not ordered as often as usual/);
+    expect(text).toMatch(/(shop has|shops have) not ordered as often as usual/);
     await request(app).get("/api/ai/summary").set(as("rep")).expect(403);
   });
   it("flags low stock risk and unusual big orders", async () => {

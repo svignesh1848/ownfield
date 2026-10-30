@@ -95,7 +95,7 @@ export async function atRiskShops(db: Db, cid: number, todayStr = dayKey(new Dat
     const avgValue = os.reduce((a, o) => a + o.total, 0) / os.length;
     let why: Line | null = null;
     if (gap > 0 && since >= Math.max(gap * 1.5, gap + 7)) why = L("No order for {0} days; usually every {1} days", [since, r0(gap)], "bad");
-    else if (prev60 >= 2 && last30 <= prev60 / 2) why = L("Only {0} orders in the last 30 days, down from about {1} a month", [last30, r0(prev60)], "warn");
+    else if (prev60 >= 2 && last30 <= prev60 / 2) why = L(last30 === 1 ? "Only {0} order in the last 30 days, down from about {1} a month" : "Only {0} orders in the last 30 days, down from about {1} a month", [last30, r0(prev60)], "warn");
     if (why) out.push({ shopId: s.id, shop: s.name, code: s.code, city: s.city, lastOrder: dstr(days[days.length - 1]), daysSince: since, usualGap: r0(gap), avgValue: r0(avgValue), why });
   }
   return out.sort((a, b) => b.avgValue * (b.daysSince / Math.max(1, b.usualGap)) - a.avgValue * (a.daysSince / Math.max(1, a.usualGap)));
@@ -118,15 +118,15 @@ export async function dailySummary(db: Db, cid: number, todayStr = dayKey(new Da
   const T = dayStats(now), Y = dayStats(yest);
   const prev = Array.from({ length: 7 }, (_, i) => dayStats(yest - 1 - i)), avgVal = prev.reduce((a, d) => a + d.value, 0) / 7, avgOrd = prev.reduce((a, d) => a + d.orders, 0) / 7;
   const lines: Line[] = [];
-  lines.push(Y.orders ? L("Yesterday: {0} orders worth {1}.", [Y.orders, inr(Y.value)]) : L("Yesterday: no orders.", [], "warn"));
+  lines.push(Y.orders ? L(Y.orders === 1 ? "Yesterday: {0} order worth {1}." : "Yesterday: {0} orders worth {1}.", [Y.orders, inr(Y.value)]) : L("Yesterday: no orders.", [], "warn"));
   if (avgVal > 0 && Y.orders) { const pct = r0((Y.value / avgVal - 1) * 100);
     if (pct >= 20) lines.push(L("That is {0}% above the 7-day average of {1}.", [pct, inr(avgVal)], "good"));
     else if (pct <= -30) lines.push(L("That is {0}% below the 7-day average of {1}.", [-pct, inr(avgVal)], "bad")); }
-  lines.push(L("Today so far: {0} orders worth {1}.", [T.orders, inr(T.value)]));
+  lines.push(L(T.orders === 1 ? "Today so far: {0} order worth {1}." : "Today so far: {0} orders worth {1}.", [T.orders, inr(T.value)]));
   for (const [lab, d] of [["Yesterday", Y], ["Today", T]] as const) if (d.planned) lines.push(L(lab === "Today" ? "Visits today: {0} of {1} planned outlets done." : "Visits yesterday: {0} of {1} planned outlets done.", [d.plannedDone, d.planned], d.plannedDone / d.planned < 0.6 && lab === "Yesterday" ? "warn" : undefined));
   // Top / bottom reps over the last 7 days (incl. today) by order value.
   const wk = all.filter(o => o.day > now - 7), byRep = reps.map(r => ({ id: r.id, name: r.name, value: wk.filter(o => o.rep === r.id).reduce((a, o) => a + o.total, 0), orders: wk.filter(o => o.rep === r.id).length })).sort((a, b) => b.value - a.value);
-  if (byRep.length && byRep[0].value > 0) lines.push(L("Top rep this week: {0} with {1} from {2} orders.", [byRep[0].name, inr(byRep[0].value), byRep[0].orders], "good"));
+  if (byRep.length && byRep[0].value > 0) lines.push(L(byRep[0].orders === 1 ? "Top rep this week: {0} with {1} from {2} order." : "Top rep this week: {0} with {1} from {2} orders.", [byRep[0].name, inr(byRep[0].value), byRep[0].orders], "good"));
   if (byRep.length > 1) { const lo = byRep[byRep.length - 1]; lines.push(lo.value > 0 ? L("Lowest this week: {0} with {1}.", [lo.name, inr(lo.value)], "warn") : L("{0} has no orders this week.", [lo.name], "warn")); }
   // Reps who visited yesterday but took no orders.
   for (const r of reps) { const v = Y.vs.filter(x => x.rep_id === r.id).length; if (v >= 3 && !Y.os.some(o => o.rep === r.id)) lines.push(L("{0} made {1} visits yesterday but took no orders.", [r.name, v], "warn")); }
@@ -135,7 +135,7 @@ export async function dailySummary(db: Db, cid: number, todayStr = dayKey(new Da
     const avg = past.reduce((a, p) => a + p.total, 0) / past.length; if (o.total > avg * 3 && o.total - avg > 1000) lines.push(L("Unusual: {0} ordered {1}, about {2}x their usual {3}.", [shopName.get(o.shop) || "", inr(o.total), r0(o.total / avg), inr(avg)], "warn")); }
   // Shops not ordering lately.
   const risk = await atRiskShops(db, cid, todayStr, all);
-  if (risk.length) lines.push(L("{0} shops have not ordered as often as usual, e.g. {1}.", [risk.length, risk.slice(0, 3).map(r => r.shop).join(", ")], "warn"));
+  if (risk.length) lines.push(L(risk.length === 1 ? "{0} shop has not ordered as often as usual: {1}." : "{0} shops have not ordered as often as usual, e.g. {1}.", [risk.length, risk.slice(0, 3).map(r => r.shop).join(", ")], "warn"));
   // Low-stock risk: fast-moving SKUs (last 30 days) with less than 7 days of cover in company + distributor stock.
   const { settings } = await getCompany(db, cid); const low: { sku: string; qty: number; days: number }[] = [];
   if (settings.features?.stock) {

@@ -48,7 +48,7 @@ export function DistributorHome({ s, cfg, go }: ViewProps) {
   return <><h2 className="hello">{hello(s.user.name)}</h2>
     <div className="tiles">
       <Tile icon="📥" title={t("New orders")} text={d.placed ? t("{0} waiting for you", d.placed) : t("All caught up")} badge={d.placed} onClick={() => go("inbox")} tone={d.placed ? "warn" : undefined} />
-      {f.invoicing && f.distributorBilling && <Tile icon="🧾" title={t("Invoices")} text={d.toBill ? t("{0} orders to bill", d.toBill) : t("Bills you issued")} badge={d.toBill} onClick={() => go(d.toBill ? "inbox" : "invoices")} />}
+      {f.invoicing && f.distributorBilling && <Tile icon="🧾" title={t("Invoices")} text={d.toBill ? t(d.toBill === 1 ? "{0} order to bill" : "{0} orders to bill", d.toBill) : t("Bills you issued")} badge={d.toBill} onClick={() => go(d.toBill ? "inbox" : "invoices")} />}
       {f.stock && <Tile icon="🏬" title={t("Stock")} text={t("What you have on hand")} onClick={() => go("stock")} />}
       {f.invoicing && f.distributorBilling && <Tile icon="💰" title={t("Collections")} text={d.due > 0 ? t("{0} to collect", inr0(d.due)) : t("Nothing due")} onClick={() => go("collections")} />}
       {f.purchaseOrders && <Tile icon="📋" title={t("Purchase orders")} text={d.po ? t("{0} open", d.po) : t("Order stock from the company")} onClick={() => go("POs")} />}
