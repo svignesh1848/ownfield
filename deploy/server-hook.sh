@@ -8,7 +8,7 @@ APPU=$(sed -n 's|^DATABASE_URL=postgres://\([a-z_][a-z0-9_]*\):.*|\1|p' /etc/fie
 APPDB=$(sed -n 's|^DATABASE_URL=postgres://[^/]*/\([a-z_][a-z0-9_]*\).*|\1|p' /etc/fieldforce-oss.env | head -1)
 [ -n "$APPU" ] && [ -n "$APPDB" ] || exit 0
 echo "server-hook: data workspace DB privileges for $APPU"
-timeout 60 sudo -u postgres psql -qX -v ON_ERROR_STOP=1 -v app="$APPU" -d "$APPDB" -f "$D/db-privileges.sql" || echo "server-hook: privileges step failed (app stays in views mode)"
+timeout 60 sudo -u postgres psql -qX -v ON_ERROR_STOP=1 -v app="$APPU" -d "$APPDB" <"$D/db-privileges.sql" || echo "server-hook: privileges step failed (app stays in views mode)"
 # BI connection sync (pg_hba allow-list). Installed outside the build dir so a rollback keeps a working copy.
 install -m 755 "$D/bi-db-sync.sh" /usr/local/sbin/fieldforce-oss-bi-sync
 install -m 644 "$D/options.env" /etc/fieldforce-oss-options.env
