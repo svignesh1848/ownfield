@@ -122,4 +122,28 @@ export async function seedDemo(db: Db, code = "DEMO") {
   if (tpl) { const qs = parseJson<any[]>(tpl.questions, []); const f = qs.find(q => q.key === "facings" && q.type === "number"); if (f && !f.target) { f.target = 12; await db.query("UPDATE audit_templates SET questions=$1 WHERE id=$2", [JSON.stringify(qs), tpl.id]); } }
   await db.query("UPDATE schemes SET budget=5000 WHERE id=(SELECT MIN(id) FROM schemes WHERE company_id=$1) AND budget IS NULL", [cid]);
   });
+  // 8) Order history for the AI suggestions and manager summary: ~60 days of sample orders (fulfilled, no stock moves), topped up on each start.
+  await step("order-history", async () => {
+  if (!rep) return;
+  const shops = (await db.query("SELECT id FROM shops WHERE company_id=$1 ORDER BY id", [cid])).rows;
+  const vars = (await db.query("SELECT v.id, v.billing_price FROM variants v JOIN items i ON i.id=v.item_id WHERE i.company_id=$1 AND i.kind='goods' ORDER BY v.id LIMIT 12", [cid])).rows;
+  if (!shops.length || !vars.length) return;
+  const have = new Set((await db.query("SELECT client_ref FROM orders WHERE company_id=$1 AND client_ref LIKE 'sample-hist-%'", [cid])).rows.map((r: any) => r.client_ref));
+  const cycles = [7, 10, 14, 5, 21];
+  for (let ago = 60; ago >= 0; ago--) {
+    const at = new Date(Date.now() - ago * 864e5); const day = at.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    if (new Date(day + "T00:00:00Z").getUTCDay() === 0) continue;
+    for (const [i, sh] of shops.entries()) {
+      const cyc = cycles[i % cycles.length]; if ((ago + i * 3) % cyc !== 0) continue;
+      if (i === 1 && ago < 35) continue; // one outlet stops ordering → shows as "at risk"
+      const ref = `sample-hist-${day}-${sh.id}`; if (have.has(ref)) continue;
+      const lines = [0, 1, 2].slice(0, 2 + (i % 2)).map(k => ({ v: vars[(i + k) % vars.length], q: 4 + ((i * 3 + k * 5) % 9) }));
+      const uniq = [...new Map(lines.map(l => [l.v.id, l])).values()];
+      const total = Math.round(uniq.reduce((a, l) => a + l.q * Number(l.v.billing_price), 0) * 100) / 100;
+      const at11 = new Date(`${day}T11:00:00+05:30`); if (at11 > new Date()) continue;
+      const o = await one(db, "INSERT INTO orders (company_id,client_ref,rep_id,shop_id,status,total,created_at) VALUES ($1,$2,$3,$4,'fulfilled',$5,$6) RETURNING id", [cid, ref, rep.id, sh.id, total, at11]);
+      for (const l of uniq) await db.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,amount) VALUES ($1,$2,'PCS',$3,$3,$4,$5)", [o.id, l.v.id, l.q, l.v.billing_price, Math.round(l.q * Number(l.v.billing_price) * 100) / 100]);
+    }
+  }
+  });
 }
