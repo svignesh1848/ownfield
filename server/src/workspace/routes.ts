@@ -4,7 +4,7 @@ import type { Db } from "../db.js";
 import { bad } from "../catalog.js";
 import { type Ctx, kvGet, kvSet } from "../common.js";
 import { audit } from "../security.js";
-import { runSql, schemaDocs, ensureWorkspaceTables, datasetOut, setBiAccess, biStatus, syncCompanySchema, WS_MAX_ROWS, WS_TIMEOUT_MS } from "./service.js";
+import { runSql, schemaDocs, ensureWorkspaceTables, datasetOut, setBiAccess, biStatus, parseAllowlist, syncCompanySchema, WS_MAX_ROWS, WS_TIMEOUT_MS } from "./service.js";
 
 export async function isAnalyst(db: Db, cid: number, user: { uid: number; role: string }) {
   if (user.role === "company_admin") return true;
@@ -67,10 +67,21 @@ export function registerWorkspaceRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     await db.query("DELETE FROM ws_datasets WHERE id=$1 AND company_id=$2", [Number(req.params.id) || 0, cid]); res.json({ ok: true });
   }));
   // BI access (admin only, off by default)
-  app.get("/api/data-workspace/bi-access", auth("company_admin"), wrap(async (req, res) => { const cid = tenant(req, res); if (cid == null) return; res.json(await biStatus(db, cid)); }));
+  app.get("/api/data-workspace/bi-access", auth("company_admin"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    res.json({ ...(await biStatus(db, cid)), allowlist: (await kvGet(db, cid, "workspace_bi", { ips: [] as string[] })).ips });
+  }));
+  // IPs the BI tool connects from. The server only opens the database to these (TLS + password), and only if the operator turned it on.
+  app.put("/api/data-workspace/bi-allowlist", auth("company_admin"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const ips = parseAllowlist(req.body?.ips);
+    await kvSet(db, cid, "workspace_bi", { ips }); await audit(db, { companyId: cid, userId: req.user.uid, action: "workspace.bi_allowlist", detail: { ips }, ip: req.ip });
+    res.json({ allowlist: ips });
+  }));
   app.put("/api/data-workspace/bi-access", auth("company_admin"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const r = await setBiAccess(db, cid, !!req.body?.enabled);
+    const r = await setBiAccess(db, cid, !!req.body?.enabled, String(req.hostname || ""));
+    res.set("Cache-Control", "no-store");
     await audit(db, { companyId: cid, userId: req.user.uid, action: r.enabled ? "workspace.bi_enabled" : "workspace.bi_disabled", ip: req.ip });
     res.json(r);
   }));

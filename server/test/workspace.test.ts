@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp, ensurePlatformOwner } from "../src/app.js";
 import { migrate } from "../src/db.js";
 import { guardSql } from "../src/workspace/guard.js";
+import { parseAllowlist } from "../src/workspace/service.js";
 import { txDb } from "./txdb.js";
 
 let app: any; const T: Record<string, string> = {}; const id: Record<string, number> = {};
@@ -92,5 +93,15 @@ describe("data workspace", () => {
     expect((await request(app).get("/api/data-workspace/bi-access").set(as("a")).expect(200)).body.enabled).toBe(false);
     await request(app).put("/api/data-workspace/bi-access").set(as("a")).send({ enabled: true }).expect(409);
     await request(app).put("/api/data-workspace/bi-access").set(as("mgr")).send({ enabled: true }).expect(403);
+  });
+  it("BI allow-list: admin only, single IPs or small networks, never everyone; server not exposed by default", async () => {
+    expect(parseAllowlist("203.0.113.5, 198.51.100.0/24 2001:db8::1")).toEqual(["203.0.113.5/32", "198.51.100.0/24", "2001:db8::1/128"]);
+    for (const bad of ["0.0.0.0/0", "10.0.0.0/8", "::/0", "300.1.1.1", "127.0.0.1", "example.com", "2001:db8::/32"]) expect(() => parseAllowlist(bad), bad).toThrow();
+    await request(app).put("/api/data-workspace/bi-allowlist").set(as("a")).send({ ips: "0.0.0.0/0" }).expect(400);
+    await request(app).put("/api/data-workspace/bi-allowlist").set(as("mgr")).send({ ips: "203.0.113.5" }).expect(403);
+    expect((await request(app).put("/api/data-workspace/bi-allowlist").set(as("a")).send({ ips: "203.0.113.5" }).expect(200)).body.allowlist).toEqual(["203.0.113.5/32"]);
+    const st = (await request(app).get("/api/data-workspace/bi-access").set(as("a")).expect(200)).body;
+    expect(st.allowlist).toEqual(["203.0.113.5/32"]); expect(st.server.exposed).toBe(false); expect(st.enabled).toBe(false);
+    expect((await request(app).get("/api/data-workspace/bi-access").set(as("b")).expect(200)).body.allowlist).toEqual([]);
   });
 });
