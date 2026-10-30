@@ -3,6 +3,9 @@ services:
     image: postgres:16-alpine
     environment: { POSTGRES_USER: fieldforce, POSTGRES_PASSWORD: fieldforce, POSTGRES_DB: fieldforce }
     volumes: [dbdata:/var/lib/postgresql/data]
+    # The database is NOT published. For BI tools (README -> Data workspace -> BI tools) only if you must:
+    # publish it on a firewall that allows just the BI IPs, require TLS and hostssl rules in pg_hba.conf, e.g.
+    # ports: ["5432:5432"]   # never open 5432 to 0.0.0.0/0
   app:
     build: .
     depends_on: [db]

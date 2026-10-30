@@ -178,23 +178,52 @@ builder as a data source (`SQL: <name>`), so it gets charts, KPI cards, comparis
    `set_config`, `pg_sleep` …). Table names are rewritten to the company schema.
 3. **Database.** Each run is a `READ ONLY` transaction with `statement_timeout` (`WORKSPACE_TIMEOUT_MS`, 15 s), `search_path` set to the company
    schema, and a row cap (`WORKSPACE_MAX_ROWS`, 5 000; `WORKSPACE_RUNS_PER_MIN`, 30). When the app's database user has `CREATEROLE`, the query also
-   runs `SET LOCAL ROLE ff_ro_c<id>`: a NOLOGIN role that can only `SELECT` that company's views (no base tables, no other schemas, no file functions).
-   The schema endpoint reports `isolation: "role+views"` or `"views"`. To get the role layer: `ALTER ROLE <app db user> CREATEROLE;` (optional;
-   disable with `WORKSPACE_DB_ROLES=0`).
+   runs `SET LOCAL ROLE ff_ro_c<id>` (**strong mode**): a NOLOGIN role that can only `SELECT` that company's views (no base tables, no
+   other schemas, no file functions, no writes). The schema endpoint and the workspace page report `isolation: "role+views"` (strong) or `"views"`.
+   Strong mode switches on by itself when the database allows it, in either of two ways:
+   - **Least privilege (hosted server, recommended):** the app's DB user gets no extra rights. As the Postgres superuser run
+     `deploy/db-privileges.sql` (`psql -v app=<app db user> -f deploy/db-privileges.sql`, safe to re-run). It creates a NOLOGIN role
+     `ff_ws_provisioner` that only has `CREATEROLE`, and makes the app user a NOINHERIT member of it. The app switches to it
+     (`SET LOCAL ROLE`) only for the statements that create the per-company roles. On PostgreSQL 16+ such a role can only manage roles it
+     created and can never create superusers. The hosted EC2 server applies this automatically on every update (`deploy/server-hook.sh`).
+   - **Simple:** `ALTER ROLE <app db user> CREATEROLE;` (the default Docker setup already uses the superuser, so it is strong out of the box).
+   Disable with `WORKSPACE_DB_ROLES=0`; a different provisioner role name with `WORKSPACE_PROVISIONER_ROLE`.
 
 Every query, including refused ones, is written to the security audit log (`workspace.sql` / `workspace.sql_refused`, with the SQL, rows and time);
 admins see it under **Query log**.
 
-**BI tools (Metabase, Power BI, Superset)** — optional, **off by default**, needs `CREATEROLE` as above. An admin turns it on under
-Data workspace → Access; the app creates login `ff_bi_c<id>` with a random password (shown once), `default_transaction_read_only=on`,
-`search_path=ff_c<id>`, a connection limit (`WORKSPACE_BI_CONN_LIMIT`, 3) and `statement_timeout`; it can read only that company's views.
-Turning it off sets `NOLOGIN`. In the BI tool use host `WORKSPACE_BI_HOST`, port `WORKSPACE_BI_PORT`, database `WORKSPACE_BI_DATABASE`, schema `ff_c<id>`.
-Your Postgres must accept connections from the BI tool (e.g. publish port 5432 only to the BI server's IP, require SSL in `pg_hba.conf`);
-the default Docker setup does not expose the database.
+**BI tools (Power BI, Tableau, Metabase, Superset)** — optional, **off by default**, needs strong mode. An admin turns it on under
+Data workspace → Access; the app creates login `ff_bi_c<id>` with a random password (**shown once**, never logged or stored by the app),
+`default_transaction_read_only=on`, `search_path=ff_c<id>`, a connection limit (`WORKSPACE_BI_CONN_LIMIT`, 3) and `statement_timeout`; it
+can read only that company's views. "Make a new password" replaces it; turning it off sets `NOLOGIN`.
+
+The admin also enters the **allowed IP addresses** (the public IP of the BI server or gateway; single IPs or networks no wider than /16
+(IPv4) or /48 (IPv6); `0.0.0.0/0` is refused). The database is **never open to the world**:
+- *Hosted EC2 server:* outside connections are off unless `BI_DB_EXPOSE=1` in `deploy/options.env` (default `0`; change it by a commit).
+  When on, `fieldforce-oss-bi-sync` (root timer, every 2 min, installed by `deploy/server-hook.sh`) writes one
+  `hostssl <db> ff_bi_c<id> <ip> scram-sha-256` rule per allowed IP of each company whose BI login is on, turns on TLS with the server's
+  Let's Encrypt certificate (TLS 1.2+), and listens on port `BI_DB_PORT` (5432) only while at least one rule exists. No other user or
+  database can connect from outside, and connections without TLS are refused. **You must also add an inbound rule to the AWS security group:**
+  TCP 5432 from each allowed IP (`x.x.x.x/32`) only — never `0.0.0.0/0`. The app shows whether the server accepts BI connections.
+- *Docker / your own server:* the default compose file does not publish the database. If you need it, publish 5432 only on a firewall that
+  allows the BI IPs, set `ssl=on`, and add `hostssl <db> ff_bi_c<id> <ip>/32 scram-sha-256` lines to `pg_hba.conf` (see `docker-compose.yml`).
+
+Connection details (shown with the password): host = your server name (`WORKSPACE_BI_HOST`, defaults to the site's host name), port 5432
+(`WORKSPACE_BI_PORT`), database (`WORKSPACE_BI_DATABASE`, defaults to the app database), user `ff_bi_c<id>`, schema `ff_c<id>`, SSL required.
+- **Power BI Desktop:** Get data → PostgreSQL database → Server `host:5432`, Database `<db>` → Import or DirectQuery → Database login with
+  the user and password → pick tables under `ff_c<id>`. Keep "Encrypt connections" on. For the Power BI service, use an on-premises data
+  gateway and allow the gateway machine's public IP.
+- **Tableau Desktop / Server / Cloud:** Connect → To a Server → PostgreSQL → Server `host`, Port `5432`, Database `<db>`, Authentication
+  "Username and Password", tick **Require SSL** → Sign In → Schema `ff_c<id>`. For Tableau Cloud, allow Tableau Cloud's published IP
+  addresses for your pod (or use Tableau Bridge and allow the Bridge machine's IP).
+- **Metabase:** Admin → Databases → Add → PostgreSQL → host, port, database name, username, password, "Use a secure connection (SSL)" on,
+  "Only these schemas" → `ff_c<id>`.
+- **Superset:** Settings → Database Connections → + Database → PostgreSQL → SQLAlchemy URI
+  `postgresql://ff_bi_c<id>:<password>@host:5432/<db>?sslmode=require`; in Advanced → SQL Lab leave DML off.
 
 **API** (JWT, admin or analyst): `GET /api/data-workspace/schema`, `POST /api/data-workspace/query {sql, limit}`, `GET|POST /api/data-workspace/datasets`,
 `PUT|DELETE /api/data-workspace/datasets/:id`, `GET /api/data-workspace/me`; admin only: `GET|PUT /api/data-workspace/analysts {userIds}`,
-`GET /api/data-workspace/history`, `GET|PUT /api/data-workspace/bi-access {enabled}`. Datasets are used in report definitions as `"source": "ds:<id>"`.
+`GET /api/data-workspace/history`, `GET|PUT /api/data-workspace/bi-access {enabled}`, `PUT /api/data-workspace/bi-allowlist {ips}`. Datasets are used in report definitions as `"source": "ds:<id>"`.
 To expose another table or column, add it to `server/src/workspace/tables.ts` (never secret columns) and extend `server/test/workspace.test.ts`.
 
 ## Stack
