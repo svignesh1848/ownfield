@@ -15,7 +15,7 @@ let app: any, db: Db; const T: Record<string, string> = {}; let shopIntra: numbe
 const login = async (c: string, e: string) => (await request(app).post("/api/auth/login").send({ companyCode: c, email: e, password: "pw" })).body.token;
 const as = (t: string) => ({ Authorization: `Bearer ${T[t]}` });
 const csv = (rows: (string | number)[][]) => Buffer.from(rows.map(r => r.join(",")).join("\n"));
-const GST = { legalName: "Sample Pharma Distributors (sample)", gstin: "33AAAAA0000A1Z5", stateCode: "33", address: "1 Sample Street, Chennai" };
+const GST = { legalName: "Sample Pharma Distributors (sample)", gstin: "33AAAAA0000A1Z9", stateCode: "33", address: "1 Sample Street, Chennai" };
 const order = async (ref: string, shopId: number, lines: any[]) => (await request(app).post("/api/orders").set(as("rep")).send({ clientRef: ref, shopId, lines }).expect(201)).body;
 const accept = (id: number) => request(app).post(`/api/orders/${id}/status`).set(as("adm")).send({ status: "accepted" }).expect(200);
 const stockOf = async (sku: string) => Object.fromEntries((await request(app).get("/api/stock").set(as("adm"))).body.filter((s: any) => s.sku === sku).map((s: any) => [s.batch_no, s.qty]));
@@ -33,7 +33,7 @@ beforeAll(async () => {
   T.rep = await login("PH", "r@x.com"); T.rep2 = await login("PH", "r2@x.com"); T.mgr = await login("PH", "m@x.com");
   await request(app).post("/api/company/sample-data").set(as("adm")).expect(200);
   await request(app).post("/api/import/shops").set(as("adm")).attach("file", csv([["Code", "Name", "City", "GSTIN", "State Code"],
-    ["TN1", "Sample Chennai Chemist", "Chennai", "33BBBBB1111B1Z1", ""], ["KA1", "Sample Bengaluru Chemist", "Bengaluru", "29CCCCC2222C1Z2", ""]]), "s.csv").expect(200);
+    ["TN1", "Sample Chennai Chemist", "Chennai", "33BBBBB1111B1ZU", ""], ["KA1", "Sample Bengaluru Chemist", "Bengaluru", "29CCCCC2222C1Z4", ""]]), "s.csv").expect(200);
   const shops = (await request(app).get("/api/shops").set(as("adm"))).body;
   shopIntra = shops.find((s: any) => s.code === "TN1").id; shopInter = shops.find((s: any) => s.code === "KA1").id;
   expect(shops.find((s: any) => s.code === "KA1").state_code).toBe("29");
@@ -54,7 +54,7 @@ describe("GST invoices", () => {
   it("requires GST settings and validates them", async () => {
     const o = await order("g0", shopIntra, [{ sku: "SPARA-650", qty: 1 }]); await accept(o.id);
     expect((await pid(o.id)).status).toBe(400);
-    await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { ...GST, gstin: "29AAAAA0000A1Z5" } }).expect(400);
+    await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { ...GST, gstin: "29AAAAA0000A1ZY" } }).expect(400);
     await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { ...GST, numberFormat: "INV" } }).expect(400);
     const s = (await request(app).put("/api/company/settings").set(as("adm")).send({ gst: GST }).expect(200)).body.settings;
     expect(s.gst.hsnRates).toEqual([{ prefix: "3004", rate: 5 }]);

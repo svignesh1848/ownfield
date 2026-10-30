@@ -1,3 +1,4 @@
+import { gstinError } from "./gstin.js";
 import { logMove } from "./inventory.js";
 // Step 5a: purchase orders distributor → company. Draft → submit → approve (editable qty, audited price override) / reject,
 // partial dispatches (FEFO from company stock when tracked) and receipt into distributor stock. Numbered PO/<FY>/<seq> per distributor.
@@ -122,7 +123,7 @@ export function registerPurchaseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const next: any = { ...cur };
     for (const k of ident) if (k in b) next[k] = b[k] === "" ? null : String(b[k]).trim();
     if (!isDist) for (const k of terms) if (k in b) next[k] = b[k] === "" || b[k] == null ? null : Number(b[k]);
-    if (next.gstin) { next.gstin = next.gstin.toUpperCase(); if (!/^\d{2}[A-Z0-9]{13}$/.test(next.gstin)) throw bad("invalid GSTIN"); next.state_code ??= next.gstin.slice(0, 2); }
+    if (next.gstin) { next.gstin = next.gstin.toUpperCase(); if (!/^\d{2}[A-Z0-9]{13}$/.test(next.gstin)) throw bad("invalid GSTIN"); if (next.gstin !== cur.gstin) { const e = gstinError(next.gstin); if (e) throw bad(e); } next.state_code ??= next.gstin.slice(0, 2); }
     if (next.state_code && !/^\d{2}$/.test(next.state_code)) throw bad("state code must be 2 digits");
     if (next.gstin && next.state_code && next.gstin.slice(0, 2) !== next.state_code) throw bad("GSTIN does not match state code");
     for (const k of ["margin_pct", "discount_pct"]) if (next[k] != null && !(next[k] >= 0 && next[k] < 100)) throw bad(`${k} must be 0–99.99`);

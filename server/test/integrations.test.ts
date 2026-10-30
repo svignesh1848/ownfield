@@ -182,7 +182,7 @@ describe("connectors", () => {
 
 describe("two-way sync through a live Custom REST connector", () => {
   it("pulls products and stock on schedule, pushes orders and invoices on events", async () => {
-    await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "IN Sample Co", gstin: "33AAAAA0000A1Z5", stateCode: "33" } }).expect(200);
+    await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "IN Sample Co", gstin: "33AAAAA0000A1Z9", stateCode: "33" } }).expect(200);
     const c = (await request(app).post("/api/integrations/connectors").set(as("adm")).send({ type: "custom-rest", name: "Sample ERP" }).expect(201)).body;
     const endpoints = { orders: { method: "POST", path: "/so", template: { order: "{{$mapped}}" } }, invoices: { method: "POST", path: "/inv" },
       products: { method: "GET", path: "/items", itemsPath: "items" }, stock: { method: "GET", path: "/stock" } };

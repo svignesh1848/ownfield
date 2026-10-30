@@ -18,7 +18,7 @@ beforeAll(async () => {
   await request(app).post("/api/import/users").set(as("adm")).attach("file", csv([["Name", "Email", "Role", "Password"], ["D1", "d1@x.com", "distributor", "pw"], ["D2", "d2@x.com", "distributor", "pw"], ["Rep", "r@x.com", "sales_rep", "pw"]]), "u.csv");
   T.d1 = await login("SC", "d1@x.com"); T.d2 = await login("SC", "d2@x.com"); T.rep = await login("SC", "r@x.com");
   await request(app).post("/api/company/sample-data").set(as("adm")).expect(200);
-  await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "SC (sample)", gstin: "33AAAAA0000A1Z5", stateCode: "33" } }).expect(200);
+  await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "SC (sample)", gstin: "33AAAAA0000A1Z9", stateCode: "33" } }).expect(200);
   const ds = (await request(app).get("/api/distributors").set(as("adm"))).body; id.d1 = ds.find((d: any) => d.email === "d1@x.com").id;
   const shops = (await request(app).get("/api/shops").set(as("adm"))).body; id.s1 = shops[0].id; id.s3 = shops[2].id;
   await request(app).post(`/api/shops/${id.s1}/distributor`).set(as("adm")).send({ distributorId: id.d1 });

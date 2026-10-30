@@ -21,7 +21,7 @@ beforeAll(async () => {
   await request(app).post("/api/import/users").set(as("adm")).attach("file", csv([["Name", "Email", "Role", "Password"], ["Rep", "r@x.com", "sales_rep", "pw"], ["Dist", "d@x.com", "distributor", "pw"], ["Mgr", "m@x.com", "manager", "pw"]]), "u.csv");
   T.rep = await login("FL", "r@x.com"); T.dist = await login("FL", "d@x.com"); T.mgr = await login("FL", "m@x.com");
   await request(app).post("/api/company/sample-data").set(as("adm")).expect(200);
-  await request(app).put("/api/company/settings").set(as("adm")).send({ features: { schemes: false, stock: true, batches: true, distInventory: true, vanSales: true }, gst: { legalName: "FL Sample Co", gstin: "33AAAAA0000A1Z5", stateCode: "33" } }).expect(200);
+  await request(app).put("/api/company/settings").set(as("adm")).send({ features: { schemes: false, stock: true, batches: true, distInventory: true, vanSales: true }, gst: { legalName: "FL Sample Co", gstin: "33AAAAA0000A1Z9", stateCode: "33" } }).expect(200);
   const shops = (await request(app).get("/api/shops").set(as("adm"))).body; id.s = shops[0].id; id.s2 = shops[1].id;
   const users = (await request(app).get("/api/users").set(as("adm"))).body; id.rep = users.find((u: any) => u.email === "r@x.com").id; id.dist = users.find((u: any) => u.email === "d@x.com").id;
   sku = (await db.query("SELECT sku FROM variants ORDER BY id LIMIT 1")).rows[0].sku;

@@ -36,7 +36,7 @@ export function nicPayload(inv: any, ref?: { number: string; doc_date: string })
     Version: "1.1",
     TranDtls: { TaxSch: "GST", SupTyp: "B2B", RegRev: "N", IgstOnIntra: "N" },
     DocDtls: { Typ: inv.kind === "invoice" ? "INV" : "CRN", No: inv.number, Dt: dmy(inv.doc_date) },
-    SellerDtls: { Gstin: s.gstin, LglNm: s.name, Addr1: String(s.address).slice(0, 100), Loc: s.city, Pin: sPin, Stcd: s.state },
+    SellerDtls: { Gstin: s.gstin, LglNm: s.name, ...(s.tradeName ? { TrdNm: s.tradeName } : {}), ...(s.phone ? { Ph: String(s.phone).replace(/\D/g, "").slice(-12) } : {}), ...(s.email ? { Em: s.email } : {}), Addr1: String(s.address).slice(0, 100), Loc: s.city, Pin: sPin, Stcd: s.state },
     BuyerDtls: { Gstin: b.gstin, LglNm: b.name, Pos: inv.place_of_supply, Addr1: String(b.address).slice(0, 100), Loc: b.city, Pin: bPin, Stcd: String(b.gstin).slice(0, 2) },
     ItemList: items,
     ValDtls: { AssVal: inv.taxable, CgstVal: inv.cgst, SgstVal: inv.sgst, IgstVal: inv.igst, CesVal: 0, StCesVal: 0, Discount: 0, OthChrg: 0, RndOffAmt: inv.round_off, TotInvVal: inv.total },

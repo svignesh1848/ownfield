@@ -1,3 +1,4 @@
+import { GST_STATES } from "./gstin.js";
 import { logMove } from "./inventory.js";
 import { emit } from "./integrations/webhooks.js";
 // Step 4: GST invoices & credit notes (returns). HSN/SAC-based rates, CGST+SGST (intra-state) vs IGST (inter-state),
@@ -10,7 +11,7 @@ import type { Gst, Settings } from "./templates.js";
 import { distributorProfile } from "./purchase.js";
 
 export const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-export const fyOf = (date: string) => { const [y, m] = date.split("-").map(Number); const s = m >= 4 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, "0")}`; };
+export const fyOf = (date: string, start = 4) => { const [y, m] = date.split("-").map(Number); const s = m >= start ? y : y - 1; return start === 1 ? `${s}` : `${s}-${String((s + 1) % 100).padStart(2, "0")}`; };
 export const rateFor = (g: Gst, hsn: string | null) => {
   const h = String(hsn || ""); let best: { prefix: string; rate: number } | undefined;
   for (const x of g.hsnRates) if (h.startsWith(x.prefix) && (!best || x.prefix.length > best.prefix.length)) best = x;
@@ -41,12 +42,17 @@ export async function createDoc(tx: Db, cid: number, uid: number, d: { kind: "in
   lines: { orderLineId?: number | null; refLineId?: number | null; variantId: number; description: string; hsn: string | null; baseQty: number; uom: string; rate: number; taxable: number; gstRate: number }[] }) {
   const sellerState = d.g.stateCode, pos = d.shop.state_code || String(d.shop.gstin || "").slice(0, 2) || sellerState;
   const intra = pos === sellerState;
-  const fy = fyOf(d.date);
+  const fy = fyOf(d.date, Number(d.g.fyStartMonth) || 4);
   const number = formatNumber(d.g.numberFormat, d.kind === "invoice" ? d.g.invoicePrefix : d.g.creditPrefix, fy, await nextNumber(tx, cid, d.issuer === "company" ? d.kind : `${d.kind}:${d.issuer}`, fy));
   const lines = d.lines.map(l => { const t = split(l.taxable, l.gstRate, intra); return { ...l, ...t, total: r2(l.taxable + t.cgst + t.sgst + t.igst) }; });
   const sum = (k: "taxable" | "cgst" | "sgst" | "igst") => r2(lines.reduce((a, l) => a + l[k], 0));
   const gross = r2(sum("taxable") + sum("cgst") + sum("sgst") + sum("igst")), total = Math.round(gross), roundOff = r2(total - gross);
-  const seller = JSON.stringify({ name: d.g.legalName, gstin: d.g.gstin, state: sellerState, address: d.g.address, city: d.g.city || "", pin: d.g.pincode || "" });
+  const g: any = d.g, x = (k: string) => g[k] || undefined;
+  const seller = JSON.stringify({ name: g.legalName, gstin: g.gstin, state: sellerState, address: g.address, city: g.city || "", pin: g.pincode || "",
+    tradeName: x("tradeName"), stateName: x("stateName"), pan: x("pan"), cin: x("cin"), udyam: x("udyam"), regType: x("regType"), email: x("email"), phone: x("phone"),
+    bank: g.bankAccount ? { name: g.bankName || "", account: g.bankAccount, ifsc: g.bankIfsc || "", branch: g.bankBranch || "", upi: g.upiId || "" } : g.upiId ? { upi: g.upiId } : undefined,
+    logo: x("logo"), signatory: g.signatoryName ? { name: g.signatoryName, designation: g.signatoryDesignation || "", signature: g.signature || "" } : undefined,
+    lut: g.lutNo ? `${g.lutNo}${g.lutValidTill ? ` (valid till ${g.lutValidTill})` : ""}` : undefined, terms: x("terms"), declaration: x("declaration") });
   const buyer = JSON.stringify({ name: d.shop.name, gstin: d.shop.gstin || "", state: pos, address: [d.shop.address, d.shop.city].filter(Boolean).join(", "), city: d.shop.city || "", pin: d.shop.pincode || "" });
   const inv = (await tx.query(`INSERT INTO invoices (company_id,issuer,kind,number,fy,doc_date,order_id,ref_invoice_id,shop_id,seller,buyer,place_of_supply,intra_state,reason,taxable,cgst,sgst,igst,round_off,total,created_by)
     VALUES ($1,$21,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
@@ -83,14 +89,15 @@ export function invoiceHtml(inv: any, ref?: string, einv = "") {
   const title = inv.kind === "invoice" ? "TAX INVOICE" : "CREDIT NOTE";
   const hsn = new Map<string, any>();
   for (const l of inv.lines) { const k = `${l.hsn || "-"}|${l.gst_rate}`; const h = hsn.get(k) || { hsn: l.hsn || "-", rate: l.gst_rate, taxable: 0, cgst: 0, sgst: 0, igst: 0 }; for (const f of ["taxable", "cgst", "sgst", "igst"]) h[f] = r2(h[f] + l[f]); hsn.set(k, h); }
-  const taxCols = inv.intra_state ? ["CGST", "SGST"] : ["IGST"];
+  const taxCols = inv.intra_state ? ["CGST", "SGST"] : ["IGST"], S = inv.seller;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(inv.number)}</title><style>
 body{font-family:system-ui,sans-serif;font-size:12px;margin:24px;color:#111}h1{font-size:18px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin:10px 0}
 th,td{border:1px solid #999;padding:4px 6px;text-align:left}td.n,th.n{text-align:right}.grid{display:flex;gap:16px}.grid>div{flex:1;border:1px solid #999;padding:8px}
-.tot td{font-weight:700}.muted{color:#555}@media print{button{display:none}body{margin:8mm}}</style></head><body>
+.tot td{font-weight:700}.muted{color:#555}.logo{max-height:60px;max-width:200px;float:right}.sign{text-align:right}.sign img{max-height:50px}h1 small{font-size:11px;font-weight:400}@media print{button{display:none}body{margin:8mm}}</style></head><body>
 <button onclick="print()">Print</button>
-<h1>${title}</h1><div>No. <b>${esc(inv.number)}</b> · Date ${esc(inv.doc_date)} · FY ${esc(inv.fy)}${ref ? ` · Against invoice <b>${esc(ref)}</b>` : ""}</div>
-<div class="grid"><div><b>Supplier</b><br>${esc(inv.seller.name)}<br>${esc(inv.seller.address)}<br>GSTIN ${esc(inv.seller.gstin)} · State ${esc(inv.seller.state)}</div>
+${S.logo ? `<img class="logo" src="${esc(S.logo)}" alt="">` : ""}<h1>${title}${S.regType === "composition" ? ` <small>(Bill of supply — composition taxable person, not eligible to collect tax on supplies)</small>` : ""}</h1><div>No. <b>${esc(inv.number)}</b> · Date ${esc(inv.doc_date)} · FY ${esc(inv.fy)}${ref ? ` · Against invoice <b>${esc(ref)}</b>` : ""}</div>
+<div class="grid"><div><b>Supplier</b><br>${esc(S.name)}${S.tradeName && S.tradeName !== S.name ? ` <span class="muted">(${esc(S.tradeName)})</span>` : ""}<br>${esc(S.address)}${S.pin && !String(S.address).includes(S.pin) ? ` – ${esc(S.pin)}` : ""}<br>GSTIN ${esc(S.gstin)} · State ${esc(S.stateName ? `${S.stateName} (${S.state})` : S.state)}
+${[S.pan && `PAN ${esc(S.pan)}`, S.cin && `CIN ${esc(S.cin)}`, S.udyam && `Udyam ${esc(S.udyam)}`].filter(Boolean).length ? `<br>${[S.pan && `PAN ${esc(S.pan)}`, S.cin && `CIN ${esc(S.cin)}`, S.udyam && `Udyam ${esc(S.udyam)}`].filter(Boolean).join(" · ")}` : ""}${S.phone || S.email ? `<br>${[S.phone, S.email].filter(Boolean).map(esc).join(" · ")}` : ""}</div>
 <div><b>Recipient</b><br>${esc(inv.buyer.name)}<br>${esc(inv.buyer.address)}<br>GSTIN ${esc(inv.buyer.gstin || "Unregistered")} · Place of supply ${esc(inv.place_of_supply)}</div></div>
 ${einv}
 ${inv.reason ? `<p>Reason: ${esc(inv.reason)}</p>` : ""}
@@ -100,6 +107,10 @@ ${inv.lines.map((l: any, i: number) => `<tr><td>${i + 1}</td><td>${esc(l.descrip
 <table><tr><th>HSN/SAC</th><th class="n">GST %</th><th class="n">Taxable</th>${taxCols.map(c => `<th class="n">${c}</th>`).join("")}</tr>
 ${[...hsn.values()].map(h => `<tr><td>${esc(h.hsn)}</td><td class="n">${h.rate}</td><td class="n">${inr(h.taxable)}</td>${inv.intra_state ? `<td class="n">${inr(h.cgst)}</td><td class="n">${inr(h.sgst)}</td>` : `<td class="n">${inr(h.igst)}</td>`}</tr>`).join("")}</table>
 <p>Round off: ${inr(inv.round_off)} · <b>Amount ${inv.kind === "invoice" ? "payable" : "credited"}: ₹${inr(inv.total)}</b></p>
+${S.lut ? `<p>Supply under LUT/bond ${esc(S.lut)} without payment of IGST.</p>` : ""}
+<div class="grid foot"><div>${S.bank ? `<b>Bank details</b><br>${S.bank.account ? `${esc(S.bank.name)} · A/c ${esc(S.bank.account)}<br>IFSC ${esc(S.bank.ifsc)}${S.bank.branch ? ` · ${esc(S.bank.branch)}` : ""}<br>` : ""}${S.bank.upi ? `UPI ${esc(S.bank.upi)}` : ""}` : ""}
+${S.terms ? `<p><b>Terms</b><br>${esc(S.terms).replace(/\n/g, "<br>")}</p>` : ""}${S.declaration ? `<p><b>Declaration</b><br>${esc(S.declaration).replace(/\n/g, "<br>")}</p>` : ""}</div>
+<div class="sign">For ${esc(S.name)}<br>${S.signatory?.signature ? `<img src="${esc(S.signatory.signature)}" alt="">` : "<br><br>"}<br>${S.signatory ? `${esc(S.signatory.name)}${S.signatory.designation ? `, ${esc(S.signatory.designation)}` : ""}<br>` : ""}Authorised signatory</div></div>
 <p class="muted">Generated by OwnField. Verify GST rates and HSN/SAC codes with your tax advisor.</p></body></html>`;
 }
 
@@ -123,7 +134,7 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!settings.features.distributorBilling) throw bad("distributor billing is turned off for this company", 403);
     const p = await distributorProfile(db, cid, req.user.uid);
     if (!p?.legal_name || !p?.gstin || !p?.state_code) throw bad("set your legal name, GSTIN and state code in your profile first");
-    return { key: `d${req.user.uid}`, g: { ...settings.gst, legalName: p.legal_name, gstin: p.gstin, stateCode: p.state_code, address: p.address || "", city: p.city || "", pincode: p.pincode || "",
+    return { key: `d${req.user.uid}`, g: { defaultRate: settings.gst.defaultRate, hsnRates: settings.gst.hsnRates, fyStartMonth: settings.gst.fyStartMonth, pan: String(p.gstin).slice(2, 12), stateName: GST_STATES[p.state_code] || "", legalName: p.legal_name, gstin: p.gstin, stateCode: p.state_code, address: p.address || "", city: p.city || "", pincode: p.pincode || "",
       invoicePrefix: p.invoice_prefix || "INV", creditPrefix: p.credit_prefix || "CN", numberFormat: p.number_format || settings.gst.numberFormat } };
   };
   const scope = (req: any) => req.user.role === "distributor" ? `d${req.user.uid}` : null;

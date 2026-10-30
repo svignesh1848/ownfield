@@ -8,7 +8,14 @@ export type CustomField = { key: string; label: string; type: (typeof FIELD_TYPE
 export const ENTITIES = ["outlet", "product", "visit"] as const;
 export type Uom = { code: string; factor: number }; // factor = base units per unit; the base unit has factor 1
 export type Gst = { legalName: string; gstin: string; stateCode: string; address: string; city?: string; pincode?: string; defaultRate: number; hsnRates: { prefix: string; rate: number }[];
-  invoicePrefix: string; creditPrefix: string; numberFormat: string };
+  invoicePrefix: string; creditPrefix: string; numberFormat: string } & Partial<GstProfile>;
+/** Extra company/business identity used on invoices (Tally / Zoho Books / IRP style). All optional. */
+export type Branch = { name: string; gstin?: string; stateCode?: string; address?: string; city?: string; pincode?: string };
+export type GstProfile = { tradeName: string; pan: string; tan: string; cin: string; udyam: string; msmeType: string;
+  regType: "regular" | "composition" | "sez" | "unregistered"; stateName: string; email: string; phone: string; website: string; branches: Branch[];
+  bankName: string; bankAccount: string; bankIfsc: string; bankBranch: string; upiId: string; logo: string; signatoryName: string; signatoryDesignation: string; signature: string;
+  fyStartMonth: number; einvoiceApplicable: boolean; irpUsername: string; irpGspId: string; ewayBill: boolean; ewayThreshold: number; tcsApplicable: boolean; tdsApplicable: boolean;
+  defaultHsn: string; lutNo: string; lutValidTill: string; terms: string; declaration: string };
 export type PoPricing = { priceBase: "billing" | "mrp"; marginPct: number; productDiscounts: { scope: "item" | "category"; key: string; pct: number }[]; numberFormat: string };
 export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing; credit: Credit; einvoice: { provider: "test" | "gsp" } };
 export type Credit = { days: number; limit: number; onBreach: "warn" | "block" };

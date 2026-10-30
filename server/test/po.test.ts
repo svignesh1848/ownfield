@@ -20,11 +20,11 @@ beforeAll(async () => {
   await request(app).post("/api/import/users").set(as("adm")).attach("file", csv([["Name", "Email", "Role", "Password"], ["Dist One", "d1@x.com", "distributor", "pw"], ["Dist Two", "d2@x.com", "distributor", "pw"], ["Rep", "r@x.com", "sales_rep", "pw"]]), "u.csv");
   T.d1 = await login("PH", "d1@x.com"); T.d2 = await login("PH", "d2@x.com"); T.rep = await login("PH", "r@x.com");
   await request(app).post("/api/company/sample-data").set(as("adm")).expect(200);
-  await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "Sample Pharma (sample)", gstin: "33AAAAA0000A1Z5", stateCode: "33" },
+  await request(app).put("/api/company/settings").set(as("adm")).send({ gst: { legalName: "Sample Pharma (sample)", gstin: "33AAAAA0000A1Z9", stateCode: "33" },
     po: { priceBase: "billing", marginPct: 10, productDiscounts: [{ scope: "category", key: "analgesic", pct: 5 }, { scope: "item", key: "SAMPLE-SYRUP", pct: 2 }] } }).expect(200);
   const ds = (await request(app).get("/api/distributors").set(as("adm"))).body; id.d1 = ds.find((d: any) => d.email === "d1@x.com").id; id.d2 = ds.find((d: any) => d.email === "d2@x.com").id;
   await request(app).put(`/api/distributors/${id.d1}/profile`).set(as("adm")).send({ margin_pct: 8, discount_pct: 2 }).expect(200);
-  await request(app).put(`/api/distributors/${id.d1}/profile`).set(as("d1")).send({ legal_name: "Sample Dist One", gstin: "29BBBBB1111B1Z1", margin_pct: 0 }).expect(200);
+  await request(app).put(`/api/distributors/${id.d1}/profile`).set(as("d1")).send({ legal_name: "Sample Dist One", gstin: "29BBBBB1111B1ZJ", margin_pct: 0 }).expect(200);
 });
 
 describe("PO pricing", () => {

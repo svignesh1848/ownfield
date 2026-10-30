@@ -30,7 +30,7 @@ beforeAll(async () => {
   await request(app).post("/api/import/users").set(as("adm")).attach("file", csv([["Name", "Email", "Role", "Password"], ["Rep", "r@x.com", "sales_rep", "pw"]]), "u.csv");
   T.rep = await login("CL", "r@x.com");
   await request(app).post("/api/company/sample-data").set(as("adm")).expect(200);
-  await request(app).put("/api/company/settings").set(as("adm")).send({ features: { schemes: false }, gst: { legalName: "CL Sample Co", gstin: "33AAAAA0000A1Z5", stateCode: "33" } }).expect(200);
+  await request(app).put("/api/company/settings").set(as("adm")).send({ features: { schemes: false }, gst: { legalName: "CL Sample Co", gstin: "33AAAAA0000A1Z9", stateCode: "33" } }).expect(200);
   id.s = (await request(app).get("/api/shops").set(as("adm"))).body[2].id;
   inv.A = await invoiced(100); inv.B = await invoiced(45); inv.C = await invoiced(0);
 });

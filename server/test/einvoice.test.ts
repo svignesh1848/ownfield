@@ -24,9 +24,9 @@ beforeAll(async () => {
   await request(app).post("/api/import/users").set(as("adm")).attach("file", csv([["Name", "Email", "Role", "Password"], ["Rep", "r@x.com", "sales_rep", "pw"]]), "u.csv");
   T.rep = await login("EI", "r@x.com");
   await request(app).post("/api/import/shops").set(as("adm")).attach("file", csv([["Code", "Name", "Address", "City", "State Code", "GSTIN", "PIN Code"],
-    ["EB2B", "Sample B2B Outlet", "12 Sample Street", "Bengaluru", "29", "29BBBBB1111B1Z1", "560001"], ["EB2C", "Sample Walk-in Outlet", "1 Sample Road", "Chennai", "33", "", "600002"]]), "s.csv").expect(200);
+    ["EB2B", "Sample B2B Outlet", "12 Sample Street", "Bengaluru", "29", "29BBBBB1111B1ZJ", "560001"], ["EB2C", "Sample Walk-in Outlet", "1 Sample Road", "Chennai", "33", "", "600002"]]), "s.csv").expect(200);
   await request(app).post("/api/company/sample-data").set(as("adm")).expect(200);
-  await request(app).put("/api/company/settings").set(as("adm")).send({ features: { schemes: false }, gst: { legalName: "EI Sample Co", gstin: "33AAAAA0000A1Z5", stateCode: "33", address: "5 Sample Lane", city: "Chennai", pincode: "600001" } }).expect(200);
+  await request(app).put("/api/company/settings").set(as("adm")).send({ features: { schemes: false }, gst: { legalName: "EI Sample Co", gstin: "33AAAAA0000A1Z9", stateCode: "33", address: "5 Sample Lane", city: "Chennai", pincode: "600001" } }).expect(200);
   const shops = (await request(app).get("/api/shops").set(as("adm"))).body; id.b2b = shops.find((s: any) => s.code === "EB2B").id; id.b2c = shops.find((s: any) => s.code === "EB2C").id;
 });
 
@@ -40,7 +40,7 @@ describe("e-invoicing", () => {
   it("builds NIC v1.1 JSON", async () => {
     const j = (await request(app).get(`/api/invoices/${inv.id}/einvoice/json`).set(as("adm")).expect(200)).body;
     expect(j).toMatchObject({ Version: "1.1", TranDtls: { SupTyp: "B2B" }, DocDtls: { Typ: "INV", No: inv.number },
-      SellerDtls: { Gstin: "33AAAAA0000A1Z5", Pin: 600001, Stcd: "33", Loc: "Chennai" }, BuyerDtls: { Gstin: "29BBBBB1111B1Z1", Pos: "29", Pin: 560001, Stcd: "29" },
+      SellerDtls: { Gstin: "33AAAAA0000A1Z9", Pin: 600001, Stcd: "33", Loc: "Chennai" }, BuyerDtls: { Gstin: "29BBBBB1111B1ZJ", Pos: "29", Pin: 560001, Stcd: "29" },
       ValDtls: { AssVal: 2800, IgstVal: inv.igst, CgstVal: 0, TotInvVal: inv.total } });
     expect(j.DocDtls.Dt).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
     expect(j.ItemList[0]).toMatchObject({ SlNo: "1", IsServc: "N", HsnCd: "6109", Qty: 10, Unit: "PCS", AssAmt: 2800, GstRt: inv.lines[0].gst_rate });

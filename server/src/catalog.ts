@@ -1,3 +1,4 @@
+import { gstinError, gstinInfo, GST_STATES, ID_RULES } from "./gstin.js";
 // Step 3: industry templates, company settings & feature toggles, configurable catalogue (items + variants + units),
 // custom fields, stock with batch/expiry (FEFO), schemes, and attribute-aware Excel/CSV import.
 import type { Express, Response, Request, NextFunction } from "express";
@@ -23,6 +24,33 @@ const iso = (y: number, m: number, d: number) => {
   return dt.toISOString().slice(0, 10);
 };
 /** Accepts YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, MM/YYYY (→ last day of month, common for expiry) and Excel serial dates. */
+const clip = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
+/** Validate the optional business-identity fields of company GST settings in place. */
+function cleanProfile(g: any) {
+  for (const k of ["tradeName", "signatoryName", "signatoryDesignation", "bankName", "bankBranch", "website", "irpUsername", "irpGspId", "lutNo", "lutValidTill", "msmeType", "stateName"]) if (k in g) g[k] = clip(g[k], 120);
+  for (const k of ["terms", "declaration"]) if (k in g) g[k] = clip(g[k], 1500);
+  const up = (k: string, rule: string) => { if (!(k in g)) return; g[k] = clip(g[k], 40); if (rule !== "upi" && rule !== "email") g[k] = g[k].toUpperCase().replace(/\s+/g, k === "phone" ? " " : ""); if (g[k] && !ID_RULES[rule][0].test(g[k])) throw bad(ID_RULES[rule][1]); };
+  up("pan", "pan"); up("tan", "tan"); up("cin", "cin"); up("udyam", "udyam"); up("bankIfsc", "ifsc"); up("upiId", "upi"); up("bankAccount", "account");
+  if ("email" in g) { g.email = clip(g.email, 120); if (g.email && !ID_RULES.email[0].test(g.email)) throw bad(ID_RULES.email[1]); }
+  if ("phone" in g) { g.phone = clip(g.phone, 20); if (g.phone && !ID_RULES.phone[0].test(g.phone)) throw bad(ID_RULES.phone[1]); }
+  if ("regType" in g && !["regular", "composition", "sez", "unregistered"].includes(g.regType)) throw bad("registration type must be regular, composition, sez or unregistered");
+  if ("fyStartMonth" in g) { g.fyStartMonth = Number(g.fyStartMonth || 4); if (!(Number.isInteger(g.fyStartMonth) && g.fyStartMonth >= 1 && g.fyStartMonth <= 12)) throw bad("financial year start month must be 1–12"); }
+  for (const k of ["einvoiceApplicable", "ewayBill", "tcsApplicable", "tdsApplicable"]) if (k in g) g[k] = !!g[k];
+  if ("ewayThreshold" in g) { g.ewayThreshold = Number(g.ewayThreshold || 50000); if (!(g.ewayThreshold >= 0)) throw bad("e-way bill threshold must be ≥ 0"); }
+  if ("defaultHsn" in g) { g.defaultHsn = clip(g.defaultHsn, 8); if (g.defaultHsn && !/^\d{4,8}$/.test(g.defaultHsn)) throw bad("default HSN/SAC must be 4–8 digits"); }
+  for (const k of ["logo", "signature"]) if (k in g) { g[k] = String(g[k] || ""); if (g[k] && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(g[k])) throw bad(`${k} must be a PNG/JPEG/WebP image`); if (g[k].length > 200_000) throw bad(`${k} image is too large (max ~150 KB)`); }
+  if ("branches" in g) {
+    if (!Array.isArray(g.branches) || g.branches.length > 50) throw bad("branches must be a list (max 50)");
+    g.branches = g.branches.map((b: any) => {
+      const o: any = { name: clip(b?.name, 120), gstin: clip(b?.gstin, 15).toUpperCase(), stateCode: clip(b?.stateCode, 2), address: clip(b?.address, 300), city: clip(b?.city, 80), pincode: clip(b?.pincode, 6) };
+      if (!o.name) throw bad("each branch needs a name");
+      if (o.gstin) { const e = gstinError(o.gstin); if (e) throw bad(`${o.name}: ${e}`); o.stateCode ||= o.gstin.slice(0, 2); if (o.stateCode !== o.gstin.slice(0, 2)) throw bad(`${o.name}: GSTIN does not match state code`); }
+      if (o.pincode && !ID_RULES.pincode[0].test(o.pincode)) throw bad(`${o.name}: PIN code must be 6 digits`);
+      return o;
+    });
+  }
+}
+
 export function parseDate(v: unknown): string | null {
   if (empty(v)) return null;
   if (typeof v === "number") { if (v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10); throw bad(`invalid date ${v}`); }
@@ -109,6 +137,10 @@ export function validateSettings(input: any, base: Settings): Settings {
     const g = { ...s.gst, ...input.gst };
     g.gstin = String(g.gstin || "").toUpperCase().trim(); g.stateCode = String(g.stateCode || "").trim();
     if (g.gstin && !/^\d{2}[A-Z0-9]{13}$/.test(g.gstin)) throw bad("GSTIN must be 15 characters starting with the 2-digit state code");
+    if (g.gstin && g.gstin !== s.gst?.gstin) { const e = gstinError(g.gstin); if (e) throw bad(e); }
+    if (g.gstin) { const info = gstinInfo(g.gstin); g.stateCode ||= info.stateCode; g.pan = String(g.pan || "").toUpperCase().trim() || info.pan; if (g.pan !== info.pan) throw bad("PAN does not match the PAN inside the GSTIN"); }
+    if (g.stateCode) g.stateName = GST_STATES[g.stateCode] || g.stateName || "";
+    cleanProfile(g);
     if (g.stateCode && !/^\d{2}$/.test(g.stateCode)) throw bad("state code must be 2 digits");
     if (g.gstin && g.stateCode && g.gstin.slice(0, 2) !== g.stateCode) throw bad("GSTIN does not match state code");
     if (g.pincode && !/^\d{6}$/.test(String(g.pincode))) throw bad("PIN code must be 6 digits");
@@ -156,6 +188,7 @@ async function importShop({ db, cid, s }: Imp, r: any) {
   }
   const gstin = String(r.gstin ?? "").toUpperCase().trim() || null;
   if (gstin && !/^\d{2}[A-Z0-9]{13}$/.test(gstin)) throw bad("invalid GSTIN");
+  if (gstin) { const e = gstinError(gstin); if (e) throw bad(e); }
   const state = String(r.state_code ?? "").trim().padStart(empty(r.state_code) ? 0 : 2, "0") || gstin?.slice(0, 2) || null;
   if (state && !/^\d{2}$/.test(state)) throw bad("state code must be 2 digits");
   const pin = String(r.pincode ?? r.pin ?? r.pin_code ?? "").trim() || null;
