@@ -8,6 +8,7 @@ import { startWebhookWorker } from "./integrations/webhooks.js";
 import { startConnectorScheduler } from "./connectors/service.js";
 import { startMessageWorker } from "./messaging.js";
 import { startDiskWatch } from "./disk.js";
+import { startReportScheduler } from "./reports/schedule.js";
 const db = createPool();
 await migrate(db);
 await ensurePlatformOwner(db, process.env.OWNER_EMAIL || "owner@example.com", process.env.OWNER_PASSWORD || "change-me-now");
@@ -17,3 +18,4 @@ createApp(db).listen(port, process.env.HOST || "127.0.0.1", () => console.log(`O
 if (process.env.NODE_ENV === "production") scheduleBackups();
 if (process.env.WEBHOOKS_DISABLED !== "1") { startWebhookWorker(db); startConnectorScheduler(db); startMessageWorker(db); }
 startDiskWatch();
+startReportScheduler(db);

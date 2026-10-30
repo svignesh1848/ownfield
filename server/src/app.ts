@@ -35,6 +35,7 @@ import { registerApiV1 } from "./integrations/api.js";
 import { registerIntegrationRoutes, registerInbound } from "./integrations/admin.js";
 import "./connectors/service.js";
 import { diskStatus } from "./disk.js";
+import { registerCustomReportRoutes } from "./reports/routes.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor", "retailer"] as const;
 export type Role = (typeof ROLES)[number];
@@ -284,6 +285,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerCoverageRoutes({ app, db, auth, wrap, tenant });
   registerAiRoutes({ app, db, auth, wrap, tenant });
   registerIntegrationRoutes({ app, db, auth, wrap, tenant });
+  registerCustomReportRoutes({ app, db, auth, wrap, tenant });
   registerInbound(app, db);
   registerApiV1(app, db);
 
