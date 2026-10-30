@@ -124,5 +124,5 @@ export function SetupChecklist({ s, cfg, go }: ViewProps) {
       {n === steps.length && <button className="ghost sm" onClick={() => { localStorage.setItem("ff-setup-hidden", "1"); setHide(true); }}>{t("Hide")}</button>}</div>
     <div className="bar big"><span style={{ width: `${pct}%` }} /></div>
     {steps.map((x, i) => <div key={i} className={`step ${x.done ? "done" : ""}`}><span className="dot">{x.done ? "✓" : i + 1}</span><div><b>{x.title}</b><div className="muted small">{x.text}</div></div>
-      {!x.done && <button className="sm" onClick={() => go(x.tab)}>{x.btn}</button>}</div>)}</div>;
+      {x.done ? <button className="sm ghost" onClick={() => go(x.tab)}>{x.tab === "settings" ? t("Edit") : t("View")}</button> : <button className="sm" onClick={() => go(x.tab)}>{x.btn}</button>}</div>)}</div>;
 }
