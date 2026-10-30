@@ -3,6 +3,7 @@ import { api, Table, type Session, type Cfg } from "./main";
 import { download } from "./po";
 import { t } from "./i18n";
 import { Term, Empty, fmtDate } from "./ui";
+import { gstinError, gstinInfo, GST_STATES } from "./gstin";
 
 type P = { s: Session; cfg: Cfg };
 const inr = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -95,12 +96,62 @@ export function Visits({ s, cfg }: P) {
       {cfg.settings.features.photos && <VisitPhotos s={s} visitId={v.id} />}</div>)}</>;
 }
 
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const readImg = (file: File | undefined, cb: (d: string) => void) => {
+  if (!file) return; if (file.size > 150_000) { alert(t("Image too large (max 150 KB)")); return; }
+  const r = new FileReader(); r.onload = () => cb(String(r.result)); r.readAsDataURL(file);
+};
+/** GSTIN input with live format/check-digit validation and auto-filled state. */
+export function GstinInput({ value, onChange }: { value: string; onChange: (v: string, info?: { stateCode: string; state: string; pan: string }) => void }) {
+  const v = String(value || "").toUpperCase(), err = v.length === 15 ? gstinError(v) : "";
+  return <label className="fld"><span>GSTIN</span><input value={v} maxLength={15} placeholder="27AAPFU0939F1ZV" autoCapitalize="characters"
+    onChange={e => { const n = e.target.value.toUpperCase().replace(/\s/g, ""); onChange(n, n.length === 15 && !gstinError(n) ? gstinInfo(n) : undefined); }} />
+    {v.length === 15 && (err ? <small className="err">{err}</small> : <small className="ok">✓ {GST_STATES[v.slice(0, 2)]} · PAN {v.slice(2, 12)}</small>)}{v.length > 0 && v.length < 15 && <small className="muted">{v.length}/15</small>}</label>;
+}
 export function GstSettings({ g, onChange }: { g: any; onChange: (g: any) => void }) {
-  const f = (k: string, l: string, ph = "") => <label className="fld" key={k}><span>{l}</span><input placeholder={ph} value={g[k] ?? ""} onChange={e => onChange({ ...g, [k]: e.target.value })} /></label>;
-  return <><h3>{t("GST invoicing")}</h3>
-    {f("legalName", t("Legal name (supplier)"))}{f("gstin", "GSTIN", "15 characters")}{f("stateCode", t("State code"), "e.g. 33")}{f("address", t("Address"))}{f("city", t("City"))}{f("pincode", "PIN code")}
-    {f("defaultRate", t("Default GST %"))}
-    <label className="fld"><span>{t("GST % by HSN/SAC prefix (longest match wins), e.g. 6109=5, 3004=12")}</span><input value={typeof g.hsnRates === "string" ? g.hsnRates : (g.hsnRates || []).map((h: any) => `${h.prefix}=${h.rate}`).join(", ")} onChange={e => onChange({ ...g, hsnRates: e.target.value })} /></label>
-    {f("invoicePrefix", t("Invoice prefix"))}{f("creditPrefix", t("Credit note prefix"))}{f("numberFormat", t("Number format — {prefix} {fy} {seq:4}; max 16 chars, restarts every April"))}
-    <p className="muted small">{t("Sample rates only — verify the GST rate for each HSN/SAC code with your tax advisor.")}</p></>;
+  const set = (o: any) => onChange({ ...g, ...o });
+  const f = (k: string, l: string, ph = "", type = "text") => <label className="fld" key={k}><span>{l}</span><input type={type} placeholder={ph} value={g[k] ?? ""} onChange={e => set({ [k]: e.target.value })} /></label>;
+  const ck = (k: string, l: string) => <label className="chk" key={k}><input type="checkbox" checked={!!g[k]} onChange={e => set({ [k]: e.target.checked })} />{l}</label>;
+  const img = (k: string, l: string) => <div className="fld" key={k}><span>{l}</span>{g[k] && <img src={g[k]} alt="" className="thumb" />}
+    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => readImg(e.target.files?.[0], d => set({ [k]: d }))} />{g[k] && <button type="button" className="sm ghost" onClick={() => set({ [k]: "" })}>{t("Remove")}</button>}</div>;
+  const sec = (title: string, open: boolean, body: React.ReactNode) => <details className="sec" open={open}><summary>{title}</summary>{body}</details>;
+  const br: any[] = g.branches || [], setBr = (i: number, o: any) => set({ branches: br.map((b, j) => j === i ? { ...b, ...o } : b) });
+  return <><h3>{t("Company details & GST")}</h3>
+    {sec(t("Business identity"), !g.gstin, <>
+      {f("legalName", t("Legal name"))}{f("tradeName", t("Trade name"))}
+      <label className="fld"><span>{t("GST registration type")}</span><select value={g.regType || "regular"} onChange={e => set({ regType: e.target.value })}>
+        <option value="regular">{t("Regular")}</option><option value="composition">{t("Composition")}</option><option value="sez">{t("SEZ")}</option><option value="unregistered">{t("Unregistered")}</option></select></label>
+      <GstinInput value={g.gstin} onChange={(v, i) => set(i ? { gstin: v, stateCode: i.stateCode, stateName: i.state, pan: i.pan } : { gstin: v })} />
+      {f("pan", "PAN", "ABCDE1234F")}{f("tan", "TAN", "ABCD12345E")}{f("cin", "CIN / LLPIN", "U12345TN2020PTC123456")}
+      {f("udyam", "Udyam / MSME no.", "UDYAM-TN-01-0001234")}
+    </>)}
+    {sec(t("Address & contact"), false, <>
+      {f("address", t("Address"))}{f("city", t("City"))}{f("pincode", t("PIN code"), "600001")}
+      <label className="fld"><span>{t("State")}</span><select value={g.stateCode || ""} onChange={e => set({ stateCode: e.target.value, stateName: GST_STATES[e.target.value] || "" })}><option value="">—</option>
+        {Object.entries(GST_STATES).map(([c, n]) => <option key={c} value={c}>{c} – {n}</option>)}</select></label>
+      {f("email", t("Email"), "", "email")}{f("phone", t("Phone"), "", "tel")}{f("website", t("Website"))}</>)}
+    {sec(t("Branches"), false, <>
+      {br.map((b, i) => <div key={i} className="card">{(["name", "address", "city", "pincode"] as const).map(k => <label key={k} className="fld"><span>{({ name: t("Branch name"), address: t("Address"), city: t("City"), pincode: t("PIN code") })[k]}</span><input value={b[k] || ""} onChange={e => setBr(i, { [k]: e.target.value })} /></label>)}
+        <GstinInput value={b.gstin || ""} onChange={(v, x) => setBr(i, x ? { gstin: v, stateCode: x.stateCode } : { gstin: v })} />
+        <button type="button" className="sm ghost" onClick={() => set({ branches: br.filter((_, j) => j !== i) })}>{t("Remove")}</button></div>)}
+      <button type="button" className="sm ghost" onClick={() => set({ branches: [...br, { name: "" }] })}>+ {t("Add branch")}</button></>)}
+    {sec(t("Bank & UPI (printed on invoices)"), false, <>
+      {f("bankName", t("Bank name"))}{f("bankAccount", t("Account number"))}{f("bankIfsc", "IFSC", "HDFC0001234")}{f("bankBranch", t("Branch"))}{f("upiId", "UPI ID", "name@bank")}</>)}
+    {sec(t("Logo & signatory"), false, <>
+      {img("logo", t("Logo"))}{f("signatoryName", t("Signatory name"))}{f("signatoryDesignation", t("Designation"))}{img("signature", t("Signature"))}</>)}
+    {sec(t("Invoice numbering & tax"), false, <>
+      {f("invoicePrefix", t("Invoice prefix"))}{f("creditPrefix", t("Credit note prefix"))}{f("numberFormat", t("Number format — {prefix} {fy} {seq:4}; max 16 chars, restarts every April"))}
+      <label className="fld"><span>{t("Financial year starts in (month)")}</span><select value={g.fyStartMonth || 4} onChange={e => set({ fyStartMonth: Number(e.target.value) })}>{MONTHS.map(i => <option key={i} value={i}>{new Date(2000, i - 1, 1).toLocaleString(document.documentElement.lang || "en", { month: "long" })}</option>)}</select></label>
+      {f("defaultRate", t("Default GST %"))}{f("defaultHsn", t("Default HSN/SAC"), "e.g. 3004")}
+      <label className="fld"><span>{t("GST % by HSN/SAC prefix (longest match wins), e.g. 6109=5, 3004=12")}</span><input value={typeof g.hsnRates === "string" ? g.hsnRates : (g.hsnRates || []).map((h: any) => `${h.prefix}=${h.rate}`).join(", ")} onChange={e => set({ hsnRates: e.target.value })} /></label>
+      {ck("tcsApplicable", t("TCS applicable"))}{ck("tdsApplicable", t("TDS applicable"))}
+      <p className="muted small">{t("Sample rates only — verify the GST rate for each HSN/SAC code with your tax advisor.")}</p></>)}
+    {sec(t("E-invoice & e-way bill"), false, <>
+      {ck("einvoiceApplicable", t("E-invoicing applicable"))}
+      {g.einvoiceApplicable && <>{f("irpUsername", t("IRP / GSP username"))}{f("irpGspId", t("GSP client ID"))}<p className="muted small">{t("Do not enter passwords here — set them on the server.")}</p></>}
+      {ck("ewayBill", t("E-way bill applicable"))}{g.ewayBill && f("ewayThreshold", t("E-way bill limit (₹)"), "50000")}</>)}
+    {sec(t("Exports, terms & declaration"), false, <>
+      {f("lutNo", t("LUT / bond no."))}{f("lutValidTill", t("LUT valid till"), "", "date")}
+      <label className="fld"><span>{t("Invoice terms")}</span><textarea rows={3} value={g.terms || ""} onChange={e => set({ terms: e.target.value })} /></label>
+      <label className="fld"><span>{t("Declaration")}</span><textarea rows={2} value={g.declaration || ""} onChange={e => set({ declaration: e.target.value })} /></label></>)}</>;
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { t } from "./i18n";
 import { api, Table, type Session, type Cfg } from "./main";
+import { GstinInput } from "./step4";
 
 type P = { s: Session; cfg: Cfg };
 const inr = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -59,7 +60,7 @@ export function DistributorTerms({ s, cfg }: P) {
   return <><h2>{dist ? t("My GST & billing profile") : t("Distributor terms")}</h2>
     {!dist && <select value={sel ?? ""} onChange={e => setSel(Number(e.target.value) || null)}><option value="">{t("Select distributor…")}</option>{ds.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>}
     {sel && <>{!dist && <>{f("margin_pct", `Margin % (blank = company default ${cfg.settings.po?.marginPct ?? 0}%)`)}{f("discount_pct", t("Distributor discount %"))}{f("credit_days", t("Credit days for outlets"))}{f("credit_limit", t("Credit limit per outlet (₹)"))}</>}
-      {f("legal_name", t("Legal name"))}{f("gstin", "GSTIN")}{f("state_code", t("State code"))}{f("address", t("Address"))}{f("city", t("City"))}{f("pincode", "PIN code")}
+      {f("legal_name", t("Legal name"))}<GstinInput value={p.gstin || ""} onChange={(v, i) => setP({ ...p, gstin: v, ...(i ? { state_code: i.stateCode } : {}) })} />{f("state_code", t("State code"))}{f("address", t("Address"))}{f("city", t("City"))}{f("pincode", "PIN code")}
       {f("invoice_prefix", t("Invoice prefix (own numbering)"))}{f("credit_prefix", t("Credit note prefix"))}{f("number_format", t("Number format, e.g. {prefix}/{fy}/{seq:4}"))}
       <button onClick={async () => { try { setP(await api(s, `/api/distributors/${sel}/profile`, { method: "PUT", body: JSON.stringify(p) })); setMsg(t("Saved")); } catch (e: any) { setMsg(e.message); } }}>{t("Save")}</button><p>{msg}</p></>}</>;
 }

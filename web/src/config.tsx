@@ -87,6 +87,7 @@ export function SettingsPage({ s, cfg, reload }: P) {
   useEffect(() => { setFeatures({ ...st.features }); setAttrs(st.attributes.join(", ")); setUnits(unitsText(st.uoms)); setCf({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) }); setGst({ ...(st as any).gst }); setPo({ ...(st as any).po }); }, [cfg]);
   const put = async (body: any, ok: string) => { try { await api(s, "/api/company/settings", { method: "PUT", body: JSON.stringify(body) }); setMsg(ok); reload(); } catch (x: any) { setMsg(x.message); } };
   return <><h2>{t("Company settings")}</h2>
+    <p className="muted">{t("Choose your industry and turn features on/off. Add your company and GST details for invoices.")}</p>
     <label>{t("Industry template")}</label>
     <select value={industry} onChange={e => setIndustry(e.target.value)}>{tpl.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
     <p className="muted">{tpl.find(t => t.id === industry)?.description}</p>
@@ -99,12 +100,12 @@ export function SettingsPage({ s, cfg, reload }: P) {
     <label className="fld"><span>{t("Units with conversion to base unit (base = 1), e.g. PCS=1, BOX=12, CASE=144")}</span><input value={units} onChange={e => setUnits(e.target.value)} /></label>
     <h3>{t("Custom fields")}</h3><p className="muted">{t("One per line:")}{" "}<code>{t("Label | text/number/date/select | options,comma,separated | required")}</code></p>
     {(["outlet", "product", "visit"] as const).map(e => <label key={e} className="fld"><span>{label(e)} fields</span><textarea rows={3} value={cf[e]} onChange={x => setCf({ ...cf, [e]: x.target.value })} /></label>)}
-    {features.invoicing && <GstSettings g={gst} onChange={setGst} />}
+    <GstSettings g={gst} onChange={setGst} />
     {features.purchaseOrders && <PoSettings po={po} onChange={setPo} />}
     {features.invoicing && <CreditSettings c={credit} onChange={setCredit} />}
     {features.eInvoice && <><h3>{t("E-invoicing")}</h3><label className="fld"><span>{t("Provider")}</span><select value={einv} onChange={e => setEinv(e.target.value)}>
       <option value="test">{t("TEST mock (fake IRN/QR — not valid for GST)")}</option><option value="gsp">{t("GSP adapter (configure EINV_GSP_* env on the server)")}</option></select></label></>}
-    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, ...(features.invoicing ? { gst: { ...gst, defaultRate: Number(gst.defaultRate) } } : {}), ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.eInvoice ? { einvoice: { provider: einv } } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, t("Settings saved"))}>{t("Save settings")}</button>
+    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, gst: { ...gst, defaultRate: Number(gst.defaultRate) }, ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.eInvoice ? { einvoice: { provider: einv } } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, t("Settings saved"))}>{t("Save settings")}</button>
     <p>{msg}</p></>;
 }
 
