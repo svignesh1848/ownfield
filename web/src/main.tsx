@@ -8,9 +8,10 @@ import { SetupChecklist, RepHome, DistributorHome, ManagerHome, DiskAlert } from
 import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge, queue } from "./field";
 import { Collections } from "./collect";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
-import { Invoices, Targets, Reports, Visits } from "./step4";
+import { Invoices, Targets, Visits } from "./step4";
 import { PurchaseOrders, DistributorTerms } from "./po";
 import { Integrations } from "./integrations";
+import { ReportsHub, PinnedReports } from "./reports";
 import { FlowSettings } from "./flow";
 import { t, t as i18n, LANGS, lang, setLang } from "./i18n";
 import { VanRep, VanAdmin, Inventory, Claims, Leads, Trail, useTracking, Coverage, Surveys, Messages } from "./ops";
@@ -210,14 +211,14 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
     [t("Finance"), [...(f.invoicing ? ["invoices", "collections"] : []), ...(f.expenses ? ["expenses"] : []), ...(f.messaging ? ["messages"] : []), "reports"]],
     [t("Setup"), ["catalog", "users", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : []), "fieldrules", "integrations", "security"] : []), "account"]]]
     : role === "retailer" ? [[t("Menu"), ["home", "order", "orders", "catalog", "account"]]]
-    : role === "sales_rep" ? [[t("Menu"), ["home", "beat", "order", "orders", ...(f.vanSales ? ["van"] : []), ...(f.leads ? ["leads"] : []), ...(f.surveys ? ["surveys"] : []), ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "catalog", "account"]]]
-    : [[t("Menu"), ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.distInventory ? ["inventory"] : []), ...(f.claims ? ["claims"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "catalog", "account"]]];
+    : role === "sales_rep" ? [[t("Menu"), ["home", "beat", "order", "orders", ...(f.vanSales ? ["van"] : []), ...(f.leads ? ["leads"] : []), ...(f.surveys ? ["surveys"] : []), ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "reports", "catalog", "account"]]]
+    : [[t("Menu"), ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.distInventory ? ["inventory"] : []), ...(f.claims ? ["claims"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "reports", "catalog", "account"]]];
   const tabs = groups.flatMap(g => g[1]);
   const primary = (mgr ? ["home", "orders", f.invoicing ? "collections" : "dashboard", "reports"] : role === "retailer" ? ["home", "order", "orders", "catalog"] : role === "sales_rep" ? ["home", "beat", "order", f.invoicing ? "collect" : "orders"]
     : ["home", "inbox", f.invoicing && f.distributorBilling ? "invoices" : "catalog", f.stock ? "stock" : f.purchaseOrders ? "POs" : "profile"]).filter(t => tabs.includes(t));
   const cur = s.enrollTotp ? "account" : tabs.includes(tab) ? tab : "home";
   const views: Record<string, any> = { home: mgr ? ManagerHome : role === "retailer" ? RetailerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
-    catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: Reports, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
+    catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: ReportsHub, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
     collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, inventory: Inventory, claims: Claims, leads: Leads, surveys: Surveys, messages: Messages, trail: Trail, coverage: Coverage, account: (p: ViewProps) => <><div className="card"><LangPicker /></div><MyAccount s={p.s} onSignedOut={onLogout} /></>, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules, fieldrules: FlowSettings };
   const C = views[cur];
   const Item = ({ t }: { t: string }) => /* t is a tab id here */ <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{i18n(TAB_LABEL[t] || t)}</span></button>;
@@ -228,7 +229,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
       <p className="muted small copy">{t("OwnField — Own your sales.")}<br />© 2026 Vignesh S. OwnField is a trademark of Vignesh S. AGPL-3.0.</p></aside>
     <div className="content">
       <header className="top"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{s.user.companyCode}</b></div><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
-      {mgr && cur === "home" && <Usage u={usage} />}<OfflineBadge s={s} />
+      {mgr && cur === "home" && <Usage u={usage} />}<OfflineBadge s={s} />{cur === "home" && role !== "retailer" && <PinnedReports s={s} go={setTab} />}
       <section className="card main-card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} go={setTab} /></section>
     </div>
     <nav className="bottom">{primary.map(t => <Item key={t} t={t} />)}
