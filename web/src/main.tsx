@@ -39,7 +39,7 @@ export const api = async (s: Session | null, url: string, opts: RequestInit = {}
   if (r.status === 401 && s) { localStorage.removeItem("ff"); setTimeout(() => location.reload(), 1500); }
   if (!r.ok) throw Object.assign(new Error(t(j.error || r.statusText)), { body: j });
   const m = (opts.method || "GET").toUpperCase();
-  if (m !== "GET" && !/\/api\/(auth|orders\/preview)/.test(url)) toast(SAVED[m] || t("Saved"));
+  if (m !== "GET" && !/\/api\/(auth|orders\/preview|report-builder\/preview|data-workspace\/query)/.test(url)) toast(SAVED[m] || t("Saved"));
   return j;
 };
 
