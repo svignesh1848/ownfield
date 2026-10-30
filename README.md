@@ -161,6 +161,42 @@ Everything lives in `server/src/reports/`: `sources.ts` (data sources), `engine.
 4. Optional: `enrich()` to add computed values with extra company-scoped queries, or `load()` to build rows in code (see `beat_plan`).
 5. Add the new labels to `web/src/locales/en.json` (and other languages), add a test in `server/test/reports.test.ts`.
 
+## Data workspace (SQL for your own developers / data team)
+
+**Setup → Data workspace** gives company admins, and people an admin marks as **data analysts** (Access tab), a read-only SQL editor
+with a schema browser (tables, columns, notes). Join tables, aggregate, and **save a query as a dataset**: it then appears in the report
+builder as a data source (`SQL: <name>`), so it gets charts, KPI cards, comparisons (if it has a date column), pinning, Excel/CSV and schedules.
+
+**Isolation and safety (three layers):**
+1. **Company views.** Each company gets a schema `ff_c<companyId>` with one view per allowed table (`orders`, `order_lines`, `shops`, `users`,
+   `items`, `variants`, `stock`, `beats`, `beat_shops`, `visits`, `rep_days`, `invoices`, `invoice_lines`, `payments`, `payment_allocations`,
+   `targets`, `schemes`, `expenses`, `leaves`, `leads`, `claims`, `purchase_orders`). Each view is filtered by that company id; secret columns
+   (password hashes, TOTP secrets, API keys, webhook secrets, connector settings, photo files) are never in a view. Child tables are filtered through their parent.
+2. **SQL guard** (`server/src/workspace/guard.ts`). Exactly one `SELECT` / `WITH … SELECT`. Blocks DDL/DML (`INSERT`, `UPDATE`, `DELETE`, `DROP`,
+   `CREATE`, `ALTER`, `COPY`, `SET`, `GRANT`, `SELECT INTO`, `FOR UPDATE` …), multiple statements, `$` quoting, `pg_*` / `information_schema` /
+   `public` / other companies' schemas, non-workspace tables, and any function not on an allow-list (so no `pg_read_file`, `dblink`, `lo_*`,
+   `set_config`, `pg_sleep` …). Table names are rewritten to the company schema.
+3. **Database.** Each run is a `READ ONLY` transaction with `statement_timeout` (`WORKSPACE_TIMEOUT_MS`, 15 s), `search_path` set to the company
+   schema, and a row cap (`WORKSPACE_MAX_ROWS`, 5 000; `WORKSPACE_RUNS_PER_MIN`, 30). When the app's database user has `CREATEROLE`, the query also
+   runs `SET LOCAL ROLE ff_ro_c<id>`: a NOLOGIN role that can only `SELECT` that company's views (no base tables, no other schemas, no file functions).
+   The schema endpoint reports `isolation: "role+views"` or `"views"`. To get the role layer: `ALTER ROLE <app db user> CREATEROLE;` (optional;
+   disable with `WORKSPACE_DB_ROLES=0`).
+
+Every query, including refused ones, is written to the security audit log (`workspace.sql` / `workspace.sql_refused`, with the SQL, rows and time);
+admins see it under **Query log**.
+
+**BI tools (Metabase, Power BI, Superset)** — optional, **off by default**, needs `CREATEROLE` as above. An admin turns it on under
+Data workspace → Access; the app creates login `ff_bi_c<id>` with a random password (shown once), `default_transaction_read_only=on`,
+`search_path=ff_c<id>`, a connection limit (`WORKSPACE_BI_CONN_LIMIT`, 3) and `statement_timeout`; it can read only that company's views.
+Turning it off sets `NOLOGIN`. In the BI tool use host `WORKSPACE_BI_HOST`, port `WORKSPACE_BI_PORT`, database `WORKSPACE_BI_DATABASE`, schema `ff_c<id>`.
+Your Postgres must accept connections from the BI tool (e.g. publish port 5432 only to the BI server's IP, require SSL in `pg_hba.conf`);
+the default Docker setup does not expose the database.
+
+**API** (JWT, admin or analyst): `GET /api/data-workspace/schema`, `POST /api/data-workspace/query {sql, limit}`, `GET|POST /api/data-workspace/datasets`,
+`PUT|DELETE /api/data-workspace/datasets/:id`, `GET /api/data-workspace/me`; admin only: `GET|PUT /api/data-workspace/analysts {userIds}`,
+`GET /api/data-workspace/history`, `GET|PUT /api/data-workspace/bi-access {enabled}`. Datasets are used in report definitions as `"source": "ds:<id>"`.
+To expose another table or column, add it to `server/src/workspace/tables.ts` (never secret columns) and extend `server/test/workspace.test.ts`.
+
 ## Stack
 Node 20 + TypeScript + Express + PostgreSQL. React + Vite on the front end. Tests use Vitest + Supertest against in-memory Postgres (pg-mem).
 
