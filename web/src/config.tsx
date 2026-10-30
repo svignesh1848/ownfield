@@ -83,6 +83,7 @@ export function SettingsPage({ s, cfg, reload }: P) {
   const [msg, setMsg] = useState(""); const [gst, setGst] = useState<any>({ ...(st as any).gst }); const [po, setPo] = useState<any>({ ...(st as any).po });
   const [einv, setEinv] = useState<string>((st as any).einvoice?.provider || "test");
   const [credit, setCredit] = useState<any>({ days: 0, limit: 0, onBreach: "warn", ...(st as any).credit });
+  const [approval, setApproval] = useState<any>({ levels: 0, above: 0, ...(st as any).approval });
   useEffect(() => { api(null, "/api/templates").then(setTpl); }, []);
   useEffect(() => { setFeatures({ ...st.features }); setAttrs(st.attributes.join(", ")); setUnits(unitsText(st.uoms)); setCf({ outlet: cfText(st.customFields.outlet), product: cfText(st.customFields.product), visit: cfText(st.customFields.visit) }); setGst({ ...(st as any).gst }); setPo({ ...(st as any).po }); }, [cfg]);
   const put = async (body: any, ok: string) => { try { await api(s, "/api/company/settings", { method: "PUT", body: JSON.stringify(body) }); setMsg(ok); reload(); } catch (x: any) { setMsg(x.message); } };
@@ -103,9 +104,12 @@ export function SettingsPage({ s, cfg, reload }: P) {
     <GstSettings g={gst} onChange={setGst} />
     {features.purchaseOrders && <PoSettings po={po} onChange={setPo} />}
     {features.invoicing && <CreditSettings c={credit} onChange={setCredit} />}
+    <h3>{t("Order approval")}</h3><p className="muted small">{t("Big orders can wait for a manager's OK before they go to the distributor. 0 = off.")}</p>
+    <div className="grid2"><label className="fld"><span>{t("Approvals needed")}</span><select value={approval.levels} onChange={e => setApproval({ ...approval, levels: Number(e.target.value) })}>{[0, 1, 2, 3].map(n => <option key={n} value={n}>{n === 0 ? t("Off") : n}</option>)}</select></label>
+      <label className="fld"><span>{t("For orders of at least (₹)")}</span><input type="number" min={0} value={approval.above} onChange={e => setApproval({ ...approval, above: e.target.value })} /></label></div>
     {features.eInvoice && <><h3>{t("E-invoicing")}</h3><label className="fld"><span>{t("Provider")}</span><select value={einv} onChange={e => setEinv(e.target.value)}>
       <option value="test">{t("TEST mock (fake IRN/QR — not valid for GST)")}</option><option value="gsp">{t("GSP adapter (configure EINV_GSP_* env on the server)")}</option></select></label></>}
-    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, gst: { ...gst, defaultRate: Number(gst.defaultRate) }, ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.eInvoice ? { einvoice: { provider: einv } } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, t("Settings saved"))}>{t("Save settings")}</button>
+    <button onClick={() => put({ industry, features, attributes: attrs, uoms: units, gst: { ...gst, defaultRate: Number(gst.defaultRate) }, ...(features.purchaseOrders ? { po: poForSave(po) } : {}), ...(features.eInvoice ? { einvoice: { provider: einv } } : {}), ...(features.invoicing ? { credit: { days: Number(credit.days), limit: Number(credit.limit), onBreach: credit.onBreach } } : {}), approval: { levels: Number(approval.levels), above: Number(approval.above) || 0 }, customFields: { outlet: cfParse(cf.outlet), product: cfParse(cf.product), visit: cfParse(cf.visit) } }, t("Settings saved"))}>{t("Save settings")}</button>
     <p>{msg}</p></>;
 }
 
@@ -113,9 +117,10 @@ export function ImportPage({ s, cfg, onUsage }: P) {
   const st = cfg.settings, f = st.features; const [msg, setMsg] = useState("");
   const cols: Record<string, string[]> = {
     products: ["Item Code", "Item Name", "Category", ...(f.services ? ["Type"] : []), "HSN", "SKU", ...st.attributes.map(label), "MRP", "Billing Price", "Units", ...st.customFields.product.map(x => x.label)],
-    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "State Code", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", ...st.customFields.outlet.map(x => x.label)],
+    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "State Code", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", "Outlet Type", ...st.customFields.outlet.map(x => x.label)],
     users: ["Name", "Email", "Phone", "Role", "Password", ...(f.drugLicence ? ["Drug Licence"] : [])],
     targets: ["Rep Email", "Month", "Metric", "Target"],
+    prices: ["SKU", "Outlet Type", "Price"],
     ...(f.stock ? { stock: ["SKU", "Qty", "Unit", ...(f.batches ? ["Batch", "Expiry"] : []), "Distributor Email"] } : {}),
   };
   const dl = (k: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([cols[k].join(",") + "\n"], { type: "text/csv" })); a.download = `${k}-template.csv`; a.click(); };

@@ -125,3 +125,8 @@ nav:not(.bottom){display:flex;gap:6px;margin:8px 0;overflow-x:auto}
 
 details.sec{border:1px solid var(--line,#ddd);border-radius:10px;margin:8px 0;padding:0 12px}details.sec>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}details.sec[open]{padding-bottom:10px}
 .thumb{display:block;max-height:60px;max-width:200px;margin:4px 0}small.ok{color:var(--accent)}small.err{color:#c62828}
+.bell { position: relative; margin-left: auto; margin-right: 8px; }
+.bell .badge { background: #d33; color: #fff; border-radius: 9px; padding: 0 5px; font-size: 11px; margin-left: 2px; }
+.bell-list { position: absolute; right: 0; top: 110%; width: min(320px, 90vw); max-height: 60vh; overflow: auto; background: var(--card, #fff); border: 1px solid #ddd; border-radius: 8px; padding: 6px; z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+.bell-list .row { cursor: pointer; }
+.bell-list .unread { font-weight: 600; }

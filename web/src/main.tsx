@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import { Toasts, toast, Empty, Loading, Field, fmtCell, ICONS } from "./ui";
 import { SetupChecklist, RepHome, DistributorHome, ManagerHome, DiskAlert } from "./home";
-import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge, queue } from "./field";
+import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge, queue, Bell } from "./field";
 import { Collections } from "./collect";
 import { Catalog, Stock, Schemes, SettingsPage, ImportPage } from "./config";
 import { Invoices, Targets, Visits } from "./step4";
@@ -229,7 +229,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
       <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div>
       <p className="muted small copy">{t("OwnField — Own your sales.")}<br />© 2026 Vignesh S. OwnField is a trademark of Vignesh S. AGPL-3.0.</p></aside>
     <div className="content">
-      <header className="top"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{s.user.companyCode}</b></div><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
+      <header className="top"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{s.user.companyCode}</b></div><Bell s={s} go={setTab} /><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
       {mgr && cur === "home" && <Usage u={usage} />}<OfflineBadge s={s} />{cur === "home" && role !== "retailer" && <PinnedReports s={s} go={setTab} />}
       <section className="card main-card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} go={setTab} /></section>
     </div>
