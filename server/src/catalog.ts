@@ -125,6 +125,12 @@ export function validateSettings(input: any, base: Settings): Settings {
     if (!["test", "gsp"].includes(e.provider)) throw bad("e-invoice provider must be test or gsp");
     s.einvoice = e;
   }
+  if (input.approval) {
+    const a = { levels: Number(input.approval.levels ?? s.approval.levels), above: Number(input.approval.above ?? s.approval.above) };
+    if (!(Number.isInteger(a.levels) && a.levels >= 0 && a.levels <= 3)) throw bad("approval levels must be 0 (off), 1, 2 or 3");
+    if (!(a.above >= 0)) throw bad("approval amount must be ≥ 0");
+    s.approval = a;
+  }
   if (input.credit) {
     const c = { ...s.credit, ...input.credit };
     c.days = Number(c.days); c.limit = Number(c.limit);
@@ -231,6 +237,19 @@ async function importProduct({ db, cid, s }: Imp, r: any) {
 }
 
 /** Stock upload SETS the quantity for (location, SKU, batch). */
+/** Channel price list row: SKU, Outlet Type, Price (empty or 0 price removes it, so the standard billing price applies again). */
+async function importPrice({ db, cid }: Imp, r: any) {
+  const sku = String(r.sku ?? "").trim(), type = String(r.outlet_type ?? r.channel ?? "").trim(), price = empty(r.price) ? 0 : Number(r.price);
+  if (!sku || !type) throw bad("SKU and Outlet Type are required");
+  if (!(price >= 0)) throw bad("price must be a number ≥ 0");
+  const v = (await db.query("SELECT v.id FROM variants v JOIN items i ON i.id=v.item_id WHERE i.company_id=$1 AND v.sku=$2", [cid, sku])).rows[0];
+  if (!v) throw bad(`unknown SKU ${sku}`);
+  const had = (await db.query("SELECT id FROM channel_prices WHERE variant_id=$1 AND lower(outlet_type)=lower($2)", [v.id, type])).rows[0];
+  if (!price) { if (had) await db.query("DELETE FROM channel_prices WHERE id=$1", [had.id]); return "updated"; }
+  if (had) { await db.query("UPDATE channel_prices SET price=$1 WHERE id=$2", [price, had.id]); return "updated"; }
+  await db.query("INSERT INTO channel_prices (company_id,variant_id,outlet_type,price) VALUES ($1,$2,$3,$4)", [cid, v.id, type, price]);
+  return "inserted";
+}
 async function importStock({ db, cid, s, role, uid }: Imp, r: any) {
   if (!s.features.stock) throw bad("stock tracking is disabled");
   const v = (await db.query("SELECT v.id, i.kind, i.uoms FROM variants v JOIN items i ON i.id=v.item_id WHERE v.company_id=$1 AND v.sku=$2", [cid, String(r.sku ?? "").trim()])).rows[0];
@@ -256,7 +275,7 @@ async function importStock({ db, cid, s, role, uid }: Imp, r: any) {
 }
 
 const IMPORTERS: Record<string, (c: Imp, r: any) => Promise<string>> = {
-  shops: importShop, products: importProduct, stock: importStock,
+  shops: importShop, products: importProduct, stock: importStock, prices: importPrice,
   users: async (c, r) => { await c.addUser(c.cid, r); return "inserted"; },
   targets: async (c, r) => (await import("./insights.js")).setTarget(c.db, c.cid, { repEmail: String(r.rep_email ?? r.email ?? ""), month: String(r.month ?? ""), metric: String(r.metric ?? "").toLowerCase().trim(), target: Number(r.target) }),
 };

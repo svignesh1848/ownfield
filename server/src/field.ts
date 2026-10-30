@@ -22,7 +22,10 @@ const coord = (lat: unknown, lng: unknown) => {
 const coordOpt = (on: boolean, lat: unknown, lng: unknown) => on || (lat != null && lng != null) ? coord(lat, lng) : [null, null];
 type Priced = { vid: number; sku: string; uom: string; qty: number; base: number; price: number; disc: number; gross: number; amount: number; saving: number; schemeId: number | null; scheme: string | null; free: boolean };
 /** Price order lines: unit conversion, schemes (best discount + buy-X-get-Y free lines at ₹0), and base-unit stock demand. */
-export async function priceLines(db: any, cid: number, settings: any, items: any[], dist: number | null) {
+export async function priceLines(db: any, cid: number, settings: any, items: any[], dist: number | null, shop: any = null) {
+  // Channel price list: a price set for this outlet type (e.g. Wholesale, Modern trade) wins over the standard billing price.
+  const channel = new Map<number, number>();
+  if (shop?.outlet_type) for (const r of (await db.query("SELECT variant_id, price FROM channel_prices WHERE company_id=$1 AND lower(outlet_type)=lower($2)", [cid, shop.outlet_type])).rows) channel.set(r.variant_id, Number(r.price));
   const f = settings.features;
   const schemes = f.schemes ? await activeSchemes(db, cid) : [];
   const priced: Priced[] = [], need = new Map<number, { sku: string; n: number }>();
@@ -35,7 +38,7 @@ export async function priceLines(db: any, cid: number, settings: any, items: any
     const uoms = parseJson<Uom[]>(v.uoms, settings.uoms);
     const u = l.uom ? uoms.find(x => x.code === String(l.uom).toUpperCase()) : uoms.find(x => x.factor === 1);
     if (!u) throw bad(`unit ${l.uom} not defined for ${v.sku}`);
-    const base = qty * u.factor, price = Number(v.billing_price);
+    const base = qty * u.factor, price = channel.get(v.id) ?? Number(v.billing_price);
     const a = applySchemes(schemes, { vid: v.id, itemId: v.item_id, category: v.category, base, price }, dist);
     priced.push({ vid: v.id, sku: v.sku, uom: u.code, qty, base, price, disc: a.disc, gross: a.gross, amount: a.amount, saving: Math.round((a.gross - a.amount) * 100) / 100, schemeId: a.schemeId, scheme: a.scheme, free: false });
     let n = base;
@@ -50,7 +53,15 @@ export async function priceLines(db: any, cid: number, settings: any, items: any
   return { priced, need };
 }
 
-export const TRANSITIONS: Record<string, string[]> = { placed: ["accepted", "rejected"], accepted: ["fulfilled"] };
+export const TRANSITIONS: Record<string, string[]> = { placed: ["accepted", "rejected"], accepted: ["dispatched", "fulfilled"], dispatched: ["fulfilled"] };
+
+export async function orderEvent(q: Db, orderId: number, status: string, uid: number | null, note: string | null = null) {
+  await q.query("INSERT INTO order_events (order_id,status,user_id,note) VALUES ($1,$2,$3,$4)", [orderId, status, uid, note]);
+}
+/** In-app notification; template + args are translated in the app (t(template, ...args)). */
+export async function notify(q: Db, cid: number, userId: number, template: string, args: unknown[], note: string | null = null, link: string | null = null) {
+  await q.query("INSERT INTO notifications (company_id,user_id,template,args,note,link) VALUES ($1,$2,$3,$4,$5,$6)", [cid, userId, template, JSON.stringify(args), note, link]);
+}
 export const dayKey = (d: Date | string, tz = process.env.REPORT_TZ || "Asia/Kolkata") => new Date(d).toLocaleDateString("en-CA", { timeZone: tz });
 
 export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
@@ -158,7 +169,6 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       WHERE v.company_id=$1 ${mine ? "AND v.rep_id=$2" : ""} ORDER BY v.id DESC`, mine ? [cid, req.user.uid] : [cid])).rows.map(v => ({ ...v, custom: parseJson(v.custom, {}) })));
   }));
 
-  // ---- Orders (idempotent on clientRef so the offline queue can safely retry) ----
   // Retailers order for their own outlet only (Retailer app feature); the order goes to the outlet's distributor like a rep order.
   const retailerShop = async (req: any, cid: number) => {
     if (req.user.role !== "retailer") return null;
@@ -173,6 +183,35 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const s = (await db.query("SELECT s.id,s.code,s.name,s.city,s.phone,d.name AS distributor_name FROM shops s LEFT JOIN users d ON d.id=s.distributor_id WHERE s.id=$1", [sid])).rows[0];
     res.json(s);
   }));
+  // ---- Orders (idempotent on clientRef so the offline queue can safely retry) ----
+  // Life cycle (like FieldAssist / Bizom secondary orders): [pending_approval →] placed → accepted → dispatched → fulfilled (full or partial),
+  // or rejected / cancelled. Every step is written to order_events (who, when, why) and the order taker gets an in-app notification.
+  const shopName = async (q: Db, id: number) => (await q.query("SELECT name FROM shops WHERE id=$1", [id])).rows[0]?.name ?? "";
+  const tell = async (q: Db, cid: number, o: any, status: string, by: number, reason: string | null = null) => {
+    const name = await shopName(q, o.shop_id);
+    if (o.rep_id !== by) await notify(q, cid, o.rep_id, "Order #{0} at {1}: {2}", [o.id, name, status], reason, `orders#${o.id}`);
+    if (status === "placed" && o.distributor_id && o.distributor_id !== by) await notify(q, cid, o.distributor_id, "New order #{0} from {1}", [o.id, name], null, `inbox#${o.id}`);
+  };
+  const needsApproval = (settings: any, total: number) => { const a = settings.approval || { levels: 0, above: 0 }; return a.levels > 0 && total >= (a.above || 0); };
+  const checkCart = async (cid: number, settings: any, shop: any, lines: any) => {
+    const items = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.qty) > 0);
+    if (!items.length) throw bad("at least one line with qty > 0");
+    const loc: number | null = shop.distributor_id ?? null;
+    const { priced, need } = await priceLines(db, cid, settings, items, loc, shop);
+    for (const [vid, { sku, n }] of need) {
+      const avail = (await fefoRows(db, cid, loc, vid)).reduce((a, r) => a + r.qty, 0);
+      if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
+    }
+    const r = (n: number) => Math.round(n * 100) / 100;
+    const total = r(priced.reduce((a, l) => a + l.amount, 0)), savings = r(priced.reduce((a, l) => a + l.saving, 0));
+    const credit = await creditCheck(db, cid, settings, shop, total);
+    if (!credit.ok && credit.action === "block") throw Object.assign(bad(`credit hold: ${credit.reasons.join("; ")}`, 409), { credit });
+    return { priced, total, savings, credit, loc };
+  };
+  const insertLines = async (tx: Db, oid: number, priced: any[]) => {
+    for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount,gross,scheme_id,free) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [oid, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
+  };
   app.post("/api/orders", auth("sales_rep", "retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const own = await retailerShop(req, cid);
@@ -181,28 +220,68 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const dup = (await db.query("SELECT * FROM orders WHERE company_id=$1 AND client_ref=$2", [cid, String(clientRef)])).rows[0];
     if (dup) return res.status(200).json({ ...dup, duplicate: true });
     const shop = await shopIn(cid, shopId); if (!shop) throw bad("shop not found", 404);
-    const items = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.qty) > 0);
-    if (!items.length) throw bad("at least one line with qty > 0");
     const { settings } = await getCompany(db, cid);
-    const f = settings.features, loc: number | null = shop.distributor_id ?? null;
-    const { priced, need } = await priceLines(db, cid, settings, items, loc);
-    for (const [vid, { sku, n }] of need) {
-      const avail = (await fefoRows(db, cid, loc, vid)).reduce((a, r) => a + r.qty, 0);
-      if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
-    }
-    const total = Math.round(priced.reduce((a, l) => a + l.amount, 0) * 100) / 100;
-    const credit = await creditCheck(db, cid, settings, shop, total);
-    if (!credit.ok && credit.action === "block") throw Object.assign(bad(`credit hold: ${credit.reasons.join("; ")}`, 409), { credit });
-    const savings = Math.round(priced.reduce((a, l) => a + l.saving, 0) * 100) / 100;
+    const { priced, total, savings, credit, loc } = await checkCart(cid, settings, shop, lines);
+    const status = needsApproval(settings, total) ? "pending_approval" : "placed";
     const o = await withTx(db, async tx => {
-      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-        [cid, String(clientRef), req.user.uid, shop.id, loc, total, savings])).rows[0];
-      for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount,gross,scheme_id,free) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
-        [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
+      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+        [cid, String(clientRef), req.user.uid, shop.id, loc, total, savings, status])).rows[0];
+      await insertLines(tx, o.id, priced);
+      await orderEvent(tx, o.id, status, req.user.uid, credit.ok ? null : credit.reasons.join("; "));
+      if (status === "placed") await tell(tx, cid, o, "placed", req.user.uid);
+      else for (const m of (await tx.query("SELECT id FROM users WHERE company_id=$1 AND role IN ('company_admin','manager') AND active", [cid])).rows)
+        await notify(tx, cid, m.id, "Order #{0} at {1} needs your approval", [o.id, shop.name], null, `orders#${o.id}`);
       await emit(tx, cid, "order.created", { id: o.id, client_ref: o.client_ref, shop_id: o.shop_id, distributor_id: o.distributor_id, total: Number(o.total), status: o.status });
       return o;
     });
     res.status(201).json(credit.ok ? o : { ...o, creditWarning: credit.reasons });
+  }));
+  // Edit while the order is still new (not yet accepted): the order taker or a manager replaces the lines; prices/schemes/stock/credit are re-checked.
+  app.put("/api/orders/:id", auth("sales_rep", "retailer", "company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const own = await retailerShop(req, cid);
+    const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
+    const role = req.user.role;
+    if (!o || (role === "sales_rep" && o.rep_id !== req.user.uid) || (role === "retailer" && o.shop_id !== own)) throw bad("order not found", 404);
+    if (!["placed", "pending_approval"].includes(o.status)) throw bad("only new orders can be edited", 409);
+    const shop = await shopIn(cid, o.shop_id);
+    const { settings } = await getCompany(db, cid);
+    const { priced, total, savings, credit } = await checkCart(cid, settings, shop, req.body?.lines);
+    const status = needsApproval(settings, total) ? "pending_approval" : o.status === "pending_approval" && o.approval_level > 0 ? "pending_approval" : "placed";
+    const u = await withTx(db, async tx => {
+      const u = (await tx.query("UPDATE orders SET updated_at=NOW(), total=$1, savings=$2, status=$3, approval_level=0 WHERE id=$4 AND status=$5 RETURNING *", [total, savings, status, o.id, o.status])).rows[0];
+      if (!u) throw bad("order changed meanwhile — reload", 409);
+      await tx.query("DELETE FROM order_lines WHERE order_id=$1", [o.id]);
+      await insertLines(tx, o.id, priced);
+      await orderEvent(tx, o.id, "edited", req.user.uid, `${o.total} → ${total}`);
+      if (o.rep_id !== req.user.uid) await notify(tx, cid, o.rep_id, "Order #{0} at {1}: {2}", [o.id, shop.name, "edited"], null, `orders#${o.id}`);
+      await emit(tx, cid, "order.status_changed", { id: u.id, client_ref: u.client_ref, from: o.status, status: "edited", total });
+      return u;
+    });
+    res.json(credit.ok ? u : { ...u, creditWarning: credit.reasons });
+  }));
+  // Multi-level approval (Settings → Orders: levels and amount; off by default). Each level needs a different manager/admin.
+  app.post("/api/orders/:id/approve", auth("company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
+    if (!o) throw bad("order not found", 404);
+    if (o.status !== "pending_approval") throw bad("this order is not waiting for approval", 409);
+    const reject = req.body?.decision === "reject", reason = String(req.body?.reason || "").trim().slice(0, 300) || null;
+    if (!reject && (await db.query("SELECT 1 FROM order_events WHERE order_id=$1 AND status='approved' AND user_id=$2 AND at>=$3", [o.id, req.user.uid, o.updated_at])).rows[0])
+      throw bad("you already approved this order — another approver is needed", 409);
+    const { settings } = await getCompany(db, cid);
+    const levels = settings.approval?.levels || 1, level = o.approval_level + 1;
+    const to = reject ? "rejected" : level >= levels ? "placed" : "pending_approval";
+    const u = await withTx(db, async tx => {
+      const u = (await tx.query("UPDATE orders SET status=$1, approval_level=$2, status_reason=COALESCE($3,status_reason), status_by=$4 WHERE id=$5 AND status='pending_approval' AND approval_level=$6 RETURNING *",
+        [to, reject ? o.approval_level : level, reason, req.user.uid, o.id, o.approval_level])).rows[0];
+      if (!u) throw bad("order changed meanwhile — reload", 409);
+      await orderEvent(tx, o.id, reject ? "rejected" : "approved", req.user.uid, reason ?? (reject ? null : `level ${level} of ${levels}`));
+      if (to !== "pending_approval") await tell(tx, cid, u, to, req.user.uid, reason);
+      if (to !== "pending_approval") await emit(tx, cid, "order.status_changed", { id: u.id, client_ref: u.client_ref, from: o.status, status: to, total: Number(u.total) });
+      return u;
+    });
+    res.json(u);
   }));
   // Preview: price a cart (schemes applied) without placing it — the rep app shows savings before submitting.
   app.post("/api/orders/preview", auth("sales_rep", "company_admin", "manager", "retailer"), wrap(async (req, res) => {
@@ -211,38 +290,81 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const shop = await shopIn(cid, own ?? req.body?.shopId); if (!shop) throw bad("shop not found", 404);
     const items = (Array.isArray(req.body?.lines) ? req.body.lines : []).filter((l: any) => Number(l.qty) > 0);
     const { settings } = await getCompany(db, cid);
-    const { priced } = await priceLines(db, cid, settings, items, shop.distributor_id ?? null);
+    const { priced } = await priceLines(db, cid, settings, items, shop.distributor_id ?? null, shop);
     const r = (n: number) => Math.round(n * 100) / 100;
     res.json({ lines: priced, gross: r(priced.reduce((a, l) => a + l.gross, 0)), savings: r(priced.reduce((a, l) => a + l.saving, 0)), total: r(priced.reduce((a, l) => a + l.amount, 0)) });
   }));
   app.get("/api/orders", auth("company_admin", "manager", "sales_rep", "distributor", "retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     if (req.user.role === "retailer") await retailerShop(req, cid);
-    const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2" : req.user.role === "retailer" ? "AND o.shop_id=(SELECT shop_id FROM users WHERE id=$2)" : "";
+    const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2 AND o.status<>'pending_approval'" : req.user.role === "retailer" ? "AND o.shop_id=(SELECT shop_id FROM users WHERE id=$2)" : "";
     const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name, u.role AS placed_by_role FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
       WHERE o.company_id=$1 ${scope} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
     for (const o of orders) {
-      o.lines = (await db.query(`SELECT l.id,l.qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,l.gross,l.free,l.scheme_id,sc.name AS scheme,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
+      o.lines = (await db.query(`SELECT l.id,l.qty,l.ordered_qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,l.gross,l.free,l.scheme_id,l.variant_id,sc.name AS scheme,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
         JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows.map(l => ({ ...l, attrs: parseJson(l.attrs, {}) }));
       o.invoice = (await db.query("SELECT id, number FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0] ?? null;
       for (const l of o.lines) l.allocations = (await db.query("SELECT batch_no, expiry, qty FROM order_allocations WHERE order_line_id=$1 ORDER BY id", [l.id])).rows;
+      o.history = (await db.query("SELECT e.status, e.note, e.at, u.name AS by FROM order_events e LEFT JOIN users u ON u.id=e.user_id WHERE e.order_id=$1 ORDER BY e.id", [o.id])).rows;
+      o.partial = o.lines.some((l: any) => l.ordered_qty != null && Number(l.ordered_qty) > Number(l.qty));
     }
     res.json(orders);
   }));
   app.post("/api/orders/:id/status", auth("distributor", "company_admin"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
-    if (!o || (req.user.role === "distributor" && o.distributor_id !== req.user.uid)) throw bad("order not found", 404);
+    if (!o || (req.user.role === "distributor" && (o.distributor_id !== req.user.uid || o.status === "pending_approval"))) throw bad("order not found", 404);
     const to = String(req.body?.status || "");
     const reason = String(req.body?.reason || "").trim().slice(0, 300) || null;
     if (!(TRANSITIONS[o.status] || []).includes(to)) throw bad(`cannot move ${o.status} -> ${to}`, 409);
     const { settings } = await getCompany(db, cid);
+    // Partial delivery: delivered quantities per line (in the line's unit); anything short is taken off the order (and back into stock).
+    const given = Array.isArray(req.body?.lines) && to === "fulfilled" ? req.body.lines : null;
+    let partial = false;
+    if (given) { // validate before changing anything
+      if ((await db.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order is invoiced — record short supply as a return / credit note", 409);
+      const ls = (await db.query("SELECT id, qty FROM order_lines WHERE order_id=$1", [o.id])).rows;
+      for (const g of given) {
+        const l = ls.find(x => x.id === Number(g.id)); if (!l) throw bad("line not found", 404);
+        const d = Number(g.qty); if (!(Number.isInteger(d) && d >= 0 && d <= Number(l.qty))) throw bad(`delivered quantity must be a whole number from 0 to ${l.qty}`);
+      }
+    }
     const updated = await withTx(db, async tx => {
       // Status compare-and-set + stock allocation commit together or not at all.
       const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status=$1, status_reason=COALESCE($4, status_reason), status_by=$5 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status, reason, req.user.uid])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
       if (to === "accepted" && settings.features.stock) await allocateStock(tx, cid, o);
-      const ev = { id: u.id, client_ref: u.client_ref, from: o.status, status: to, total: Number(u.total) };
+      if (given) {
+        if ((await tx.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order is invoiced — record short supply as a return / credit note", 409);
+        const lines = (await tx.query("SELECT * FROM order_lines WHERE order_id=$1", [o.id])).rows;
+        for (const g of given) {
+          const l = lines.find(x => x.id === Number(g.id)); if (!l) throw bad("line not found", 404);
+          const d = Number(g.qty), q = Number(l.qty);
+          if (!(Number.isInteger(d) && d >= 0 && d <= q)) throw bad(`delivered quantity must be a whole number from 0 to ${q}`);
+          if (d === q) continue;
+          partial = true;
+          const f = q ? d / q : 0, r = (n: number) => Math.round(n * 100) / 100, base = Math.round(Number(l.base_qty) * f), back = Number(l.base_qty) - base;
+          await tx.query("UPDATE order_lines SET ordered_qty=COALESCE(ordered_qty,qty), qty=$1, base_qty=$2, amount=$3, gross=$4 WHERE id=$5",
+            [d, base, r(Number(l.amount) * f), l.gross == null ? null : r(Number(l.gross) * f), l.id]);
+          let left = back; // return the short quantity to the batches it was picked from (latest picks first)
+          for (const a of (await tx.query("SELECT * FROM order_allocations WHERE order_line_id=$1 ORDER BY id DESC", [l.id])).rows) {
+            if (left <= 0) break;
+            const take = Math.min(left, Number(a.qty)); left -= take;
+            await tx.query("UPDATE stock SET updated_at=NOW(), qty=qty+$1 WHERE id=$2", [take, a.stock_id]);
+            await logMove(tx, cid, o.distributor_id ?? null, l.variant_id, a.batch_no || "", take, "short_delivery", `order:${o.client_ref}`, req.user.uid, reason);
+            if (take === Number(a.qty)) await tx.query("DELETE FROM order_allocations WHERE id=$1", [a.id]); else await tx.query("UPDATE order_allocations SET qty=qty-$1 WHERE id=$2", [take, a.id]);
+          }
+        }
+        if (partial) {
+          const t = (await tx.query("SELECT amount, gross FROM order_lines WHERE order_id=$1", [o.id])).rows;
+          const r = (n: number) => Math.round(n * 100) / 100, total = r(t.reduce((a, x) => a + Number(x.amount), 0)), gross = r(t.reduce((a, x) => a + Number(x.gross ?? x.amount), 0));
+          Object.assign(u, (await tx.query("UPDATE orders SET total=$1, savings=$2 WHERE id=$3 RETURNING total, savings", [total, r(gross - total), o.id])).rows[0]);
+        }
+      }
+      const label = partial ? "partly delivered" : to;
+      await orderEvent(tx, o.id, partial ? "partly_delivered" : to, req.user.uid, reason ?? (partial ? `${o.total} → ${u.total}` : null));
+      await tell(tx, cid, u, label, req.user.uid, reason);
+      const ev = { id: u.id, client_ref: u.client_ref, from: o.status, status: to, total: Number(u.total), partial };
       await emit(tx, cid, "order.status_changed", ev);
       if (to === "accepted") await emit(tx, cid, "order.approved", ev);
       return u;
@@ -251,9 +373,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       const vids = (await db.query("SELECT DISTINCT variant_id FROM order_lines WHERE order_id=$1", [o.id])).rows.map(r => r.variant_id);
       await checkLowStock(db, cid, vids, o.distributor_id ?? null);
     }
-    res.json(updated);
+    res.json({ ...updated, partial });
   }));
-
   // Cancel: the order taker (rep / retailer) while it is still new; the distributor or admin/manager until it is delivered.
   // Stock already picked for an accepted order goes back to the same batches. Invoiced orders need a credit note instead.
   app.post("/api/orders/:id/cancel", auth("sales_rep", "retailer", "distributor", "company_admin", "manager"), wrap(async (req, res) => {
@@ -261,10 +382,10 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const own = await retailerShop(req, cid);
     const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
     const role = req.user.role;
-    const mine = !o ? false : role === "sales_rep" ? o.rep_id === req.user.uid : role === "retailer" ? o.shop_id === own : role === "distributor" ? o.distributor_id === req.user.uid : true;
+    const mine = !o ? false : role === "sales_rep" ? o.rep_id === req.user.uid : role === "retailer" ? o.shop_id === own : role === "distributor" ? o.distributor_id === req.user.uid && o.status !== "pending_approval" : true;
     if (!o || !mine) throw bad("order not found", 404);
-    const allowed = ["sales_rep", "retailer"].includes(role) ? ["placed"] : ["placed", "accepted"];
-    if (!allowed.includes(o.status)) throw bad(o.status === "accepted" ? "already accepted — ask the distributor to cancel it" : `cannot cancel a ${o.status} order`, 409);
+    const allowed = ["sales_rep", "retailer"].includes(role) ? ["placed", "pending_approval"] : ["pending_approval", "placed", "accepted", "dispatched"];
+    if (!allowed.includes(o.status)) throw bad(o.status === "accepted" || o.status === "dispatched" ? "already accepted — ask the distributor to cancel it" : `cannot cancel a ${o.status} order`, 409);
     if ((await db.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order is invoiced — issue a credit note instead", 409);
     const reason = String(req.body?.reason || "").trim().slice(0, 300);
     if (!reason) throw bad("reason required");
@@ -277,10 +398,26 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         await logMove(tx, cid, o.distributor_id ?? null, a.variant_id, a.batch_no || "", a.qty, "cancel", `order:${o.client_ref}`, req.user.uid, reason);
         await tx.query("DELETE FROM order_allocations WHERE id=$1", [a.id]);
       }
+      await orderEvent(tx, o.id, "cancelled", req.user.uid, reason);
+      await tell(tx, cid, u, "cancelled", req.user.uid, reason);
+      if (o.distributor_id && o.distributor_id !== req.user.uid && o.status !== "pending_approval")
+        await notify(tx, cid, o.distributor_id, "Order #{0} at {1}: {2}", [o.id, await shopName(tx, o.shop_id), "cancelled"], reason, `inbox#${o.id}`);
       await emit(tx, cid, "order.status_changed", { id: u.id, client_ref: u.client_ref, from: o.status, status: "cancelled", total: Number(u.total), reason });
       return u;
     });
     res.json(u);
+  }));
+
+  // ---- In-app notifications (bell): newest first; reading marks them read ----
+  app.get("/api/notifications", auth("company_admin", "manager", "sales_rep", "distributor", "retailer"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    res.json((await db.query("SELECT id, template, args, note, link, created_at, read_at FROM notifications WHERE company_id=$1 AND user_id=$2 ORDER BY id DESC LIMIT 50", [cid, req.user.uid])).rows
+      .map(n => ({ ...n, args: parseJson(n.args, []) })));
+  }));
+  app.post("/api/notifications/read", auth("company_admin", "manager", "sales_rep", "distributor", "retailer"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    await db.query("UPDATE notifications SET read_at=NOW() WHERE company_id=$1 AND user_id=$2 AND read_at IS NULL", [cid, req.user.uid]);
+    res.json({ ok: true });
   }));
 
   // ---- Manager dashboard: visits & orders by rep/day ----

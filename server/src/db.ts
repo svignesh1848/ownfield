@@ -245,6 +245,16 @@ ALTER TABLE po_dispatches ADD COLUMN IF NOT EXISTS grn_no TEXT;
 ALTER TABLE po_dispatch_lines ADD COLUMN IF NOT EXISTS received_qty INTEGER;
 CREATE TABLE IF NOT EXISTS van_takes (
   id SERIAL PRIMARY KEY, load_id INTEGER NOT NULL REFERENCES van_loads(id), variant_id INTEGER NOT NULL REFERENCES variants(id), batch_no TEXT NOT NULL DEFAULT '', expiry TEXT, qty INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS order_events (
+  id SERIAL PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), status TEXT NOT NULL, user_id INTEGER REFERENCES users(id), note TEXT, at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), user_id INTEGER NOT NULL REFERENCES users(id), template TEXT NOT NULL, args TEXT, note TEXT, link TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), read_at TIMESTAMPTZ);
+ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS ordered_qty INTEGER;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS approval_level INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS channel_prices (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), variant_id INTEGER NOT NULL REFERENCES variants(id), outlet_type TEXT NOT NULL, price NUMERIC NOT NULL,
+  UNIQUE (variant_id, outlet_type));
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {

@@ -17,12 +17,13 @@ export type GstProfile = { tradeName: string; pan: string; tan: string; cin: str
   fyStartMonth: number; einvoiceApplicable: boolean; irpUsername: string; irpGspId: string; ewayBill: boolean; ewayThreshold: number; tcsApplicable: boolean; tdsApplicable: boolean;
   defaultHsn: string; lutNo: string; lutValidTill: string; terms: string; declaration: string };
 export type PoPricing = { priceBase: "billing" | "mrp"; marginPct: number; productDiscounts: { scope: "item" | "category"; key: string; pct: number }[]; numberFormat: string };
-export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing; credit: Credit; einvoice: { provider: "test" | "gsp" } };
+export type Settings = { features: Features; attributes: string[]; uoms: Uom[]; customFields: Record<(typeof ENTITIES)[number], CustomField[]>; gst: Gst; po: PoPricing; credit: Credit; approval: Approval; einvoice: { provider: "test" | "gsp" } };
+export type Approval = { levels: number; above: number };
 export type Credit = { days: number; limit: number; onBreach: "warn" | "block" };
 export const INDUSTRIES = ["apparel", "fmcg", "pharma", "retail", "services", "custom"] as const;
 export type Industry = (typeof INDUSTRIES)[number];
 type Row = Record<string, string | number>;
-type Template = { label: string; description: string; settings: Omit<Settings, "gst" | "po" | "credit" | "einvoice">; sample: { shops: Row[]; products: Row[]; stock: Row[] } };
+type Template = { label: string; description: string; settings: Omit<Settings, "gst" | "po" | "credit" | "approval" | "einvoice">; sample: { shops: Row[]; products: Row[]; stock: Row[] } };
 
 const F = (on: FeatureKey[]): Features => Object.fromEntries(FEATURE_KEYS.map(k => [k, on.includes(k)])) as Features;
 const sel = (key: string, label: string, options: string[], required = false): CustomField => ({ key, label, type: "select", options, required });
@@ -113,9 +114,9 @@ export const defaultGst = (ind: Industry): Gst => ({ legalName: "", gstin: "", s
 const asIndustry = (ind: string): Industry => (INDUSTRIES as readonly string[]).includes(ind) ? (ind as Industry) : "custom";
 export const templateSettings = (ind: string): Settings =>
   ({ ...JSON.parse(JSON.stringify(TEMPLATES[asIndustry(ind)].settings)), gst: defaultGst(asIndustry(ind)),
-     po: { priceBase: "billing", marginPct: 0, productDiscounts: [], numberFormat: "{prefix}/{fy}/{seq:4}" }, credit: { days: 0, limit: 0, onBreach: "warn" }, einvoice: { provider: "test" } });
+     po: { priceBase: "billing", marginPct: 0, productDiscounts: [], numberFormat: "{prefix}/{fy}/{seq:4}" }, credit: { days: 0, limit: 0, onBreach: "warn" }, approval: { levels: 0, above: 0 }, einvoice: { provider: "test" } });
 /** Fill keys added in later versions (new features, gst) from the industry template. */
 export const withDefaults = (ind: string, s: Partial<Settings>): Settings => {
   const t = templateSettings(ind);
-  return { ...t, ...s, features: { ...t.features, ...(s.features || {}) }, gst: { ...t.gst, ...(s.gst || {}) }, po: { ...t.po, ...(s.po || {}) }, credit: { ...t.credit, ...(s.credit || {}) }, einvoice: { ...t.einvoice, ...(s.einvoice || {}) } } as Settings;
+  return { ...t, ...s, features: { ...t.features, ...(s.features || {}) }, gst: { ...t.gst, ...(s.gst || {}) }, po: { ...t.po, ...(s.po || {}) }, credit: { ...t.credit, ...(s.credit || {}) }, approval: { ...t.approval, ...((s as any).approval || {}) }, einvoice: { ...t.einvoice, ...(s.einvoice || {}) } } as Settings;
 };
