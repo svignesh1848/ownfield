@@ -30,6 +30,7 @@ import { registerSurveyRoutes } from "./surveys.js";
 import { registerMessagingRoutes } from "./messaging.js";
 import { registerTrackingRoutes } from "./tracking.js";
 import { registerCoverageRoutes } from "./coverage.js";
+import { registerAiRoutes } from "./ai.js";
 import { registerApiV1 } from "./integrations/api.js";
 import { registerIntegrationRoutes, registerInbound } from "./integrations/admin.js";
 import "./connectors/service.js";
@@ -281,6 +282,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerMessagingRoutes({ app, db, auth, wrap, tenant });
   registerTrackingRoutes({ app, db, auth, wrap, tenant });
   registerCoverageRoutes({ app, db, auth, wrap, tenant });
+  registerAiRoutes({ app, db, auth, wrap, tenant });
   registerIntegrationRoutes({ app, db, auth, wrap, tenant });
   registerInbound(app, db);
   registerApiV1(app, db);
