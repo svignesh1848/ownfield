@@ -7,7 +7,7 @@ import path from "node:path";
 import type { Db } from "../db.js";
 import { parseJson } from "../catalog.js";
 import { runReport } from "./engine.js";
-import { ensureReportTables, toFile } from "./routes.js";
+import { ensureReportTables, toFile, companySources } from "./routes.js";
 
 const istNow = (now = new Date()) => { const d = new Date(+now + 5.5 * 36e5); return { day: d.toISOString().slice(0, 10), hour: d.getUTCHours(), weekday: d.getUTCDay(), date: d.getUTCDate() }; };
 /** Is this schedule due now (and not already run today, IST)? */
@@ -38,7 +38,7 @@ export async function runDueReports(db: Db, now = new Date()) {
     const s = parseJson<any>(r.schedule, null); if (!isDue(s, r.last_run_at, now)) continue;
     let status: string;
     try {
-      const f = toFile(await runReport(db, r.company_id, parseJson(r.def, {})), r.name, s.format);
+      const f = toFile(await runReport(db, r.company_id, parseJson(r.def, {}), { sources: await companySources(db, r.company_id, r.created_by) }), r.name, s.format);
       const d = path.join(dir, String(r.company_id)); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, f.file), f.body);
       status = await send(s.emails, `${r.company}: ${r.name}`, `Your scheduled OwnField report "${r.name}" is attached.`, f);
     } catch (e: any) { status = `failed: ${String(e.message).slice(0, 200)}`; }

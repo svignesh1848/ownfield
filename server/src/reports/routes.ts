@@ -8,6 +8,24 @@ import { type Ctx, MGR } from "../common.js";
 import { audit } from "../security.js";
 import { catalog, runReport, validateDef, type RunResult } from "./engine.js";
 import { TEMPLATES, templateDef } from "./templates.js";
+import { SOURCES, type Source, type FieldType } from "./sources.js";
+import { runSql, ensureWorkspaceTables } from "../workspace/service.js";
+
+/** Report sources for this company: the built-in ones plus its saved SQL datasets ("ds:<id>"). */
+export async function companySources(db: Db, cid: number, uid: number): Promise<Record<string, Source>> {
+  await ensureWorkspaceTables(db);
+  const out: Record<string, Source> = { ...SOURCES };
+  for (const d of (await db.query("SELECT * FROM ws_datasets WHERE company_id=$1", [cid])).rows) {
+    const cols = parseJson<{ key: string; type: string }[]>(d.columns, []);
+    const fields: Source["fields"] = {};
+    for (const c of cols) { const type = (["number", "date", "bool"].includes(c.type) ? c.type : "text") as FieldType;
+      fields[c.key] = { label: c.key, type, get: r => type === "date" && r[c.key] ? String(r[c.key]).slice(0, 10) : type === "number" && r[c.key] != null ? Number(r[c.key]) : r[c.key] }; }
+    const dateField = cols.find(c => c.type === "date")?.key;
+    out[`ds:${d.id}`] = { label: `SQL: ${d.name}`, description: d.description || "Saved SQL dataset", sql: "", dateKind: dateField ? "text" : null, dateField, dims: {}, fields,
+      load: async () => (await runSql(db, cid, d.sql, { uid, via: `report:ds:${d.id}` })).rows };
+  }
+  return out;
+}
 
 export const SHARE_ROLES = ["manager", "sales_rep", "distributor"] as const;
 const FREQS = ["daily", "weekly", "monthly"] as const;
@@ -71,16 +89,18 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
   };
   const override = (def: any, q: any) => q.preset ? { ...def, filters: { ...def.filters, dateRange: { preset: String(q.preset), from: q.from, to: q.to } } } : def;
 
-  app.get("/api/report-builder/catalog", auth(...MGR), wrap(async (_req, res) => {
-    res.json({ ...catalog(), templates: TEMPLATES.map(t => ({ key: t.key, name: t.name, description: t.description, def: templateDef(t) })), shareRoles: SHARE_ROLES, smtp: !!process.env.SMTP_HOST });
+  app.get("/api/report-builder/catalog", auth(...MGR), wrap(async (_req, _res) => { const res = _res;
+    const cid = tenant(_req, _res); if (cid == null) return; const srcs = await companySources(db, cid, _req.user.uid);
+    const cat = catalog(); cat.sources.push(...Object.entries(srcs).filter(([k]) => k.startsWith("ds:")).map(([key, s]) => ({ key, label: s.label, description: s.description, hasDate: !!s.dateField, maxDays: null, dims: [], fields: Object.entries(s.fields).map(([k, f]) => ({ key: k, label: f.label, type: f.type })) })));
+    res.json({ ...cat, templates: TEMPLATES.map(t => ({ key: t.key, name: t.name, description: t.description, def: templateDef(t) })), shareRoles: SHARE_ROLES, smtp: !!process.env.SMTP_HOST });
   }));
   app.post("/api/report-builder/preview", auth(...MGR), wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid);
-    res.json(await runReport(db, cid, req.body?.def, { limit: 500 }));
+    res.json(await runReport(db, cid, req.body?.def, { sources: await companySources(db, cid, req.user.uid), limit: 500 }));
   }));
   app.post("/api/report-builder/export", auth(...MGR), wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid);
-    const f = toFile(await runReport(db, cid, req.body?.def), String(req.body?.name || "report"), String(req.query.format || "xlsx"));
+    const f = toFile(await runReport(db, cid, req.body?.def, { sources: await companySources(db, cid, req.user.uid) }), String(req.body?.name || "report"), String(req.query.format || "xlsx"));
     res.type(f.mime).attachment(f.file).send(f.body);
   }));
 
@@ -90,7 +110,7 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
   }));
   const save = async (req: any, cid: number, body: any, id?: number) => {
     const name = String(body?.name || "").trim().slice(0, 80); if (!name) throw bad("Give the report a name");
-    const def = validateDef(body.def);
+    const def = validateDef(body.def, await companySources(db, cid, req.user.uid));
     const vals = [name, String(body.description || "").slice(0, 300) || null, JSON.stringify(def), JSON.stringify(cleanRoles(body.roles)), !!body.pinned, JSON.stringify(cleanSchedule(body.schedule))];
     if (id) return (await db.query("UPDATE custom_reports SET name=$1,description=$2,def=$3,roles=$4,pinned=$5,schedule=$6,updated_at=NOW() WHERE id=$7 AND company_id=$8 RETURNING *", [...vals, id, cid])).rows[0];
     const n = (await db.query("SELECT COUNT(*) AS n FROM custom_reports WHERE company_id=$1", [cid])).rows[0].n;
@@ -125,7 +145,7 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
     const cid = await ctx(req, res); if (cid == null) return;
     const list = (await db.query("SELECT * FROM custom_reports WHERE company_id=$1 AND pinned=TRUE ORDER BY name", [cid])).rows.filter(r => canSee(req, r)).slice(0, 8);
     const outp = [];
-    for (const r of list) { try { outp.push({ ...out(r), result: await runReport(db, cid, parseJson(r.def, {}), { force: force(req), limit: 50 }) }); } catch (e: any) { outp.push({ ...out(r), error: e.message }); } }
+    for (const r of list) { try { outp.push({ ...out(r), result: await runReport(db, cid, parseJson(r.def, {}), { sources: await companySources(db, cid, req.user.uid), force: force(req), limit: 50 }) }); } catch (e: any) { outp.push({ ...out(r), error: e.message }); } }
     res.json(outp);
   }));
   app.get("/api/custom-reports/:id", viewer, wrap(async (req, res) => { const cid = await ctx(req, res); if (cid == null) return; res.json(out(await get(req, cid))); }));
@@ -149,11 +169,11 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
   }));
   app.get("/api/custom-reports/:id/run", viewer, wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid); const r = await get(req, cid);
-    res.json(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { force: force(req), limit: 1000 }));
+    res.json(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { sources: await companySources(db, cid, req.user.uid), force: force(req), limit: 1000 }));
   }));
   app.get("/api/custom-reports/:id/export", viewer, wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid); const r = await get(req, cid);
-    const f = toFile(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { force: force(req) }), r.name, String(req.query.format || "xlsx"));
+    const f = toFile(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { sources: await companySources(db, cid, req.user.uid), force: force(req) }), r.name, String(req.query.format || "xlsx"));
     res.type(f.mime).attachment(f.file).send(f.body);
   }));
 }

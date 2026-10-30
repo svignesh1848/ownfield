@@ -66,9 +66,9 @@ const toRange = (from: string, to: string): Range => ({ from, to, lo: new Date(D
 
 const str = (v: unknown, max = 200) => String(v ?? "").slice(0, max);
 /** Check a definition against the whitelist and return a clean copy (unknown keys dropped). Throws 400 with a plain message. */
-export function validateDef(input: any): ReportDef {
+export function validateDef(input: any, SRC: Record<string, Source> = SOURCES): ReportDef {
   if (!input || typeof input !== "object") throw bad("Report definition is missing");
-  const src = SOURCES[String(input.source)]; if (!src) throw bad(`Unknown data source "${str(input.source, 40)}"`);
+  const src = SRC[String(input.source)]; if (!src) throw bad(`Unknown data source "${str(input.source, 40)}"`);
   const field = (k: unknown, what: string) => { const s = String(k); if (!src.fields[s]) throw bad(`Unknown ${what} "${str(k, 40)}" for ${src.label}`); return s; };
   const arr = (v: unknown, max: number, what: string) => { if (v == null) return []; if (!Array.isArray(v)) throw bad(`${what} must be a list`); if (v.length > max) throw bad(`Too many ${what} (max ${max})`); return v; };
   const columns = arr(input.columns, 40, "columns").map(c => field(c, "column"));
@@ -178,8 +178,8 @@ export type RunResult = { columns: { key: string; label: string; type: string }[
   range: { from: string; to: string } | null; compareRange: { from: string; to: string } | null; view: string; source: string };
 
 /** Run a report. `force` adds dim filters the caller can't remove (e.g. a sales rep sees only their own rows). */
-export async function runReport(db: Db, cid: number, input: any, opts: { force?: Partial<Record<Dim, number[]>>; now?: string; limit?: number } = {}): Promise<RunResult> {
-  const def = validateDef(input); const src = SOURCES[def.source];
+export async function runReport(db: Db, cid: number, input: any, opts: { force?: Partial<Record<Dim, number[]>>; now?: string; limit?: number; sources?: Record<string, Source> } = {}): Promise<RunResult> {
+  const SRC = opts.sources || SOURCES; const def = validateDef(input, SRC); const src = SRC[def.source];
   for (const [d, v] of Object.entries(opts.force || {}) as [Dim, number[]][]) { if (!src.dims[d]) throw bad("You can't see this report", 403); def.filters[d] = v; }
   const r0 = src.dateField || src.usesRange ? resolveRange(def.filters.dateRange, opts.now) : null;
   const range = r0 ? toRange(r0.from, r0.to) : null;
