@@ -199,15 +199,24 @@ async function importShop({ db, cid, s }: Imp, r: any) {
   if (state && !/^\d{2}$/.test(state)) throw bad("state code must be 2 digits");
   const pin = String(r.pincode ?? r.pin ?? r.pin_code ?? "").trim() || null;
   if (pin && !/^\d{6}$/.test(pin)) throw bad("PIN code must be 6 digits");
+  // Optional credit terms per outlet (blank keeps what is there; 0 = no limit / cash).
+  const term = (v: any, int: boolean, label: string) => { if (empty(v)) return undefined; const n = Number(String(v).replace(/,/g, "")); if (!(n >= 0) || (int && !Number.isInteger(n))) throw bad(`${label} must be a number ≥ 0`); return n; };
+  const climit = term(r.credit_limit, false, "credit limit"), cdays = term(r.credit_days, true, "credit days");
   const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, gstin, dl, custom, state, pin];
+  const setTerms = async (id: number) => {
+    if (climit !== undefined) await db.query("UPDATE shops SET credit_limit=$1 WHERE id=$2", [climit, id]);
+    if (cdays !== undefined) await db.query("UPDATE shops SET credit_days=$1 WHERE id=$2", [cdays, id]);
+  };
   const ex = (await db.query("SELECT id, distributor_id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
   if (ex) {
     await db.query("UPDATE shops SET updated_at=NOW(), name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,pincode=$10,distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
     if (!empty(r.outlet_type)) await db.query("UPDATE shops SET outlet_type=$1 WHERE id=$2", [String(r.outlet_type).trim().slice(0, 40), ex.id]);
+    await setTerms(ex.id);
     return "updated";
   }
-  if (!empty(r.outlet_type)) { await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code,outlet_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", [...vals, dist, cid, String(r.code), String(r.outlet_type).trim().slice(0, 40)]); return "inserted"; }
-  await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [...vals, dist, cid, String(r.code)]);
+  if (!empty(r.outlet_type)) { await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code,outlet_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", [...vals, dist, cid, String(r.code), String(r.outlet_type).trim().slice(0, 40)]); }
+  else await db.query("INSERT INTO shops (name,owner_name,phone,address,city,gstin,drug_licence,custom,state_code,pincode,distributor_id,company_id,code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [...vals, dist, cid, String(r.code)]);
+  await setTerms((await db.query("SELECT id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0].id);
   return "inserted";
 }
 

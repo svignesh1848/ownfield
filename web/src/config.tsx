@@ -117,7 +117,7 @@ export function ImportPage({ s, cfg, onUsage }: P) {
   const st = cfg.settings, f = st.features; const [msg, setMsg] = useState("");
   const cols: Record<string, string[]> = {
     products: ["Item Code", "Item Name", "Category", ...(f.services ? ["Type"] : []), "HSN", "SKU", ...st.attributes.map(label), "MRP", "Billing Price", "Units", ...st.customFields.product.map(x => x.label)],
-    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "State Code", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", "Outlet Type", ...st.customFields.outlet.map(x => x.label)],
+    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "State Code", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", "Outlet Type", "PIN Code", "Credit Limit", "Credit Days", ...st.customFields.outlet.map(x => x.label)],
     users: ["Name", "Email", "Phone", "Role", "Password", ...(f.drugLicence ? ["Drug Licence"] : [])],
     targets: ["Rep Email", "Month", "Metric", "Target"],
     prices: ["SKU", "Outlet Type", "Price"],
