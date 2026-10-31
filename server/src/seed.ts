@@ -70,6 +70,11 @@ export async function seedDemo(db: Db, code = "DEMO") {
       await db.query("INSERT INTO targets (company_id,rep_id,month,metric,target) VALUES ($1,$2,$3,'value',$4)", [cid, rep.id, month, 5000]);
   }
   });
+  // 4b) Manager login for testers (the "Use manager" button on the login page): manager@example.com / Demo@2026
+  await step("manager", async () => {
+  const m = await one(db, "SELECT id FROM users WHERE company_id=$1 AND email='manager@example.com'", [cid]);
+  if (!m) await db.query("INSERT INTO users (company_id,email,name,role,password_hash) VALUES ($1,'manager@example.com','Sample Manager','manager',$2)", [cid, await bcrypt.hash("Demo@2026", 10)]);
+  });
   // 5) Retailer app: retailer@example.com / Demo@2026 linked to a sample outlet that has a distributor
   await step("retailer", async () => {
   await enable(db, cid, ["retailerApp"]);

@@ -69,6 +69,7 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     {demo && <div className="hint"><b>{t("Sample logins for the DEMO company")}</b><br />{t("Admin: admin@example.com / Demo@2026")}<br />{t("Sales rep: rep@example.com / Demo@2026")}<br />{t("Distributor: distributor@example.com / Demo@2026")}<br />{t("Shop (retailer): retailer@example.com / Demo@2026")}<br /><span className="muted">{t("All DEMO data is sample data.")}</span>
       <div className="row-btns"><button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "admin@example.com", password: "Demo@2026" })}>{t("Use admin")}</button>
         <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "rep@example.com", password: "Demo@2026" })}>{t("Use sales rep")}</button>
+        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "manager@example.com", password: "Demo@2026" })}>{t("Use manager")}</button>
         <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "retailer@example.com", password: "Demo@2026" })}>{t("Use shop")}</button></div></div>}
     <Field label={t("Email")} help={t("The email address you were registered with.")} error={fe("email")}>
       <input type="email" inputMode="email" autoComplete="username" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>

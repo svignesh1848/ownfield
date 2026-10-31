@@ -1321,5 +1321,6 @@
  "New order #{0} from {1}": "New order #{0} from {1}",
  "Order #{0} at {1} needs your approval": "Order #{0} at {1} needs your approval",
  "Out for delivery": "ᱰᱮᱞᱤᱵᱷᱟᱨᱤ ᱞᱟᱹᱜᱤᱫ ᱵᱟᱦᱨᱮ",
- "{0} (ordered {1})": "{0} (ordered {1})"
+ "{0} (ordered {1})": "{0} (ordered {1})",
+ "Use manager": "ᱢᱟᱱᱮᱡᱚᱨ ᱵᱮᱵᱷᱟᱨ ᱢᱮ"
 }
