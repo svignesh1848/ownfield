@@ -74,6 +74,8 @@ export function errorHandler(err: any, req: Request, res: Response, _n: NextFunc
   const dup = err.code === "23505" || /duplicate key|unique constraint/i.test(err.message || "");
   if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "photo is too large — please take a smaller photo" });
   if (dup) return res.status(409).json({ error: "already exists" });
+  // A missing or non-numeric id (e.g. no outlet picked) reaches SQL as NaN: that is a bad request, not a server fault.
+  if (err.code === "22P02" || /invalid input syntax for (type )?(integer|bigint|numeric)/i.test(err.message || "")) return res.status(400).json({ error: "Invalid request — a required item (outlet, order or product) is missing or wrong" });
   const status = Number(err.status || err.statusCode) || 500;
   if (status < 500 && err.expose !== false && err.status) return res.status(status).json({ error: err.type === "entity.parse.failed" ? "Invalid request" : err.message });
   console.error(`[error] ${req.method} ${req.originalUrl}:`, err.stack || err);
