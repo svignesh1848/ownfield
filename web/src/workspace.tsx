@@ -13,7 +13,9 @@ export function DataWorkspace({ s }: ViewProps) {
   const [res, setRes] = useState<any>(null); const [busy, setBusy] = useState(false); const [ds, setDs] = useState<any[]>([]); const [cur, setCur] = useState<any>(null);
   const [name, setName] = useState(""); const [tab, setTab] = useState("sql");
   const loadDs = () => api(s, "/api/data-workspace/datasets").then(setDs).catch(() => {});
-  useEffect(() => { api(s, "/api/data-workspace/schema").then(setSchema).catch(e => setErr(e.message)); loadDs(); }, []);
+  // Ask first whether this user may use the workspace, so a manager who is not a data analyst sees a clear note instead of a failed call.
+  useEffect(() => { api(s, "/api/data-workspace/me").then(m => { if (!m.allowed) return setErr(t("Only admins and data analysts can use the data workspace"));
+    api(s, "/api/data-workspace/schema").then(setSchema).catch(e => setErr(e.message)); loadDs(); }).catch(e => setErr(e.message)); }, []);
   if (err) return <Empty icon="🔒" title={t("Data workspace")} text={err} />;
   if (!schema) return <Loading />;
   const run = async () => { setBusy(true); try { setRes(await api(s, "/api/data-workspace/query", { method: "POST", body: JSON.stringify({ sql }) })); } catch (e: any) { setRes({ error: e.message }); } finally { setBusy(false); } };

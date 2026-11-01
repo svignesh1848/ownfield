@@ -177,9 +177,11 @@ export async function llmWording(facts: string[], fetcher: typeof fetch = fetch)
 
 export function registerAiRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   app.get("/api/ai/status", auth(...MGR, "sales_rep"), wrap(async (_req, res) => { const p = aiProvider(); res.json({ provider: p.name, model: p.model || null }); }));
-  app.post("/api/ai/suggest", auth(...MGR, "sales_rep"), wrap(async (req, res) => {
+  app.post("/api/ai/suggest", auth(...MGR, "sales_rep", "retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    res.json(await smartSuggest(db, cid, Number(req.body?.shopId)));
+    // A retailer gets suggestions for its own shop only.
+    const sid = req.user.role === "retailer" ? (await db.query("SELECT shop_id FROM users WHERE id=$1 AND company_id=$2", [req.user.uid, cid])).rows[0]?.shop_id : Number(req.body?.shopId);
+    res.json(await smartSuggest(db, cid, Number(sid)));
   }));
   app.get("/api/ai/summary", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;

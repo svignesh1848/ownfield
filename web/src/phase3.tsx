@@ -56,9 +56,9 @@ export function AuditSetup({ s }: ViewProps) {
   const load = () => api(s, "/api/audit-templates?all=1").then(setList).catch(e => { setList([]); toast(e.message, "err"); }); useEffect(() => { load(); }, []);
   const save = async () => { try { await api(s, "/api/audit-templates", { method: "POST", body: JSON.stringify({ name, questions: qs.filter(q => q.label.trim()) }) }); setName(""); setQs([{ label: "", type: "yes_no", required: false }]); load(); } catch (e: any) { toast(e.message, "err"); } };
   return <><h2>{t("Store checklists")}</h2><p className="muted">{t("Questions your sales reps answer at each outlet visit.")}</p>
-    {list == null ? <Loading /> : list.map(t => <div className="row" key={t.id}><b>{t.name}</b> {!t.active && <span className="pill">hidden</span>}
-      <div className="muted small">{t.questions.map((q: any) => `${q.label} (${QTYPE[q.type]}${q.target ? ` · ${i18n("target {0}", q.target)}` : ""})`).join(" · ")}</div>
-      <button className="sm ghost" onClick={() => api(s, `/api/audit-templates/${t.id}`, { method: "PUT", body: JSON.stringify({ active: !t.active }) }).then(load)}>{t.active ? t("Hide") : t("Show again")}</button></div>)}
+    {list == null ? <Loading /> : list.map(tp => <div className="row" key={tp.id}><b>{tp.name}</b> {!tp.active && <span className="pill">hidden</span>}
+      <div className="muted small">{tp.questions.map((q: any) => `${q.label} (${QTYPE[q.type]}${q.target ? ` · ${i18n("target {0}", q.target)}` : ""})`).join(" · ")}</div>
+      <button className="sm ghost" onClick={() => api(s, `/api/audit-templates/${tp.id}`, { method: "PUT", body: JSON.stringify({ active: !tp.active }) }).then(load)}>{tp.active ? t("Hide") : t("Show again")}</button></div>)}
     <div className="card sub"><h3>{t("New checklist")}</h3>
       <Field label={t("Checklist name")}><input value={name} placeholder={t("e.g. Shelf check")} onChange={e => setName(e.target.value)} /></Field>
       {qs.map((q, i) => <div className="qrow" key={i}><input placeholder={t("Question {0}", i + 1)} value={q.label} onChange={e => setQs(qs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />

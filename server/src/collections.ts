@@ -115,10 +115,12 @@ export function registerCollectionRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       { days: s => creditTerms(settings, s).days || Infinity });
     res.json(rows.filter(r => r.invoices.length || r.advance).map(r => ({ ...r, terms: creditTerms(settings, shops.get(r.shop_id)) })));
   }));
-  app.get("/api/credit-check", auth(...ALL), wrap(async (req, res) => {
+  app.get("/api/credit-check", auth(...ALL, "retailer"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const { settings } = await getCompany(db, cid);
-    const shop = (await db.query("SELECT * FROM shops WHERE id=$1 AND company_id=$2", [Number(req.query.shopId), cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
+    // A retailer can only check its own shop.
+    const sid = req.user.role === "retailer" ? (await db.query("SELECT shop_id FROM users WHERE id=$1", [req.user.uid])).rows[0]?.shop_id : Number(req.query.shopId);
+    const shop = (await db.query("SELECT * FROM shops WHERE id=$1 AND company_id=$2", [sid, cid])).rows[0]; if (!shop) throw bad("shop not found", 404);
     res.json(await creditCheck(db, cid, settings, shop, Number(req.query.amount) || 0));
   }));
 
