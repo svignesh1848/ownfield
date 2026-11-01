@@ -17,4 +17,5 @@ printf '[Unit]\nDescription=OwnField BI database allow-list sync\nAfter=postgres
 printf '[Unit]\nDescription=OwnField BI allow-list sync every 2 min\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=2min\n[Install]\nWantedBy=timers.target\n' >/etc/systemd/system/fieldforce-oss-bi-sync.timer
 systemctl daemon-reload && systemctl enable --now fieldforce-oss-bi-sync.timer >/dev/null 2>&1
 timeout 120 env APPU="$APPU" APPDB="$APPDB" /usr/local/sbin/fieldforce-oss-bi-sync || echo "server-hook: bi sync failed"
+timeout 300 bash "$D/domain-setup.sh" || echo "server-hook: domain setup failed"
 exit 0

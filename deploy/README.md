@@ -12,3 +12,4 @@ as root. The root `package.json` `postinstall` runs `deploy/server-hook.sh`, whi
    logins from the IPs admins entered in the app, over TLS, and writes `/var/lib/fieldforce-oss-bi/status.json` for the app.
 
 When you turn on `BI_DB_EXPOSE=1`, also allow TCP 5432 in the AWS security group **only** from those IPs (`/32`), never `0.0.0.0/0`.
+3. runs `domain-setup.sh`: adds `ownfield.in www.ownfield.in` to the nginx server_name next to the sslip.io name (once DNS points here) and expands the Let's Encrypt cert via `certbot --nginx --expand --redirect`; renewal via `certbot.timer`.
