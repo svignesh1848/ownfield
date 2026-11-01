@@ -250,3 +250,20 @@ describe("11. van sales from a distributor's stock are invoiced by that distribu
     expect(mine.some((i: any) => i.id === s.invoice.id)).toBe(true);
   });
 });
+
+describe("12. orders placed by retailers are not attributed to a rep in reports", () => {
+  it("shows 'Retailer: <shop>' as placed by, in the report builder, the export and the order list", async () => {
+    await on({ retailerApp: true, stock: false });
+    const shopName = (await request(app).get("/api/shops").set(as("adm"))).body.find((s: any) => s.id === id.s).name;
+    T.shop ||= await login("FL", "shop@x.com");
+    const v = (await db.query("SELECT sku FROM variants ORDER BY id LIMIT 1")).rows[0].sku;
+    const o = (await request(app).post("/api/orders").set(as("shop")).send({ clientRef: "ret-1", lines: [{ sku: v, qty: 1 }] }).expect(201)).body;
+    const p = (await request(app).post("/api/report-builder/preview").set(as("adm")).send({ def: { source: "orders", filters: { dateRange: { preset: "this_month" } }, groupBy: ["rep"], metrics: [{ fn: "count" }], view: { type: "table" } } }).expect(200)).body;
+    const names = p.rows.map((r: any) => r.rep);
+    expect(names).toContain(`Retailer: ${shopName}`); expect(names).not.toContain("Shop");
+    const list = (await request(app).get("/api/orders").set(as("adm"))).body.find((x: any) => x.id === o.id);
+    expect(list.placed_by).toBe(`Retailer: ${shopName}`);
+    const csv = (await request(app).get("/api/reports/orders?format=csv").set(as("adm")).expect(200)).text;
+    expect(csv).toContain(`Retailer: ${shopName}`);
+  });
+});

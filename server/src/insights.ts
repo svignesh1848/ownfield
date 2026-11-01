@@ -99,7 +99,7 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const inRange = (d: string) => d >= from && d <= to;
     let rows: Record<string, unknown>[];
     switch (req.params.kind) {
-      case "orders": rows = (await db.query(`SELECT o.id, o.created_at, o.status, u.name AS rep, s.code AS outlet_code, s.name AS outlet, d.name AS distributor, v.sku, i.name AS item, v.attrs,
+      case "orders": rows = (await db.query(`SELECT o.id, o.created_at, o.status, CASE WHEN u.role='retailer' THEN 'Retailer: ' || s.name ELSE u.name END AS rep, s.code AS outlet_code, s.name AS outlet, d.name AS distributor, v.sku, i.name AS item, v.attrs,
           l.qty, l.uom, l.base_qty, l.price, l.discount_pct, l.amount, l.free, sc.name AS scheme FROM orders o JOIN order_lines l ON l.order_id=o.id JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
           JOIN users u ON u.id=o.rep_id JOIN shops s ON s.id=o.shop_id LEFT JOIN users d ON d.id=o.distributor_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE o.company_id=$1 ORDER BY o.id, l.id`, [cid])).rows
         .filter(r => inRange(dayKey(r.created_at))).map(r => ({ order_id: r.id, date: dayKey(r.created_at), status: r.status, rep: r.rep, outlet_code: r.outlet_code, outlet: r.outlet,

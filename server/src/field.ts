@@ -305,7 +305,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     if (req.user.role === "retailer") await retailerShop(req, cid);
     const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2 AND o.status<>'pending_approval'" : req.user.role === "retailer" ? "AND o.shop_id=(SELECT shop_id FROM users WHERE id=$2)" : "";
-    const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name, u.role AS placed_by_role FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
+    const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name, u.role AS placed_by_role, CASE WHEN u.role='retailer' THEN 'Retailer: ' || s.name ELSE u.name END AS placed_by FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
       WHERE o.company_id=$1 ${scope} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
     for (const o of orders) {
       o.lines = (await db.query(`SELECT l.id,l.qty,l.ordered_qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,l.gross,l.free,l.scheme_id,l.variant_id,sc.name AS scheme,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l

@@ -107,7 +107,7 @@ describe("custom reports API", () => {
   });
   it("exports CSV and Excel", async () => {
     const c = await request(app).get(`/api/custom-reports/${id.shared}/export?format=csv`).set(as("adm")).expect(200);
-    expect(c.headers["content-type"]).toMatch(/csv/); expect(c.text).toMatch(/Sales rep,Total order value,Count/);
+    expect(c.headers["content-type"]).toMatch(/csv/); expect(c.text).toMatch(/Placed by,Total order value,Count/);
     const x = await request(app).post("/api/report-builder/export?format=xlsx").set(as("adm")).send({ def: sales, name: "Sales" }).buffer(true).parse((res, cb) => { const b: Buffer[] = []; res.on("data", d => b.push(d)); res.on("end", () => cb(null, Buffer.concat(b))); }).expect(200);
     expect((x.body as Buffer).subarray(0, 2).toString()).toBe("PK");
   });

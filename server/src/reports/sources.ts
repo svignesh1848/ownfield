@@ -47,21 +47,21 @@ const beatDim = (shopCol: string) => `${shopCol} IN (SELECT bs.shop_id FROM beat
 export const SOURCES: Record<string, Source> = {
   orders: {
     label: "Orders", description: "One row per order (header). Cancelled and rejected orders are left out, as on the dashboard.",
-    sql: `SELECT o.id, o.created_at, o.status, o.total, o.savings, r.name AS rep_name, d.name AS dist_name, ${SHOP_COLS}
+    sql: `SELECT o.id, o.created_at, o.status, o.total, o.savings, CASE WHEN r.role='retailer' THEN 'Retailer: ' || s.name ELSE r.name END AS rep_name, d.name AS dist_name, ${SHOP_COLS}
       FROM orders o JOIN users r ON r.id=o.rep_id JOIN shops s ON s.id=o.shop_id LEFT JOIN users d ON d.id=o.distributor_id WHERE o.company_id=$1 AND o.created_at>=$2 AND o.created_at<$3 AND o.status NOT IN ('rejected','cancelled')`,
     dateKind: "ts", dateField: "date",
     dims: { rep: "o.rep_id", distributor: "o.distributor_id", shop: "o.shop_id", area: "s.city", beat: beatDim("o.shop_id") },
-    fields: { order_id: col("Order no.", "number", "id"), date: col("Date", "date", "created_at"), status: col("Status", "text", "status"), rep: col("Sales rep", "text", "rep_name"),
+    fields: { order_id: col("Order no.", "number", "id"), date: col("Date", "date", "created_at"), status: col("Status", "text", "status"), rep: col("Placed by", "text", "rep_name"),
       distributor: f("Distributor", "text", r => r.dist_name || "Company"), ...SHOP_FIELDS, value: col("Order value", "money", "total"), savings: col("Discount given", "money", "savings") },
   },
   order_lines: {
     label: "Order lines (products)", description: "One row per product line in an order. Cancelled and rejected orders are left out.",
-    sql: `SELECT o.id, o.created_at, o.status, l.qty, l.base_qty, l.uom, l.price, l.discount_pct, l.amount, l.free, v.sku, v.attrs, i.name AS item_name, i.category, r.name AS rep_name, d.name AS dist_name, ${SHOP_COLS}
+    sql: `SELECT o.id, o.created_at, o.status, l.qty, l.base_qty, l.uom, l.price, l.discount_pct, l.amount, l.free, v.sku, v.attrs, i.name AS item_name, i.category, CASE WHEN r.role='retailer' THEN 'Retailer: ' || s.name ELSE r.name END AS rep_name, d.name AS dist_name, ${SHOP_COLS}
       FROM order_lines l JOIN orders o ON o.id=l.order_id JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id JOIN users r ON r.id=o.rep_id JOIN shops s ON s.id=o.shop_id
       LEFT JOIN users d ON d.id=o.distributor_id WHERE o.company_id=$1 AND o.created_at>=$2 AND o.created_at<$3 AND o.status NOT IN ('rejected','cancelled')`,
     dateKind: "ts", dateField: "date",
     dims: { rep: "o.rep_id", distributor: "o.distributor_id", shop: "o.shop_id", area: "s.city", beat: beatDim("o.shop_id"), product: "v.item_id", category: "i.category" },
-    fields: { order_id: col("Order no.", "number", "id"), date: col("Date", "date", "created_at"), status: col("Status", "text", "status"), rep: col("Sales rep", "text", "rep_name"),
+    fields: { order_id: col("Order no.", "number", "id"), date: col("Date", "date", "created_at"), status: col("Status", "text", "status"), rep: col("Placed by", "text", "rep_name"),
       distributor: f("Distributor", "text", r => r.dist_name || "Company"), ...SHOP_FIELDS, product: col("Product", "text", "item_name"), sku: col("Product code", "text", "sku"),
       variant: f("Variant", "text", r => attrs(r.attrs)), category: f("Category", "text", r => r.category || "—"), qty: col("Qty (base units)", "number", "base_qty"),
       price: col("Price", "money", "price"), discount_pct: col("Discount %", "number", "discount_pct"), value: col("Line value", "money", "amount"), free: col("Free item", "bool", "free") },

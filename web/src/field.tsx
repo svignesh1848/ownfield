@@ -249,7 +249,7 @@ export function Bell({ s, go }: { s: Session; go: (t: string) => void }) {
 }
 const OrderCard = ({ o, children }: { o: any; children?: any }) => <div className="row"><b>#{o.id} {o.shop_name}</b> <span className={`pill ${o.status}`}>{STATUS[o.status] || o.status}</span>{o.partial && <span className="pill">{t("Part delivered")}</span>}{o.placed_by_role === "retailer" && <span className="pill">{t("🏪 From the shop")}</span>}
   {o.status_reason && ["rejected", "cancelled"].includes(o.status) && <div className="muted small">{t("Reason: {0}", o.status_reason)}</div>}
-  <div className="muted">{o.rep_name} · {fmtDate(o.created_at, true)} · {inr(o.total)}{Number(o.savings) > 0 ? t(" · saved {0}", inr(o.savings)) : ""}</div>
+  <div className="muted">{o.placed_by || o.rep_name} · {fmtDate(o.created_at, true)} · {inr(o.total)}{Number(o.savings) > 0 ? t(" · saved {0}", inr(o.savings)) : ""}</div>
   {o.lines.map((l: any) => <div className="muted small" key={l.id}>{l.item_name} {attrText(l.attrs)} — {l.ordered_qty != null && l.ordered_qty !== l.qty ? t("{0} (ordered {1})", l.qty, l.ordered_qty) : l.qty} {l.uom}{l.free ? t(" FREE ({0})", l.scheme) : l.discount_pct > 0 ? ` (−${l.discount_pct}%${l.scheme ? ` ${l.scheme}` : ""})` : ""} = {inr(l.amount)}
     {l.allocations?.length > 0 && <span className="batches" title={t("Batches picked, nearest expiry first")}> {l.allocations.map((a: any) => `${a.batch_no || "stock"}${a.expiry ? ` exp ${fmtDate(a.expiry)}` : ""} ×${a.qty}`).join("; ")}</span>}</div>)}{children}<History h={o.history} /></div>;
 
