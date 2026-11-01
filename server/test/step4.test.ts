@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createApp, ensurePlatformOwner } from "../src/app.js";
 import { migrate, withTx, type Db } from "../src/db.js";
-import { allocateStock } from "../src/field.js";
+import { allocateStock, releaseStock } from "../src/field.js";
 import { txDb } from "./txdb.js";
 import { fyOf, rateFor, formatNumber } from "../src/billing.js";
 import { defaultGst } from "../src/templates.js";
@@ -106,11 +106,13 @@ describe("database transactions for stock", () => {
   });
   it("a failure mid-allocation leaves stock untouched", async () => {
     const o = await order("t1", shopIntra, [{ sku: "SPARA-500", qty: 35 }]);
-    const snap = await stockOf("SPARA-500");
+    const snap = await stockOf("SPARA-500"); // already held at placement
     const ord = (await db.query("SELECT * FROM orders WHERE id=$1", [o.id])).rows[0];
-    await expect(withTx(db, tx => allocateStock(tx, ord.company_id, ord, { afterFirstUpdate: async () => { throw new Error("crash after first update"); } }))).rejects.toThrow("crash");
+    const n = async () => Number((await db.query("SELECT COUNT(*) AS n FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1", [o.id])).rows[0].n);
+    const held = await n(); expect(held).toBeGreaterThan(0);
+    await expect(withTx(db, async tx => { await releaseStock(tx, ord.company_id, ord, null, "test"); await allocateStock(tx, ord.company_id, ord, { afterFirstUpdate: async () => { throw new Error("crash after first update"); } }); })).rejects.toThrow("crash");
     expect(await stockOf("SPARA-500")).toEqual(snap);
-    expect((await db.query("SELECT COUNT(*) AS n FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1", [o.id])).rows[0].n).toBe(0);
+    expect(await n()).toBe(held);
     await accept(o.id);
     expect(await stockOf("SPARA-500")).toMatchObject({ "SB-0127": 0, "SB-0627": 195 });
     await request(app).post(`/api/orders/${o.id}/status`).set(as("adm")).send({ status: "accepted" }).expect(409);
@@ -168,5 +170,37 @@ describe("report exports", () => {
     await request(app).get("/api/reports/nope").set(as("mgr")).expect(404);
     await request(app).get("/api/reports/orders").set(as("rep")).expect(403);
     await request(app).get("/api/reports/orders?from=2026-12-01&to=2026-01-01").set(as("mgr")).expect(400);
+  });
+});
+
+describe("stock hold at order placement", () => {
+  const total = async (sku: string) => Object.values(await stockOf(sku)).reduce((a: number, n: any) => a + Number(n), 0);
+  it("holds on place, releases on cancel / reject, converts on accept + invoice without double counting", async () => {
+    const t0 = await total("SPARA-500");
+    const a = await order("h1", shopIntra, [{ sku: "SPARA-500", qty: 5 }]);
+    expect(await total("SPARA-500")).toBe(t0 - 5); // held as soon as placed
+    await request(app).post(`/api/orders/${a.id}/cancel`).set(as("rep")).send({ reason: "Sample cancel" }).expect(200);
+    expect(await total("SPARA-500")).toBe(t0);
+    const b = await order("h2", shopIntra, [{ sku: "SPARA-500", qty: 4 }]);
+    await request(app).post(`/api/orders/${b.id}/status`).set(as("adm")).send({ status: "rejected", reason: "Sample reject" }).expect(200);
+    expect(await total("SPARA-500")).toBe(t0);
+    const c = await order("h3", shopIntra, [{ sku: "SPARA-500", qty: 3 }]);
+    await accept(c.id); expect(await total("SPARA-500")).toBe(t0 - 3);
+    await pid(c.id).expect(201); expect(await total("SPARA-500")).toBe(t0 - 3);
+    const al = (await db.query("SELECT COALESCE(SUM(a.qty),0) AS n FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1", [c.id])).rows[0].n;
+    expect(Number(al)).toBe(3);
+  });
+  it("editing re-holds; two reps cannot promise the same units", async () => {
+    const probe = await request(app).post("/api/orders").set(as("rep")).send({ clientRef: "h0", shopId: shopIntra, lines: [{ sku: "SPARA-500", qty: 99999 }] }).expect(409);
+    const left = Number(/(\d+) available/.exec(probe.body.error)![1]), base = (await total("SPARA-500")) - left;
+    const a = await order("h4", shopIntra, [{ sku: "SPARA-500", qty: left - 2 }]);
+    await request(app).put(`/api/orders/${a.id}`).set(as("rep")).send({ lines: [{ sku: "SPARA-500", qty: left - 1 }] }).expect(200);
+    expect(await total("SPARA-500")).toBe(base + 1);
+    const r = await request(app).post("/api/orders").set(as("rep2")).send({ clientRef: "h5", shopId: shopIntra, lines: [{ sku: "SPARA-500", qty: 2 }] });
+    expect(r.status).toBe(409); expect(r.body.error).toMatch(/1 available/);
+    await request(app).post("/api/orders").set(as("rep2")).send({ clientRef: "h6", shopId: shopIntra, lines: [{ sku: "SPARA-500", qty: 1 }] }).expect(201);
+    expect(await total("SPARA-500")).toBe(base);
+    await request(app).post(`/api/orders/${a.id}/cancel`).set(as("rep")).send({ reason: "Sample cancel" }).expect(200);
+    expect(await total("SPARA-500")).toBe(base + left - 1);
   });
 });

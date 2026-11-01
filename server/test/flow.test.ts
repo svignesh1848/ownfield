@@ -25,7 +25,7 @@ beforeAll(async () => {
   const shops = (await request(app).get("/api/shops").set(as("adm"))).body; id.s = shops[0].id; id.s2 = shops[1].id;
   const users = (await request(app).get("/api/users").set(as("adm"))).body; id.rep = users.find((u: any) => u.email === "r@x.com").id; id.dist = users.find((u: any) => u.email === "d@x.com").id;
   sku = (await db.query("SELECT sku FROM variants ORDER BY id LIMIT 1")).rows[0].sku;
-  await db.query("DELETE FROM stock WHERE variant_id=(SELECT id FROM variants WHERE sku=$1)", [sku]);
+  await db.query("UPDATE stock SET qty=0 WHERE variant_id=(SELECT id FROM variants WHERE sku=$1)", [sku]);
   await request(app).post("/api/inventory/moves").set(as("adm")).send({ distributorId: "company", kind: "in", lines: [{ sku, qty: 30, batch: "B1", expiry: "2099-01-31" }, { sku, qty: 10, batch: "B0", expiry: "2098-01-31" }] }).expect(201);
 });
 
@@ -155,7 +155,7 @@ describe("8. expiry block, adjustment reasons/approval, GRN", () => {
     await request(app).post("/api/van/load").set(as("adm")).send({ repId: id.rep, lines: [{ sku, qty: 1 }] }); // a closed van earlier; make sure none is open
     await request(app).post("/api/van/unload").set(as("adm")).send({ repId: id.rep });
     await request(app).post("/api/van/close").set(as("adm")).send({ repId: id.rep });
-    await db.query("DELETE FROM stock WHERE variant_id=(SELECT id FROM variants WHERE sku=$1)", [sku]);
+    await db.query("UPDATE stock SET qty=0 WHERE variant_id=(SELECT id FROM variants WHERE sku=$1)", [sku]);
     const soon = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
     await request(app).post("/api/inventory/moves").set(as("adm")).send({ distributorId: "company", kind: "in", lines: [{ sku, qty: 5, batch: "SOON", expiry: soon }] }).expect(201);
     await request(app).put("/api/flow-settings").set(as("adm")).send({ expiryBlockDays: 30 }).expect(200);

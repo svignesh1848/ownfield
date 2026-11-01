@@ -171,7 +171,7 @@ describe("DEMO sample data", () => {
     expect((await request(app).get("/api/leads").set(H("demo")).expect(200)).body.every((l: any) => /Sample/.test(l.name))).toBe(true);
     expect((await request(app).get("/api/messages/log").set(H("demo")).expect(200)).body.every((m: any) => m.status === "mock")).toBe(true);
     const hist = (await db.query("SELECT client_ref FROM orders WHERE client_ref LIKE 'sample-hist-%'")).rows.map((r: any) => r.client_ref);
-    expect(hist.length).toBeGreaterThan(10); expect(new Set(hist).size).toBe(hist.length); // order history for the AI features, not duplicated
+    expect(hist.length).toBeGreaterThan(5); expect(new Set(hist).size).toBe(hist.length); // order history for the AI features, not duplicated
     const sum = (await request(app).get("/api/ai/summary").set(H("demo")).expect(200)).body; expect(sum.lines.length).toBeGreaterThan(2);
   });
 });

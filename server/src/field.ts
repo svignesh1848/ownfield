@@ -193,13 +193,15 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (status === "placed" && o.distributor_id && o.distributor_id !== by) await notify(q, cid, o.distributor_id, "New order #{0} from {1}", [o.id, name], null, `inbox#${o.id}`);
   };
   const needsApproval = (settings: any, total: number) => { const a = settings.approval || { levels: 0, above: 0 }; return a.levels > 0 && total >= (a.above || 0); };
-  const checkCart = async (cid: number, settings: any, shop: any, lines: any) => {
+  const checkCart = async (cid: number, settings: any, shop: any, lines: any, editing: number | null = null) => {
     const items = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.qty) > 0);
     if (!items.length) throw bad("at least one line with qty > 0");
     const loc: number | null = shop.distributor_id ?? null;
     const { priced, need } = await priceLines(db, cid, settings, items, loc, shop);
     for (const [vid, { sku, n }] of need) {
-      const avail = (await fefoRows(db, cid, loc, vid)).reduce((a, r) => a + r.qty, 0);
+      // When editing, this order's own hold goes back to the pool first, so it counts as available to itself.
+      const own = editing == null ? 0 : Number((await db.query("SELECT COALESCE(SUM(a.qty),0) AS n FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1 AND l.variant_id=$2", [editing, vid])).rows[0].n);
+      const avail = (await fefoRows(db, cid, loc, vid)).reduce((a, r) => a + r.qty, 0) + own;
       if (avail < n) throw bad(`insufficient stock for ${sku}: ${avail} available, ${n} ordered (base units)`, 409);
     }
     const r = (n: number) => Math.round(n * 100) / 100;
@@ -227,6 +229,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
         [cid, String(clientRef), req.user.uid, shop.id, loc, total, savings, status])).rows[0];
       await insertLines(tx, o.id, priced);
+      // Hold stock the moment the order is placed (also while waiting for approval), so two orders cannot promise the same units.
+      if (settings.features.stock) await allocateStock(tx, cid, o);
       await orderEvent(tx, o.id, status, req.user.uid, credit.ok ? null : credit.reasons.join("; "));
       if (status === "placed") await tell(tx, cid, o, "placed", req.user.uid);
       else for (const m of (await tx.query("SELECT id FROM users WHERE company_id=$1 AND role IN ('company_admin','manager') AND active", [cid])).rows)
@@ -246,13 +250,15 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (!["placed", "pending_approval"].includes(o.status)) throw bad("only new orders can be edited", 409);
     const shop = await shopIn(cid, o.shop_id);
     const { settings } = await getCompany(db, cid);
-    const { priced, total, savings, credit } = await checkCart(cid, settings, shop, req.body?.lines);
+    const { priced, total, savings, credit } = await checkCart(cid, settings, shop, req.body?.lines, o.id);
     const status = needsApproval(settings, total) ? "pending_approval" : o.status === "pending_approval" && o.approval_level > 0 ? "pending_approval" : "placed";
     const u = await withTx(db, async tx => {
       const u = (await tx.query("UPDATE orders SET updated_at=NOW(), total=$1, savings=$2, status=$3, approval_level=0 WHERE id=$4 AND status=$5 RETURNING *", [total, savings, status, o.id, o.status])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
+      await releaseStock(tx, cid, o, req.user.uid, "order edited");
       await tx.query("DELETE FROM order_lines WHERE order_id=$1", [o.id]);
       await insertLines(tx, o.id, priced);
+      if (settings.features.stock) await allocateStock(tx, cid, u);
       await orderEvent(tx, o.id, "edited", req.user.uid, `${o.total} → ${total}`);
       if (o.rep_id !== req.user.uid) await notify(tx, cid, o.rep_id, "Order #{0} at {1}: {2}", [o.id, shop.name, "edited"], null, `orders#${o.id}`);
       await emit(tx, cid, "order.status_changed", { id: u.id, client_ref: u.client_ref, from: o.status, status: "edited", total });
@@ -276,6 +282,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       const u = (await tx.query("UPDATE orders SET status=$1, approval_level=$2, status_reason=COALESCE($3,status_reason), status_by=$4 WHERE id=$5 AND status='pending_approval' AND approval_level=$6 RETURNING *",
         [to, reject ? o.approval_level : level, reason, req.user.uid, o.id, o.approval_level])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
+      if (reject) await releaseStock(tx, cid, o, req.user.uid, reason || "rejected");
       await orderEvent(tx, o.id, reject ? "rejected" : "approved", req.user.uid, reason ?? (reject ? null : `level ${level} of ${levels}`));
       if (to !== "pending_approval") await tell(tx, cid, u, to, req.user.uid, reason);
       if (to !== "pending_approval") await emit(tx, cid, "order.status_changed", { id: u.id, client_ref: u.client_ref, from: o.status, status: to, total: Number(u.total) });
@@ -333,7 +340,9 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       // Status compare-and-set + stock allocation commit together or not at all.
       const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status=$1, status_reason=COALESCE($4, status_reason), status_by=$5 WHERE id=$2 AND status=$3 RETURNING *", [to, o.id, o.status, reason, req.user.uid])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
-      if (to === "accepted" && settings.features.stock) await allocateStock(tx, cid, o);
+      // The hold taken at placement becomes the allocation; only orders placed before holds existed (no allocation yet) are allocated now.
+      if (to === "accepted" && settings.features.stock && !(await hasAllocation(tx, o.id))) await allocateStock(tx, cid, o);
+      if (to === "rejected") await releaseStock(tx, cid, o, req.user.uid, reason || "rejected");
       if (given) {
         if ((await tx.query("SELECT id FROM invoices WHERE order_id=$1 AND kind='invoice'", [o.id])).rows[0]) throw bad("order is invoiced — record short supply as a return / credit note", 409);
         const lines = (await tx.query("SELECT * FROM order_lines WHERE order_id=$1", [o.id])).rows;
@@ -392,12 +401,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const u = await withTx(db, async tx => {
       const u = (await tx.query("UPDATE orders SET updated_at=NOW(), status='cancelled', status_reason=$1, status_by=$2 WHERE id=$3 AND status=$4 RETURNING *", [reason, req.user.uid, o.id, o.status])).rows[0];
       if (!u) throw bad("order changed meanwhile — reload", 409);
-      const al = (await tx.query("SELECT a.id, a.stock_id, a.qty, a.batch_no, l.variant_id FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1", [o.id])).rows;
-      for (const a of al) {
-        await tx.query("UPDATE stock SET updated_at=NOW(), qty=qty+$1 WHERE id=$2", [a.qty, a.stock_id]);
-        await logMove(tx, cid, o.distributor_id ?? null, a.variant_id, a.batch_no || "", a.qty, "cancel", `order:${o.client_ref}`, req.user.uid, reason);
-        await tx.query("DELETE FROM order_allocations WHERE id=$1", [a.id]);
-      }
+      await releaseStock(tx, cid, o, req.user.uid, reason, "cancel");
       await orderEvent(tx, o.id, "cancelled", req.user.uid, reason);
       await tell(tx, cid, u, "cancelled", req.user.uid, reason);
       if (o.distributor_id && o.distributor_id !== req.user.uid && o.status !== "pending_approval")
@@ -439,7 +443,19 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
 }
 
-/** FEFO allocation for an accepted order: plan first (a shortfall changes nothing), then apply with compare-and-set. Call inside withTx. */
+async function hasAllocation(db: Db, oid: number) {
+  return !!(await db.query("SELECT 1 FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1 LIMIT 1", [oid])).rows[0];
+}
+/** Put an order's held/allocated stock back into the same batches (cancel, reject, edit). Call inside withTx. */
+export async function releaseStock(db: Db, cid: number, o: any, uid: number | null, note: string | null, kind = "release") {
+  const al = (await db.query("SELECT a.id, a.stock_id, a.qty, a.batch_no, l.variant_id FROM order_allocations a JOIN order_lines l ON l.id=a.order_line_id WHERE l.order_id=$1", [o.id])).rows;
+  for (const a of al) {
+    await db.query("UPDATE stock SET updated_at=NOW(), qty=qty+$1 WHERE id=$2", [a.qty, a.stock_id]);
+    await logMove(db, cid, o.distributor_id ?? null, a.variant_id, a.batch_no || "", a.qty, kind, `order:${o.client_ref}`, uid, note);
+    await db.query("DELETE FROM order_allocations WHERE id=$1", [a.id]);
+  }
+}
+/** FEFO hold/allocation for an order (taken when it is placed): plan first (a shortfall changes nothing), then apply with compare-and-set. Call inside withTx. */
 export async function allocateStock(db: Db, cid: number, o: any, hooks: { afterFirstUpdate?: () => Promise<void> } = {}) {
       // FEFO allocation: plan everything first so a shortfall changes nothing, then apply.
       const lines = (await db.query(`SELECT l.id, l.variant_id, l.base_qty, v.sku, i.kind FROM order_lines l JOIN variants v ON v.id=l.variant_id

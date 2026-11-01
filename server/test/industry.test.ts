@@ -95,7 +95,7 @@ describe("configurable products, units and custom fields (FMCG)", () => {
     const o = (await request(app).post("/api/orders").set(as("FM_rep")).send({ clientRef: "fm1", shopId: sid, lines: [{ sku: "SCH-50", qty: 2, uom: "BOX" }] }).expect(201)).body;
     expect(Number(o.total)).toBe(364.8); // 24 pcs × 16 × 0.95
     const big = await request(app).post("/api/orders").set(as("FM_rep")).send({ clientRef: "fm2", shopId: sid, lines: [{ sku: "SCH-50", qty: 3, uom: "CASE" }] });
-    expect(big.status).toBe(409); expect(big.body.error).toMatch(/240 available/);
+    expect(big.status).toBe(409); expect(big.body.error).toMatch(/216 available/); // 24 of 240 are held by order fm1
     await request(app).post("/api/orders").set(as("FM_rep")).send({ clientRef: "fm3", shopId: sid, lines: [{ sku: "SCH-50", qty: 1, uom: "PALLET" }] }).expect(400);
   });
 });
