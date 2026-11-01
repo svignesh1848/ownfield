@@ -5,7 +5,7 @@ import { withTx } from "./db.js";
 import { bad, today, getCompany, fefoRows } from "./catalog.js";
 import { logMove } from "./inventory.js";
 import { priceLines } from "./field.js";
-import { invoiceOrder, loadInvoice, fyOf, nextNumber, r2 } from "./billing.js";
+import { invoiceOrder, loadInvoice, fyOf, nextNumber, r2, distributorIssuer } from "./billing.js";
 import { emit } from "./integrations/webhooks.js";
 import { type Ctx, MGR, requireFeature } from "./common.js";
 
@@ -82,7 +82,7 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const loads = (await db.query("SELECT l.*, u.name AS rep_name FROM van_loads l JOIN users u ON u.id=l.rep_id WHERE l.company_id=$1 AND l.day=$2 ORDER BY l.id", [cid, day])).rows;
     res.json(await Promise.all(loads.map(l => vanSummary(db, l))));
   }));
-  // On-the-spot sale from the van: the order is fulfilled at once and (with invoicing on) invoiced by the company.
+  // On-the-spot sale from the van: the order is fulfilled at once and (with invoicing on) invoiced by the company — or, when the van was loaded from a distributor's stock, by that distributor.
   app.post("/api/van/sale", auth("sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return; const settings = await requireFeature(db, cid, "vanSales");
     const L = await openLoad(db, cid, req.user.uid); if (!L) throw bad("load your van first", 409);
@@ -97,7 +97,16 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (pay.mode === "credit" && !settings.features.invoicing) throw bad("credit sales need invoicing turned on");
     const { priced } = await priceLines(db, cid, settings, items, null);
     const want = new Map<number, number>(); for (const l of priced) want.set(l.vid, (want.get(l.vid) || 0) + l.base);
-    const gstOk = settings.features.invoicing && settings.gst.gstin && settings.gst.stateCode && settings.gst.legalName;
+    // Who bills: goods loaded from a distributor's stock are sold and invoiced by that distributor (its GSTIN, numbering and ledger);
+    // goods from the company warehouse are invoiced by the company.
+    const srcDist: number | null = L.source_distributor_id ?? null;
+    let issuer: { key: string; g: any } | null = null;
+    if (settings.features.invoicing) {
+      if (srcDist != null) {
+        issuer = await distributorIssuer(db, cid, settings, srcDist);
+        if (!issuer) throw bad("this van is loaded from a distributor's stock — that distributor must set legal name, GSTIN and state code in its profile before van sales can be invoiced", 409);
+      } else if (settings.gst.gstin && settings.gst.stateCode && settings.gst.legalName) issuer = { key: "company", g: settings.gst };
+    }
     const out = await withTx(db, async tx => {
       for (const [vid, n] of want) {
         const vl = (await tx.query("SELECT id, loaded, sold, unloaded FROM van_lines WHERE load_id=$1 AND variant_id=$2", [L.id, vid])).rows[0];
@@ -106,21 +115,21 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
         if (!(await tx.query("UPDATE van_lines SET sold=$1 WHERE id=$2 AND sold=$3 RETURNING id", [vl.sold + n, vl.id, vl.sold])).rows[0]) throw bad("van stock changed — retry", 409);
       }
       const total = Math.round(priced.reduce((a, l) => a + l.amount, 0) * 100) / 100, savings = Math.round(priced.reduce((a, l) => a + l.saving, 0) * 100) / 100;
-      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,status,total,savings,van_load_id) VALUES ($1,$2,$3,$4,NULL,'fulfilled',$5,$6,$7) RETURNING *",
-        [cid, String(clientRef), req.user.uid, shop.id, total, savings, L.id])).rows[0];
+      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,status,total,savings,van_load_id) VALUES ($1,$2,$3,$4,$5,'fulfilled',$6,$7,$8) RETURNING *",
+        [cid, String(clientRef), req.user.uid, shop.id, srcDist, total, savings, L.id])).rows[0];
       for (const l of priced) await tx.query("INSERT INTO order_lines (order_id,variant_id,uom,qty,base_qty,price,discount_pct,amount,gross,scheme_id,free) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
         [o.id, l.vid, l.uom, l.qty, l.base, l.price, l.disc, l.amount, l.gross, l.schemeId, l.free]);
       await emit(tx, cid, "order.created", { id: o.id, client_ref: o.client_ref, shop_id: o.shop_id, total, status: o.status, van: true });
-      const inv = gstOk ? await invoiceOrder(tx, cid, req.user.uid, settings, { key: "company", g: settings.gst }, o, today()) : null;
+      const inv = issuer ? await invoiceOrder(tx, cid, req.user.uid, settings, issuer, o, today()) : null;
       // Payment at the counter: cash, UPI or credit (unpaid part stays outstanding on the invoice).
       const due = inv ? Number(inv.total) : total;
       const paid = pay.mode === "credit" ? 0 : Math.min(due, pay.amount == null ? due : pay.amount);
       if (paid > 0) {
         let pid: number | null = null;
         if (inv) {
-          const fy = fyOf(today()), number = `RCPT/${fy}/${String(await nextNumber(tx, cid, "receipt", fy)).padStart(4, "0")}`;
-          const p = (await tx.query(`INSERT INTO payments (company_id,issuer,number,fy,shop_id,pay_date,mode,reference,amount,collected_by) VALUES ($1,'company',$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-            [cid, number, fy, shop.id, today(), pay.mode, pay.reference, paid, req.user.uid])).rows[0];
+          const fy = fyOf(today()), number = `RCPT/${fy}/${String(await nextNumber(tx, cid, issuer!.key === "company" ? "receipt" : `receipt:${issuer!.key}`, fy)).padStart(4, "0")}`;
+          const p = (await tx.query(`INSERT INTO payments (company_id,issuer,number,fy,shop_id,pay_date,mode,reference,amount,collected_by) VALUES ($1,$10,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+            [cid, number, fy, shop.id, today(), pay.mode, pay.reference, paid, req.user.uid, issuer!.key])).rows[0];
           await tx.query("INSERT INTO payment_allocations (payment_id,invoice_id,amount) VALUES ($1,$2,$3)", [p.id, inv.id, paid]); pid = p.id;
         }
         await tx.query("INSERT INTO van_payments (load_id,order_id,mode,amount,reference,payment_id) VALUES ($1,$2,$3,$4,$5,$6)", [L.id, o.id, pay.mode, paid, pay.reference, pid]);

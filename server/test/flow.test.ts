@@ -223,3 +223,30 @@ describe("10. start/end day and the retailer home", () => {
     await request(app).get("/api/retailer/home").set(as("rep")).expect(403);
   });
 });
+
+describe("11. van sales from a distributor's stock are invoiced by that distributor", () => {
+  it("uses the distributor's GSTIN, numbering and ledger; company-stock vans stay company-invoiced", async () => {
+    await request(app).post("/api/van/unload").set(as("adm")).send({ repId: id.rep });
+    await request(app).post("/api/van/close").set(as("adm")).send({ repId: id.rep });
+    // company-stock van → company invoice
+    await request(app).post("/api/inventory/moves").set(as("adm")).send({ distributorId: "company", kind: "in", lines: [{ sku, qty: 5, batch: "CV1", expiry: "2099-06-30" }] }).expect(201);
+    const inv0 = (await db.query("SELECT issuer FROM invoices i JOIN orders o ON o.id=i.order_id WHERE o.client_ref='p1'")).rows[0];
+    expect(inv0.issuer).toBe("company");
+    // distributor-stock van
+    await request(app).post("/api/inventory/moves").set(as("dist")).send({ kind: "in", lines: [{ sku, qty: 10, batch: "DV1", expiry: "2099-12-31" }] }).expect(201);
+    const L = await request(app).post("/api/van/load").set(as("adm")).send({ repId: id.rep, sourceId: id.dist, lines: [{ sku, qty: 4 }] });
+    expect(L.status).toBe(201);
+    const blocked = await request(app).post("/api/van/sale").set(as("rep")).send({ clientRef: "dv0", shopId: id.s, lines: [{ sku, qty: 1 }], payment: { mode: "cash" } });
+    expect(blocked.status).toBe(409); expect(blocked.body.error).toMatch(/distributor/);
+    await request(app).put(`/api/distributors/${id.dist}/profile`).set(as("dist")).send({ legal_name: "Sample Distributor Pvt Ltd (sample)", gstin: "33BBBBB1111B1ZU", state_code: "33", invoice_prefix: "SDV" }).expect(200);
+    const s = (await request(app).post("/api/van/sale").set(as("rep")).send({ clientRef: "dv1", shopId: id.s, lines: [{ sku, qty: 2 }], payment: { mode: "cash" } }).expect(201)).body;
+    expect(s.invoice.issuer).toBe(`d${id.dist}`); expect(s.invoice.number).toMatch(/^SDV/);
+    expect(JSON.stringify(s.invoice.seller)).toContain("33BBBBB1111B1ZU");
+    expect(s.order.distributor_id).toBe(id.dist);
+    const pay = (await db.query("SELECT p.issuer FROM payments p JOIN payment_allocations a ON a.payment_id=p.id WHERE a.invoice_id=$1", [s.invoice.id])).rows[0];
+    expect(pay.issuer).toBe(`d${id.dist}`);
+    // the distributor sees it in its own invoice list; the company list shows it under the distributor
+    const mine = (await request(app).get("/api/invoices").set(as("dist")).expect(200)).body;
+    expect(mine.some((i: any) => i.id === s.invoice.id)).toBe(true);
+  });
+});

@@ -117,6 +117,13 @@ ${S.terms ? `<p><b>Terms</b><br>${esc(S.terms).replace(/\n/g, "<br>")}</p>` : ""
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; tenant: (req: any, res: Response) => number | null;
   wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void };
 
+/** A distributor as the issuer of a document: its own legal name, GSTIN, address and numbering series (key d<id>). Null when its profile lacks GST details. */
+export async function distributorIssuer(db: Db, cid: number, settings: Settings, did: number): Promise<{ key: string; g: Gst } | null> {
+  const p = await distributorProfile(db, cid, did);
+  if (!p?.legal_name || !p?.gstin || !p?.state_code) return null;
+  return { key: `d${did}`, g: { defaultRate: settings.gst.defaultRate, hsnRates: settings.gst.hsnRates, fyStartMonth: settings.gst.fyStartMonth, pan: String(p.gstin).slice(2, 12), stateName: GST_STATES[p.state_code] || "", legalName: p.legal_name, gstin: p.gstin, stateCode: p.state_code, address: p.address || "", city: p.city || "", pincode: p.pincode || "",
+    invoicePrefix: p.invoice_prefix || "INV", creditPrefix: p.credit_prefix || "CN", numberFormat: p.number_format || settings.gst.numberFormat } };
+}
 export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   const BILL = ["company_admin", "manager", "distributor"];
   const ready = async (cid: number) => {
@@ -132,10 +139,9 @@ export function registerBillingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       return { key: "company", g };
     }
     if (!settings.features.distributorBilling) throw bad("distributor billing is turned off for this company", 403);
-    const p = await distributorProfile(db, cid, req.user.uid);
-    if (!p?.legal_name || !p?.gstin || !p?.state_code) throw bad("set your legal name, GSTIN and state code in your profile first");
-    return { key: `d${req.user.uid}`, g: { defaultRate: settings.gst.defaultRate, hsnRates: settings.gst.hsnRates, fyStartMonth: settings.gst.fyStartMonth, pan: String(p.gstin).slice(2, 12), stateName: GST_STATES[p.state_code] || "", legalName: p.legal_name, gstin: p.gstin, stateCode: p.state_code, address: p.address || "", city: p.city || "", pincode: p.pincode || "",
-      invoicePrefix: p.invoice_prefix || "INV", creditPrefix: p.credit_prefix || "CN", numberFormat: p.number_format || settings.gst.numberFormat } };
+    const d = await distributorIssuer(db, cid, settings, req.user.uid);
+    if (!d) throw bad("set your legal name, GSTIN and state code in your profile first");
+    return d;
   };
   const scope = (req: any) => req.user.role === "distributor" ? `d${req.user.uid}` : null;
   const visible = async (req: any, cid: number, id: number) => {
