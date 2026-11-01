@@ -117,17 +117,26 @@ export function ImportPage({ s, cfg, onUsage }: P) {
   const st = cfg.settings, f = st.features; const [msg, setMsg] = useState("");
   const cols: Record<string, string[]> = {
     products: ["Item Code", "Item Name", "Category", ...(f.services ? ["Type"] : []), "HSN", "SKU", ...st.attributes.map(label), "MRP", "Billing Price", "Units", ...st.customFields.product.map(x => x.label)],
-    shops: ["Code", "Name", "Owner Name", "Phone", "Address", "City", "State Code", "GSTIN", ...(f.drugLicence ? ["Drug Licence"] : []), "Distributor Email", "Outlet Type", "PIN Code", "Credit Limit", "Credit Days", ...st.customFields.outlet.map(x => x.label)],
+    shops: ["Code", "Name", "Owner Name", "Contact Person", "Phone", "Email", "GSTIN", "PAN", "Address", "City", "State", "State Code", "PIN Code", ...(f.drugLicence ? ["Drug Licence"] : []), "Latitude", "Longitude", "Channel", "Outlet Type", "Outlet Class", "Beat", "Distributor Email", "Rep Email", "Credit Limit", "Credit Days", "Payment Terms", "Active",
+      ...st.customFields.outlet.map(x => x.label).filter(l => !["outlet class", "outlet type", "channel"].includes(l.toLowerCase()))],
     users: ["Name", "Email", "Phone", "Role", "Password", ...(f.drugLicence ? ["Drug Licence"] : [])],
     targets: ["Rep Email", "Month", "Metric", "Target"],
     prices: ["SKU", "Outlet Type", "Price"],
     ...(f.stock ? { stock: ["SKU", "Qty", "Unit", ...(f.batches ? ["Batch", "Expiry"] : []), "Distributor Email"] } : {}),
   };
-  const dl = (k: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([cols[k].join(",") + "\n"], { type: "text/csv" })); a.download = `${k}-template.csv`; a.click(); };
+  const save = (b: Blob, name: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); };
+  // Retailer master: the server builds an Excel template with labelled sample rows and a read-me sheet.
+  const dl = async (k: string) => {
+    if (k !== "shops") return save(new Blob([cols[k].join(",") + "\n"], { type: "text/csv" }), `${k}-template.csv`);
+    const r = await fetch("/api/import/shops/template", { headers: { Authorization: `Bearer ${s.token}` } });
+    if (!r.ok) return setMsg(r.statusText); save(await r.blob(), "retailer-master-template.xlsx");
+  };
+  const [errs, setErrs] = useState<any[]>([]);
   return <><h2>{t("Upload data from Excel")}</h2><p className="muted">{t("Download a template, fill it in Excel, and upload it. You can upload the same file again to update.")}</p>
-    {Object.keys(cols).map(k => <form key={k} className="row" onSubmit={async e => { e.preventDefault(); try { const r = await api(s, `/api/import/${k}`, { method: "POST", body: new FormData(e.currentTarget) }); setMsg(t("{0}: {1} added, {2} updated, {3} errors {4}", k, r.inserted, r.updated, r.errors.length, r.errors.map((x: any) => `[row ${x.row}: ${x.error}]`).join(" "))); onUsage?.(r.usage); } catch (x: any) { setMsg(x.message); } }}>
-      <label><b>{label(k)}</b> <a href="#" onClick={e => { e.preventDefault(); dl(k); }}>{t("download template")}</a></label>
+    {Object.keys(cols).map(k => <form key={k} className="row" onSubmit={async e => { e.preventDefault(); try { const r = await api(s, `/api/import/${k}`, { method: "POST", body: new FormData(e.currentTarget) }); setMsg(t("{0}: {1} added, {2} updated, {3} errors {4}", label(k), r.inserted, r.updated, r.errors.length, r.skipped ? `· ${r.skipped} sample rows skipped` : "")); setErrs(r.errors.map((x: any) => ({ ...x, kind: label(k) }))); onUsage?.(r.usage); } catch (x: any) { setMsg(x.message); } }}>
+      <label><b>{k === "shops" ? "Retailer master (outlets)" : label(k)}</b> <a href="#" onClick={e => { e.preventDefault(); dl(k); }}>{t("download template")}</a></label>
       <div className="muted small">{cols[k].join(" · ")}</div>
       <input name="file" type="file" accept=".xlsx,.xls,.csv" required /><button className="sm">{t("Upload")}</button></form>)}
-    <p className="muted">{t("Columns follow this company's attributes, units and custom fields. Units column format:")}{" "}<code>{t("PCS=1|BOX=12")}</code> {t("(blank = company default).")}</p><p>{msg}</p></>;
+    <p className="muted">{t("Columns follow this company's attributes, units and custom fields. Units column format:")}{" "}<code>{t("PCS=1|BOX=12")}</code> {t("(blank = company default).")}</p><p>{msg}</p>
+    {errs.length > 0 && <table className="tbl"><thead><tr><th>Row</th><th>Code</th><th>Error</th></tr></thead><tbody>{errs.map((x, i) => <tr key={i}><td>{x.row}</td><td>{x.code || ""}</td><td>{x.error}</td></tr>)}</tbody></table>}</>;
 }

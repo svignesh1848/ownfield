@@ -194,6 +194,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   };
   const needsApproval = (settings: any, total: number) => { const a = settings.approval || { levels: 0, above: 0 }; return a.levels > 0 && total >= (a.above || 0); };
   const checkCart = async (cid: number, settings: any, shop: any, lines: any, editing: number | null = null) => {
+    if (shop.active === false) throw bad("this retailer is marked inactive — ask the admin to reactivate it", 409);
     const items = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.qty) > 0);
     if (!items.length) throw bad("at least one line with qty > 0");
     const loc: number | null = shop.distributor_id ?? null;

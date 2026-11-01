@@ -183,8 +183,19 @@ type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; tenant: (req: any
   addUser: (cid: number, u: any) => Promise<any>; companyUsage: (cid: number) => Promise<any> };
 export type Imp = { db: Db; cid: number; s: Settings; role: string; uid: number; addUser: Ctx["addUser"] };
 
+/** Retailer master columns (template order). Sample rows use codes starting SAMPLE-ROW and are skipped on upload. */
+export const SHOP_COLUMNS = ["Code", "Name", "Owner Name", "Contact Person", "Phone", "Email", "GSTIN", "PAN", "Address", "City", "State", "State Code", "PIN Code",
+  "Latitude", "Longitude", "Channel", "Outlet Type", "Outlet Class", "Beat", "Distributor Email", "Rep Email", "Credit Limit", "Credit Days", "Payment Terms", "Active"];
+export const SHOP_SAMPLE_ROWS = [
+  ["SAMPLE-ROW-1", "Sample Kirana Store (sample row — replace or delete)", "Sample Owner", "Sample Contact", "9000000001", "sample.store1@example.com", "33AAAAA0000A1Z9", "AAAAA0000A", "1 Sample Street", "Chennai", "Tamil Nadu", "33", "600001",
+    "13.0827", "80.2707", "General trade", "Kirana", "A", "Sample Beat Monday", "", "", "50000", "15", "15 days credit", "Yes"],
+  ["SAMPLE-ROW-2", "Sample Chemist (sample row — replace or delete)", "Sample Owner 2", "", "9000000002", "", "", "", "2 Sample Road", "Bengaluru", "Karnataka", "29", "560001",
+    "", "", "Pharmacy", "Chemist", "B", "", "", "", "0", "0", "Cash", "No"],
+];
+const yes = (v: unknown) => { const t = String(v).trim().toLowerCase(); if (["yes", "y", "true", "1", "active"].includes(t)) return true; if (["no", "n", "false", "0", "inactive"].includes(t)) return false; throw bad(`Active must be Yes or No (got "${v}")`); };
 async function importShop({ db, cid, s }: Imp, r: any) {
-  if (empty(r.code) || empty(r.name)) throw bad("code and name required");
+  if (empty(r.code) || empty(r.name)) throw bad("Code and Name are required");
+  if (/^SAMPLE-ROW/i.test(String(r.code).trim())) return "skipped";
   const custom = JSON.stringify(cleanCustom(s.customFields.outlet, r));
   const dl = s.features.drugLicence ? String(r.drug_licence ?? r.drug_licence_no ?? r.dl_no ?? "").trim() || null : null;
   let dist: number | null = null;
@@ -195,21 +206,58 @@ async function importShop({ db, cid, s }: Imp, r: any) {
   const gstin = String(r.gstin ?? "").toUpperCase().trim() || null;
   if (gstin && !/^\d{2}[A-Z0-9]{13}$/.test(gstin)) throw bad("invalid GSTIN");
   if (gstin) { const e = gstinError(gstin); if (e) throw bad(e); }
-  const state = String(r.state_code ?? "").trim().padStart(empty(r.state_code) ? 0 : 2, "0") || gstin?.slice(0, 2) || null;
+  // State: a 2-digit code, or a state name (e.g. Tamil Nadu); else taken from the GSTIN.
+  let stateIn = String(r.state_code ?? "").trim();
+  if (!stateIn && !empty(r.state)) {
+    const n = String(r.state).trim().toLowerCase(), hit = Object.entries(GST_STATES).find(([, v]) => v.toLowerCase() === n);
+    if (/^\d{1,2}$/.test(n)) stateIn = n; else if (hit) stateIn = hit[0]; else throw bad(`unknown state "${r.state}"`);
+  }
+  const state = stateIn.padStart(stateIn ? 2 : 0, "0") || gstin?.slice(0, 2) || null;
   if (state && !/^\d{2}$/.test(state)) throw bad("state code must be 2 digits");
+  if (state && gstin && gstin.slice(0, 2) !== state) throw bad(`GSTIN ${gstin} does not match state code ${state}`);
+  const pan = String(r.pan ?? "").toUpperCase().trim() || (gstin ? gstin.slice(2, 12) : null);
+  if (pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) throw bad("PAN must look like AAAAA9999A");
+  if (pan && gstin && gstin.slice(2, 12) !== pan) throw bad("PAN does not match the GSTIN");
+  const email = String(r.email ?? "").trim().toLowerCase() || null;
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw bad(`invalid email "${email}"`);
+  const phone = String(r.phone ?? r.mobile ?? "").replace(/[\s-]/g, "");
+  if (phone && !/^\+?\d{10,13}$/.test(phone)) throw bad("Phone must be 10–13 digits");
+  const coord = (v: unknown, lim: number, label: string) => { if (empty(v)) return null; const n = Number(v); if (!(Number.isFinite(n) && Math.abs(n) <= lim)) throw bad(`${label} must be a number between -${lim} and ${lim}`); return n; };
+  const lat = coord(r.latitude ?? r.lat, 90, "Latitude"), lng = coord(r.longitude ?? r.long ?? r.lng, 180, "Longitude");
+  if ((lat == null) !== (lng == null)) throw bad("give both Latitude and Longitude, or neither");
+  let rep: number | null = null;
+  if (!empty(r.rep_email)) {
+    rep = (await db.query("SELECT id FROM users WHERE company_id=$1 AND email=$2 AND role='sales_rep'", [cid, String(r.rep_email).toLowerCase().trim()])).rows[0]?.id;
+    if (!rep) throw bad(`sales rep ${r.rep_email} not found`);
+  }
+  const active = empty(r.active) ? undefined : yes(r.active);
+  const txt = (v: unknown, n = 60) => empty(v) ? null : String(v).trim().slice(0, n);
+  const extra = { contact: txt(r.contact_person, 80), email, pan, channel: txt(r.channel ?? r.type, 40), cls: txt(r.outlet_class ?? r.class, 20), terms: txt(r.payment_terms, 80), lat, lng, rep };
+  const beatName = txt(r.beat ?? r.route, 80);
   const pin = String(r.pincode ?? r.pin ?? r.pin_code ?? "").trim() || null;
   if (pin && !/^\d{6}$/.test(pin)) throw bad("PIN code must be 6 digits");
   // Optional credit terms per outlet (blank keeps what is there; 0 = no limit / cash).
   const term = (v: any, int: boolean, label: string) => { if (empty(v)) return undefined; const n = Number(String(v).replace(/,/g, "")); if (!(n >= 0) || (int && !Number.isInteger(n))) throw bad(`${label} must be a number ≥ 0`); return n; };
   const climit = term(r.credit_limit, false, "credit limit"), cdays = term(r.credit_days, true, "credit days");
-  const vals = [String(r.name), r.owner_name || null, String(r.phone || "") || null, r.address || null, r.city || null, gstin, dl, custom, state, pin];
+  const vals = [String(r.name), r.owner_name || extra.contact || null, phone || null, r.address || null, r.city || null, gstin, dl, custom, state, pin];
   const setTerms = async (id: number) => {
     if (climit !== undefined) await db.query("UPDATE shops SET credit_limit=$1 WHERE id=$2", [climit, id]);
     if (cdays !== undefined) await db.query("UPDATE shops SET credit_days=$1 WHERE id=$2", [cdays, id]);
+    // Optional extras: a blank cell keeps what is there.
+    const set: [string, unknown][] = [["email", extra.email], ["pan", extra.pan], ["channel", extra.channel], ["outlet_class", extra.cls], ["payment_terms", extra.terms], ["lat", extra.lat], ["lng", extra.lng], ["rep_id", extra.rep], ["active", active]];
+    for (const [k, v] of set) if (v !== null && v !== undefined) await db.query(`UPDATE shops SET ${k}=$1 WHERE id=$2`, [v, id]);
+    if (beatName) {
+      let b = (await db.query("SELECT id FROM beats WHERE company_id=$1 AND LOWER(name)=LOWER($2)", [cid, beatName])).rows[0];
+      if (!b) b = (await db.query("INSERT INTO beats (company_id,name,rep_id) VALUES ($1,$2,$3) RETURNING id", [cid, beatName, extra.rep])).rows[0];
+      if (!(await db.query("SELECT 1 FROM beat_shops WHERE beat_id=$1 AND shop_id=$2", [b.id, id])).rows[0]) {
+        const seq = Number((await db.query("SELECT COALESCE(MAX(seq),0) AS n FROM beat_shops WHERE beat_id=$1", [b.id])).rows[0].n) + 1;
+        await db.query("INSERT INTO beat_shops (beat_id,shop_id,seq) VALUES ($1,$2,$3)", [b.id, id, seq]);
+      }
+    }
   };
   const ex = (await db.query("SELECT id, distributor_id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(r.code)])).rows[0];
   if (ex) {
-    await db.query("UPDATE shops SET updated_at=NOW(), name=$1,owner_name=$2,phone=$3,address=$4,city=$5,gstin=$6,drug_licence=$7,custom=$8,state_code=$9,pincode=$10,distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
+    await db.query("UPDATE shops SET updated_at=NOW(), name=$1,owner_name=COALESCE($2,owner_name),phone=COALESCE($3,phone),address=COALESCE($4,address),city=COALESCE($5,city),gstin=COALESCE($6,gstin),drug_licence=COALESCE($7,drug_licence),custom=$8,state_code=COALESCE($9,state_code),pincode=COALESCE($10,pincode),distributor_id=$11 WHERE id=$12", [...vals, dist ?? ex.distributor_id, ex.id]);
     if (!empty(r.outlet_type)) await db.query("UPDATE shops SET outlet_type=$1 WHERE id=$2", [String(r.outlet_type).trim().slice(0, 40), ex.id]);
     await setTerms(ex.id);
     return "updated";
@@ -297,9 +345,11 @@ export async function importOne(c: Imp, kind: string, row: Record<string, unknow
 }
 export async function runImport(c: Imp, kind: string, rows: Record<string, unknown>[]) {
   const fn = IMPORTERS[kind]; if (!fn) throw bad("unknown import type", 404);
-  const result = { inserted: 0, updated: 0, errors: [] as { row: number; error: string }[] };
+  const result = { inserted: 0, updated: 0, skipped: 0, errors: [] as { row: number; code?: string; error: string }[] };
   for (const [i, r] of rows.entries()) {
-    try { result[(await fn(c, normRow(r))) as "inserted" | "updated"]++; } catch (e: any) { result.errors.push({ row: i + 2, error: e.message }); }
+    const n = normRow(r);
+    if (Object.values(n).every(v => v == null || String(v).trim() === "")) continue; // blank line
+    try { result[(await fn(c, n)) as "inserted" | "updated" | "skipped"]++; } catch (e: any) { result.errors.push({ row: i + 2, ...(n.code ? { code: String(n.code) } : {}), error: e.message }); }
   }
   return result;
 }
@@ -381,6 +431,24 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
 
 
 
+  // Retailer master template: headers + clearly labelled sample rows (skipped on upload) + a read-me sheet.
+  app.get("/api/import/shops/template", auth("company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const { settings } = await getCompany(db, cid);
+    const known = new Set(SHOP_COLUMNS.map(norm));
+    const cf = settings.customFields.outlet.map(x => x.label).filter(l => !known.has(norm(l)));
+    const head = [...SHOP_COLUMNS.slice(0, 13), ...(settings.features.drugLicence ? ["Drug Licence"] : []), ...SHOP_COLUMNS.slice(13), ...cf];
+    const rows = SHOP_SAMPLE_ROWS.map(r => head.map(h => { const i = SHOP_COLUMNS.indexOf(h); return i >= 0 ? r[i] : ""; }));
+    const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
+    if (req.query.format === "csv") return res.type("text/csv").attachment("retailer-master-template.csv").send(XLSX.utils.sheet_to_csv(ws));
+    const help = XLSX.utils.aoa_to_sheet([["Retailer master — how to fill"], ["Rows whose Code starts with SAMPLE-ROW are examples and are skipped on upload. Replace them with your retailers."],
+      ["Code is the key: uploading a Code that exists updates that retailer; a new Code adds one. Blank optional cells keep the current value."],
+      ["Required: Code, Name. GSTIN is checked (format, state, checksum); PAN must match the GSTIN. State: name or 2-digit code."],
+      ["Distributor Email / Rep Email must be existing users. Beat is created if it does not exist. Active: Yes or No."],
+      ["Credit Limit 0 = no limit; Credit Days 0 = cash. Latitude/Longitude in decimal degrees."]]);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Retailers"); XLSX.utils.book_append_sheet(wb, help, "Read me");
+    res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").attachment("retailer-master-template.xlsx").send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+  }));
   app.post("/api/import/:kind", auth("company_admin", "distributor"), upload.single("file"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     if (req.user.role === "distributor" && req.params.kind !== "stock") return res.status(403).json({ error: "forbidden" });
