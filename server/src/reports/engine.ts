@@ -180,7 +180,9 @@ export type RunResult = { columns: { key: string; label: string; type: string }[
 /** Run a report. `force` adds dim filters the caller can't remove (e.g. a sales rep sees only their own rows). */
 export async function runReport(db: Db, cid: number, input: any, opts: { force?: Partial<Record<Dim, number[]>>; now?: string; limit?: number; sources?: Record<string, Source> } = {}): Promise<RunResult> {
   const SRC = opts.sources || SOURCES; const def = validateDef(input, SRC); const src = SRC[def.source];
-  for (const [d, v] of Object.entries(opts.force || {}) as [Dim, number[]][]) { if (!src.dims[d]) throw bad("You can't see this report", 403); def.filters[d] = v; }
+  const soft = !!(opts.force as any)?.soft;
+  for (const [d, v] of Object.entries(opts.force || {}) as [Dim, number[]][]) { if ((d as string) === "soft") continue; if (!src.dims[d]) { if (soft) continue; throw bad("You can't see this report", 403); }
+    const cur = def.filters[d] as number[] | undefined; def.filters[d] = soft && Array.isArray(cur) && cur.length ? cur.filter(x => v.includes(Number(x))) : v; if (soft && !(def.filters[d] as number[]).length) def.filters[d] = [0]; }
   const r0 = src.dateField || src.usesRange ? resolveRange(def.filters.dateRange, opts.now) : null;
   const range = r0 ? toRange(r0.from, r0.to) : null;
   let timer: NodeJS.Timeout | undefined;

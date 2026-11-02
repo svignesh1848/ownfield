@@ -1,4 +1,5 @@
 // Phase 3.2: expense claims — rep submits amount, category and receipt photo; manager approves or rejects; monthly report.
+import { teamIds, inTeam, assertTeam } from "./hierarchy.js";
 import { bad, today } from "./catalog.js";
 import { type Ctx, MGR, requireFeature, monthOk, dateOk } from "./common.js";
 import { smallUpload, savePhoto, readPhoto } from "./photos.js";
@@ -24,6 +25,7 @@ export function registerExpenseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "expenses");
     const rep = req.user.role === "sales_rep", p: unknown[] = [cid]; let w = "";
     if (rep) { p.push(req.user.uid); w += ` AND e.rep_id=$${p.length}`; }
+    w += inTeam("e.rep_id", await teamIds(db, cid, req.user));
     if (req.query.status) { p.push(String(req.query.status)); w += ` AND e.status=$${p.length}`; }
     if (monthOk(req.query.month)) { p.push(`${req.query.month}%`); w += ` AND e.spent_on LIKE $${p.length}`; }
     res.json((await db.query(`SELECT e.id,e.rep_id,u.name AS rep_name,e.spent_on,e.amount,e.category,e.note,e.status,e.reason,e.decided_at FROM expenses e JOIN users u ON u.id=e.rep_id
@@ -34,6 +36,7 @@ export function registerExpenseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const to = String(req.body?.status || ""); if (!["approved", "rejected"].includes(to)) throw bad("status must be approved or rejected");
     const reason = String(req.body?.reason || "").trim().slice(0, 200);
     if (to === "rejected" && !reason) throw bad("tell the rep why it was rejected");
+    await assertTeam(db, cid, req.user, (await db.query("SELECT rep_id FROM expenses WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0]?.rep_id);
     const r = await db.query("UPDATE expenses SET status=$1, reason=$2, decided_by=$3, decided_at=NOW() WHERE id=$4 AND company_id=$5 AND status='pending' RETURNING id,status,reason",
       [to, reason || null, req.user.uid, Number(req.params.id), cid]);
     if (!r.rows[0]) throw bad("pending claim not found", 404);

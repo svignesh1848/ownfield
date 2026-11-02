@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Custom reports API: builder catalogue, live preview, saved reports (share with roles, pin to dashboard),
 // CSV/Excel export, JSON import/export of definitions, templates, and scheduled-delivery config.
+import { teamIds } from "../hierarchy.js";
 import * as XLSX from "xlsx";
 import type { Db } from "../db.js";
 import { bad, parseJson } from "../catalog.js";
@@ -81,7 +82,10 @@ function throttle(uid: number) {
 export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   const viewer = auth("company_admin", "manager", "sales_rep", "distributor");
   const ctx = async (req: any, res: any) => { const cid = tenant(req, res); if (cid == null) return null; await ensureReportTables(db); return cid; };
-  const force = (req: any) => req.user.role === "sales_rep" ? { rep: [req.user.uid] } : req.user.role === "distributor" ? { distributor: [req.user.uid] } : {};
+  const team = new WeakMap<any, number[] | null>();
+  const force = (req: any): any => req.user.role === "sales_rep" ? { rep: [req.user.uid] } : req.user.role === "distributor" ? { distributor: [req.user.uid] } : team.get(req) ? { rep: team.get(req), soft: true } : {};
+  // Managers with a team: every run/export is narrowed to their team (sources without a rep column are not narrowed).
+  const withTeam = async (req: any, cid: number) => { if (!team.has(req)) team.set(req, await teamIds(db, cid, req.user)); };
   const canSee = (req: any, r: any) => MGR.includes(req.user.role) || parseJson<string[]>(r.roles, []).includes(req.user.role);
   const get = async (req: any, cid: number) => {
     const r = (await db.query("SELECT * FROM custom_reports WHERE id=$1 AND company_id=$2", [Number(req.params.id) || 0, cid])).rows[0];
@@ -96,11 +100,11 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
   }));
   app.post("/api/report-builder/preview", auth(...MGR), wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid);
-    res.json(await runReport(db, cid, req.body?.def, { sources: await companySources(db, cid, req.user.uid), limit: 500 }));
+    res.json(await runReport(db, cid, req.body?.def, { sources: await companySources(db, cid, req.user.uid), force: (await withTeam(req, cid), force(req)), limit: 500 }));
   }));
   app.post("/api/report-builder/export", auth(...MGR), wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid);
-    const f = toFile(await runReport(db, cid, req.body?.def, { sources: await companySources(db, cid, req.user.uid) }), String(req.body?.name || "report"), String(req.query.format || "xlsx"));
+    const f = toFile(await runReport(db, cid, req.body?.def, { sources: await companySources(db, cid, req.user.uid), force: (await withTeam(req, cid), force(req)) }), String(req.body?.name || "report"), String(req.query.format || "xlsx"));
     res.type(f.mime).attachment(f.file).send(f.body);
   }));
 
@@ -145,7 +149,7 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
     const cid = await ctx(req, res); if (cid == null) return;
     const list = (await db.query("SELECT * FROM custom_reports WHERE company_id=$1 AND pinned=TRUE ORDER BY name", [cid])).rows.filter(r => canSee(req, r)).slice(0, 8);
     const outp = [];
-    for (const r of list) { try { outp.push({ ...out(r), result: await runReport(db, cid, parseJson(r.def, {}), { sources: await companySources(db, cid, req.user.uid), force: force(req), limit: 50 }) }); } catch (e: any) { outp.push({ ...out(r), error: e.message }); } }
+    for (const r of list) { try { outp.push({ ...out(r), result: await runReport(db, cid, parseJson(r.def, {}), { sources: await companySources(db, cid, req.user.uid), force: (await withTeam(req, cid), force(req)), limit: 50 }) }); } catch (e: any) { outp.push({ ...out(r), error: e.message }); } }
     res.json(outp);
   }));
   app.get("/api/custom-reports/:id", viewer, wrap(async (req, res) => { const cid = await ctx(req, res); if (cid == null) return; res.json(out(await get(req, cid))); }));
@@ -169,11 +173,11 @@ export function registerCustomReportRoutes({ app, db, auth, wrap, tenant }: Ctx)
   }));
   app.get("/api/custom-reports/:id/run", viewer, wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid); const r = await get(req, cid);
-    res.json(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { sources: await companySources(db, cid, req.user.uid), force: force(req), limit: 1000 }));
+    res.json(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { sources: await companySources(db, cid, req.user.uid), force: (await withTeam(req, cid), force(req)), limit: 1000 }));
   }));
   app.get("/api/custom-reports/:id/export", viewer, wrap(async (req, res) => {
     const cid = await ctx(req, res); if (cid == null) return; throttle(req.user.uid); const r = await get(req, cid);
-    const f = toFile(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { sources: await companySources(db, cid, req.user.uid), force: force(req) }), r.name, String(req.query.format || "xlsx"));
+    const f = toFile(await runReport(db, cid, override(parseJson(r.def, {}), req.query), { sources: await companySources(db, cid, req.user.uid), force: (await withTeam(req, cid), force(req)) }), r.name, String(req.query.format || "xlsx"));
     res.type(f.mime).attachment(f.file).send(f.body);
   }));
 }

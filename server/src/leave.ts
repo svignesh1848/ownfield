@@ -1,5 +1,6 @@
 // Phase 3.3: leave & attendance — rep applies, manager approves; approved leave blocks check-ins on that day
 // and marks the rep's beat as "on leave". Attendance = days with at least one visit, plus leave days.
+import { teamIds, inTeam, assertTeam } from "./hierarchy.js";
 import type { Db } from "./db.js";
 import { bad, today, getCompany } from "./catalog.js";
 import { dayKey } from "./field.js";
@@ -28,13 +29,14 @@ export function registerLeaveRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
   app.get("/api/leaves", auth(...MGR, "sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "leave");
-    const rep = req.user.role === "sales_rep";
-    res.json((await db.query(`SELECT l.*, u.name AS rep_name FROM leaves l JOIN users u ON u.id=l.rep_id WHERE l.company_id=$1 ${rep ? "AND l.rep_id=$2" : ""} ORDER BY l.from_date DESC, l.id DESC`,
+    const rep = req.user.role === "sales_rep", team = await teamIds(db, cid, req.user);
+    res.json((await db.query(`SELECT l.*, u.name AS rep_name FROM leaves l JOIN users u ON u.id=l.rep_id WHERE l.company_id=$1 ${rep ? "AND l.rep_id=$2" : ""}${inTeam("l.rep_id", team)} ORDER BY l.from_date DESC, l.id DESC`,
       rep ? [cid, req.user.uid] : [cid])).rows.map(l => ({ ...l, days: days(l.from_date, l.to_date).length })));
   }));
   app.post("/api/leaves/:id/decision", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "leave");
     const to = String(req.body?.status || ""); if (!["approved", "rejected"].includes(to)) throw bad("status must be approved or rejected");
+    await assertTeam(db, cid, req.user, (await db.query("SELECT rep_id FROM leaves WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0]?.rep_id);
     const r = await db.query("UPDATE leaves SET status=$1, decided_by=$2, decided_at=NOW(), note=$3 WHERE id=$4 AND company_id=$5 AND status='pending' RETURNING *",
       [to, req.user.uid, String(req.body?.note || "").slice(0, 200) || null, Number(req.params.id), cid]);
     if (!r.rows[0]) throw bad("pending leave not found", 404);
@@ -50,7 +52,7 @@ export function registerLeaveRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "leave");
     const month = monthOk(req.query.month) ? String(req.query.month) : today().slice(0, 7);
     const rep = req.user.role === "sales_rep";
-    const reps = (await db.query(`SELECT id, name FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${rep ? "AND id=$2" : ""} ORDER BY name`, rep ? [cid, req.user.uid] : [cid])).rows;
+    const reps = (await db.query(`SELECT id, name FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${rep ? "AND id=$2" : ""}${inTeam("id", await teamIds(db, cid, req.user))} ORDER BY name`, rep ? [cid, req.user.uid] : [cid])).rows;
     const vs = (await db.query("SELECT rep_id, check_in_at FROM visits WHERE company_id=$1", [cid])).rows;
     const ls = (await db.query("SELECT rep_id, from_date, to_date FROM leaves WHERE company_id=$1 AND status='approved' AND from_date<=$3 AND to_date>=$2", [cid, `${month}-01`, `${month}-31`])).rows;
     res.json({ month, reps: reps.map(r => {

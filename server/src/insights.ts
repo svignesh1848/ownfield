@@ -1,4 +1,6 @@
 // Step 4: targets vs achievement, visit photos, Excel/CSV report exports.
+import { teamIds, inTeam } from "./hierarchy.js";
+import { returnRows } from "./returns.js";
 import { schemeCost } from "./schemes.js";
 import { ageingRows } from "./collections.js";
 import type { Express, Response, Request, NextFunction } from "express";
@@ -15,8 +17,8 @@ import { photoStore } from "./storage.js";
 export const METRICS = ["value", "orders", "visits"] as const;
 const monthOk = (m: unknown) => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m));
 
-export async function achievement(db: Db, cid: number, month: string, repId?: number) {
-  const reps = (await db.query(`SELECT id, name, email FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${repId ? "AND id=$2" : ""} ORDER BY name`, repId ? [cid, repId] : [cid])).rows;
+export async function achievement(db: Db, cid: number, month: string, repId?: number, team: number[] | null = null) {
+  const reps = (await db.query(`SELECT id, name, email FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${repId ? "AND id=$2" : ""}${inTeam("id", team)} ORDER BY name`, repId ? [cid, repId] : [cid])).rows;
   const tg = (await db.query("SELECT rep_id, metric, target FROM targets WHERE company_id=$1 AND month=$2", [cid, month])).rows;
   const orders = (await db.query("SELECT rep_id, total, created_at FROM orders WHERE company_id=$1 AND status NOT IN ('rejected','cancelled')", [cid])).rows.filter(o => dayKey(o.created_at).startsWith(month));
   const visits = (await db.query("SELECT rep_id, check_in_at FROM visits WHERE company_id=$1", [cid])).rows.filter(v => dayKey(v.check_in_at).startsWith(month));
@@ -58,7 +60,7 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   app.get("/api/targets", auth(...MGR, "sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const month = String(req.query.month || today().slice(0, 7)); if (!monthOk(month)) throw bad("month must be YYYY-MM");
-    res.json(await achievement(db, cid, month, req.user.role === "sales_rep" ? req.user.uid : undefined));
+    res.json(await achievement(db, cid, month, req.user.role === "sales_rep" ? req.user.uid : undefined, await teamIds(db, cid, req.user)));
   }));
 
   // ---- Visit photos ----
@@ -97,17 +99,18 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const to = req.query.to ? parseDate(req.query.to)! : today(), from = req.query.from ? parseDate(req.query.from)! : `${to.slice(0, 8)}01`;
     if (from > to) throw bad("from must be on or before to");
     const inRange = (d: string) => d >= from && d <= to;
+    const team = await teamIds(db, cid, req.user); // managers export only their own team's orders, visits and targets
     let rows: Record<string, unknown>[];
     switch (req.params.kind) {
       case "orders": rows = (await db.query(`SELECT o.id, o.created_at, o.status, CASE WHEN u.role='retailer' THEN 'Retailer: ' || s.name ELSE u.name END AS rep, s.code AS outlet_code, s.name AS outlet, d.name AS distributor, v.sku, i.name AS item, v.attrs,
           l.qty, l.uom, l.base_qty, l.price, l.discount_pct, l.amount, l.free, sc.name AS scheme FROM orders o JOIN order_lines l ON l.order_id=o.id JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
-          JOIN users u ON u.id=o.rep_id JOIN shops s ON s.id=o.shop_id LEFT JOIN users d ON d.id=o.distributor_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE o.company_id=$1 ORDER BY o.id, l.id`, [cid])).rows
+          JOIN users u ON u.id=o.rep_id JOIN shops s ON s.id=o.shop_id LEFT JOIN users d ON d.id=o.distributor_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE o.company_id=$1${inTeam("o.rep_id", team)} ORDER BY o.id, l.id`, [cid])).rows
         .filter(r => inRange(dayKey(r.created_at))).map(r => ({ order_id: r.id, date: dayKey(r.created_at), status: r.status, rep: r.rep, outlet_code: r.outlet_code, outlet: r.outlet,
           distributor: r.distributor || "Company", sku: r.sku, item: r.item, variant: Object.values(parseJson(r.attrs, {})).join(" / "), qty: Number(r.qty), unit: r.uom,
           base_qty: Number(r.base_qty), price: Number(r.price), discount_pct: Number(r.discount_pct), amount: Number(r.amount), scheme: r.scheme || "", free: r.free ? "yes" : "" })); break;
       case "visits": {
         const vs = (await db.query(`SELECT v.*, u.name AS rep, s.code, s.name AS outlet FROM visits v JOIN users u ON u.id=v.rep_id JOIN shops s ON s.id=v.shop_id
-          WHERE v.company_id=$1 ORDER BY v.id`, [cid])).rows.filter(r => inRange(dayKey(r.check_in_at)));
+          WHERE v.company_id=$1${inTeam("v.rep_id", team)} ORDER BY v.id`, [cid])).rows.filter(r => inRange(dayKey(r.check_in_at)));
         const pc = new Map<number, number>();
         for (const p of (await db.query("SELECT visit_id FROM visit_photos WHERE company_id=$1", [cid])).rows) pc.set(p.visit_id, (pc.get(p.visit_id) ?? 0) + 1);
         for (const r of vs) r.photos = pc.get(r.id) ?? 0;
@@ -124,10 +127,11 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       case "stock": rows = (await db.query(`SELECT st.*, v.sku, i.name, u.name AS location FROM stock st JOIN variants v ON v.id=st.variant_id JOIN items i ON i.id=v.item_id
           LEFT JOIN users u ON u.id=st.distributor_id WHERE st.company_id=$1 ORDER BY v.sku, st.expiry`, [cid])).rows.map(r => ({ location: r.location || "Company stock", sku: r.sku, item: r.name,
           batch: r.batch_no, expiry: r.expiry || "", qty_base: Number(r.qty), expired: r.expiry && r.expiry < today() ? "yes" : "" })); break;
-      case "targets": rows = (await achievement(db, cid, String(req.query.month || to.slice(0, 7)))).flatMap(r => r.metrics.map(m => ({ month: r.month, rep: r.rep, metric: m.metric, target: m.target ?? "", actual: m.actual, pct: m.pct ?? "" }))); break;
+      case "targets": rows = (await achievement(db, cid, String(req.query.month || to.slice(0, 7)), undefined, team)).flatMap(r => r.metrics.map(m => ({ month: r.month, rep: r.rep, metric: m.metric, target: m.target ?? "", actual: m.actual, pct: m.pct ?? "" }))); break;
       case "ageing": rows = await ageingRows(db, cid, to); break;
       case "schemes": rows = await schemeCost(db, cid, inRange, dayKey); break;
-      default: throw bad("unknown report — use orders, visits, gst, stock, targets, schemes or ageing", 404);
+      case "returns": rows = await returnRows(db, cid, inRange, dayKey, team); break;
+      default: throw bad("unknown report — use orders, visits, gst, stock, targets, schemes, returns or ageing", 404);
     }
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: "no rows for this period" }]);
     const name = `${req.params.kind}-${from}-to-${to}`;

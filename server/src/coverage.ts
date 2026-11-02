@@ -2,6 +2,7 @@
 // Planned calls come from beat plans: a beat with a weekday (0 = Sunday … 6 = Saturday) plans its outlets on that weekday;
 // a beat without a weekday plans them every working day (Monday–Saturday). A call is productive when the rep took an order
 // at that outlet the same day.
+import { teamIds, inTeam } from "./hierarchy.js";
 import { bad } from "./catalog.js";
 import { dayKey } from "./field.js";
 import { mustSellStats } from "./flow.js";
@@ -15,7 +16,7 @@ export function registerCoverageRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const days: string[] = []; for (let d = new Date(from + "T00:00:00Z"); d <= new Date(to + "T00:00:00Z"); d = new Date(+d + 864e5)) days.push(d.toISOString().slice(0, 10));
     if (days.length > 31) throw bad("pick at most 31 days");
     const repFilter = req.query.repId ? Number(req.query.repId) : null;
-    const reps = (await db.query(`SELECT id, name FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${repFilter ? "AND id=$2" : ""} ORDER BY name`, repFilter ? [cid, repFilter] : [cid])).rows;
+    const reps = (await db.query(`SELECT id, name FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ${repFilter ? "AND id=$2" : ""}${inTeam("id", await teamIds(db, cid, req.user))} ORDER BY name`, repFilter ? [cid, repFilter] : [cid])).rows;
     const beats = (await db.query("SELECT b.id, b.rep_id, b.weekday, bs.shop_id, s.name AS shop_name FROM beats b JOIN beat_shops bs ON bs.beat_id=b.id JOIN shops s ON s.id=bs.shop_id WHERE b.company_id=$1", [cid])).rows;
     const lo = new Date(Date.parse(from + "T00:00:00+05:30")).toISOString(), hi = new Date(Date.parse(to + "T00:00:00+05:30") + 864e5).toISOString();
     const visits = (await db.query("SELECT rep_id, shop_id, check_in_at, no_order_reason FROM visits WHERE company_id=$1 AND check_in_at>=$2 AND check_in_at<$3", [cid, lo, hi])).rows;

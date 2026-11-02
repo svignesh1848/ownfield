@@ -1,6 +1,7 @@
 // Location trail during working hours, distance travelled, and a geofenced check-in radius per outlet.
 // Lean by design: the app sends a ping every few minutes only while it is open; points closer than 25 m to the
 // previous one, poor-accuracy fixes and pings outside working hours are dropped; trails are kept 30 days.
+import { assertTeam } from "./hierarchy.js";
 import type { Db } from "./db.js";
 import { bad } from "./catalog.js";
 import { type Ctx, MGR, requireFeature, kvGet, kvSet, dateOk } from "./common.js";
@@ -63,6 +64,7 @@ export function registerTrackingRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return; await requireFeature(db, cid, "tracking");
     const rep = req.user.role === "sales_rep" ? req.user.uid : Number(req.query.repId), day = String(req.query.day || dayKey(new Date()));
     if (!dateOk(day)) throw bad("pick a day");
+    if (req.user.role === "manager") await assertTeam(db, cid, req.user, rep);
     const from = new Date(Date.parse(day + "T00:00:00+05:30")), to = new Date(+from + 864e5);
     const pts = (await db.query("SELECT at, lat, lng, acc FROM location_pings WHERE company_id=$1 AND user_id=$2 AND at>=$3 AND at<$4 ORDER BY at", [cid, rep, from.toISOString(), to.toISOString()])).rows
       .map(p => ({ at: p.at, lat: Number(p.lat), lng: Number(p.lng), acc: p.acc == null ? null : Number(p.acc) }));

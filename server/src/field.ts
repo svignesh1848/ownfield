@@ -11,6 +11,8 @@ import type { Uom } from "./templates.js";
 import { activeSchemes, applySchemes } from "./schemes.js";
 import { creditCheck } from "./collections.js";
 import { onLeave } from "./leave.js";
+import { teamIds, inTeam, assertTeam } from "./hierarchy.js";
+import { assertCanOrder } from "./outlets.js";
 
 type Ctx = { app: Express; db: Db; auth: (...r: any[]) => any; wrap: (fn: (req: any, res: Response) => Promise<unknown>) => (q: Request, s: Response, n: NextFunction) => void; tenant: (req: any, res: Response) => number | null };
 const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
@@ -85,7 +87,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
   app.get("/api/reps", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    res.json((await db.query("SELECT id,name,email FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE ORDER BY name", [cid])).rows);
+    const team = await teamIds(db, cid, req.user);
+    res.json((await db.query(`SELECT id,name,email,reports_to FROM users WHERE company_id=$1 AND role='sales_rep' AND active=TRUE${inTeam("id", team)} ORDER BY name`, [cid])).rows);
   }));
 
   // ---- Beats ----
@@ -124,9 +127,9 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
   app.get("/api/beats", auth("company_admin", "manager", "sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const mine = req.user.role === "sales_rep";
+    const mine = req.user.role === "sales_rep", team = await teamIds(db, cid, req.user);
     const beats = (await db.query(`SELECT b.*, u.name AS rep_name FROM beats b LEFT JOIN users u ON u.id=b.rep_id
-      WHERE b.company_id=$1 ${mine ? "AND b.rep_id=$2" : ""} ORDER BY b.id`, mine ? [cid, req.user.uid] : [cid])).rows;
+      WHERE b.company_id=$1 ${mine ? "AND b.rep_id=$2" : ""}${inTeam("b.rep_id", team)} ORDER BY b.id`, mine ? [cid, req.user.uid] : [cid])).rows;
     const leaveCache = new Map<number, boolean>(), wd = new Date(Date.now() + 5.5 * 36e5).getUTCDay();
     for (const b of beats) {
       b.today = b.weekday == null ? wd !== 0 : Number(b.weekday) === wd;
@@ -192,9 +195,9 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
   app.get("/api/visits", auth("company_admin", "manager", "sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const mine = req.user.role === "sales_rep";
+    const mine = req.user.role === "sales_rep", team = await teamIds(db, cid, req.user);
     res.json((await db.query(`SELECT v.*, s.name AS shop_name, u.name AS rep_name FROM visits v JOIN shops s ON s.id=v.shop_id JOIN users u ON u.id=v.rep_id
-      WHERE v.company_id=$1 ${mine ? "AND v.rep_id=$2" : ""} ORDER BY v.id DESC`, mine ? [cid, req.user.uid] : [cid])).rows.map(v => ({ ...v, custom: parseJson(v.custom, {}) })));
+      WHERE v.company_id=$1 ${mine ? "AND v.rep_id=$2" : ""}${inTeam("v.rep_id", team)} ORDER BY v.id DESC`, mine ? [cid, req.user.uid] : [cid])).rows.map(v => ({ ...v, custom: parseJson(v.custom, {}) })));
   }));
 
   // Retailers order for their own outlet only (Retailer app feature); the order goes to the outlet's distributor like a rep order.
@@ -251,6 +254,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const dup = (await db.query("SELECT * FROM orders WHERE company_id=$1 AND client_ref=$2", [cid, String(clientRef)])).rows[0];
     if (dup) return res.status(200).json({ ...dup, duplicate: true });
     const shop = await shopIn(cid, shopId); if (!shop) throw bad("shop not found", 404);
+    await assertCanOrder(db, cid, shop);
     const { settings } = await getCompany(db, cid);
     const { priced, total, savings, credit, loc } = await checkCart(cid, settings, shop, lines);
     const status = needsApproval(settings, total) ? "pending_approval" : "placed";
@@ -300,6 +304,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
     if (!o) throw bad("order not found", 404);
+    await assertTeam(db, cid, req.user, o.rep_id); // a manager approves only their own team's orders
     if (o.status !== "pending_approval") throw bad("this order is not waiting for approval", 409);
     const reject = req.body?.decision === "reject", reason = String(req.body?.reason || "").trim().slice(0, 300) || null;
     if (!reject && (await db.query("SELECT 1 FROM order_events WHERE order_id=$1 AND status='approved' AND user_id=$2 AND at>=$3", [o.id, req.user.uid, o.updated_at])).rows[0])
@@ -334,8 +339,9 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const cid = tenant(req, res); if (cid == null) return;
     if (req.user.role === "retailer") await retailerShop(req, cid);
     const scope = req.user.role === "sales_rep" ? "AND o.rep_id=$2" : req.user.role === "distributor" ? "AND o.distributor_id=$2 AND o.status<>'pending_approval'" : req.user.role === "retailer" ? "AND o.shop_id=(SELECT shop_id FROM users WHERE id=$2)" : "";
+    const team = await teamIds(db, cid, req.user);
     const orders = (await db.query(`SELECT o.*, s.name AS shop_name, u.name AS rep_name, u.role AS placed_by_role, CASE WHEN u.role='retailer' THEN 'Retailer: ' || s.name ELSE u.name END AS placed_by FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
-      WHERE o.company_id=$1 ${scope} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
+      WHERE o.company_id=$1 ${scope}${inTeam("o.rep_id", team)} ORDER BY o.id DESC`, scope ? [cid, req.user.uid] : [cid])).rows;
     for (const o of orders) {
       o.lines = (await db.query(`SELECT l.id,l.qty,l.ordered_qty,l.uom,l.base_qty,l.price,l.discount_pct,l.amount,l.gross,l.free,l.scheme_id,l.variant_id,sc.name AS scheme,v.sku,v.attrs,i.name AS item_name,i.kind FROM order_lines l
         JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id LEFT JOIN schemes sc ON sc.id=l.scheme_id WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows.map(l => ({ ...l, attrs: parseJson(l.attrs, {}) }));
@@ -457,9 +463,9 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   app.get("/api/dashboard", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
-    const since = new Date(Date.now() - days * 864e5);
-    const vs = (await db.query("SELECT v.rep_id, u.name, v.check_in_at FROM visits v JOIN users u ON u.id=v.rep_id WHERE v.company_id=$1 AND v.check_in_at>=$2", [cid, since])).rows;
-    const os = (await db.query("SELECT o.rep_id, u.name, o.created_at, o.total FROM orders o JOIN users u ON u.id=o.rep_id WHERE o.company_id=$1 AND o.created_at>=$2 AND u.role='sales_rep' AND o.status NOT IN ('rejected','cancelled')", [cid, since])).rows;
+    const since = new Date(Date.now() - days * 864e5), team = await teamIds(db, cid, req.user);
+    const vs = (await db.query(`SELECT v.rep_id, u.name, v.check_in_at FROM visits v JOIN users u ON u.id=v.rep_id WHERE v.company_id=$1 AND v.check_in_at>=$2${inTeam("v.rep_id", team)}`, [cid, since])).rows;
+    const os = (await db.query(`SELECT o.rep_id, u.name, o.created_at, o.total FROM orders o JOIN users u ON u.id=o.rep_id WHERE o.company_id=$1 AND o.created_at>=$2 AND u.role='sales_rep' AND o.status NOT IN ('rejected','cancelled')${inTeam("o.rep_id", team)}`, [cid, since])).rows;
     const m = new Map<string, any>();
     const row = (rep: number, name: string, d: Date) => {
       const k = `${dayKey(d)}|${rep}`;
