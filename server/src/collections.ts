@@ -30,6 +30,8 @@ export async function ledger(db: Db, cid: number, f: { shopId?: number; issuer?:
   const invoices = [...inv.values()].map(i => { const age = days(i.doc_date, on); return { ...i, outstanding: r2(i.total - i.credited - i.paid), age, bucket: bucketOf(age) }; });
   const allocated = new Map<number, number>(); for (const a of allocs) allocated.set(a.payment_id, r2((allocated.get(a.payment_id) ?? 0) + Number(a.amount)));
   const advances = pays.filter(p => p.status === "cleared").map(p => ({ shop_id: p.shop_id, issuer: p.issuer, amount: r2(Number(p.amount) - (allocated.get(p.id) ?? 0)) })).filter(p => p.amount > 0);
+  // A credit note not linked to an invoice (e.g. a sales return booked without an invoice) is credit on account.
+  for (const d of docs.filter(d => d.kind === "credit_note" && !d.ref_invoice_id)) advances.push({ shop_id: d.shop_id, issuer: d.issuer, amount: r2(Number(d.total)) });
   return { invoices, advances };
 }
 
