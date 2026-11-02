@@ -186,6 +186,8 @@ export type Imp = { db: Db; cid: number; s: Settings; role: string; uid: number;
 /** Retailer master columns (template order). Sample rows use codes starting SAMPLE-ROW and are skipped on upload. */
 export const SHOP_COLUMNS = ["Code", "Name", "Owner Name", "Contact Person", "Phone", "Email", "GSTIN", "PAN", "Address", "City", "State", "State Code", "PIN Code",
   "Latitude", "Longitude", "Channel", "Outlet Type", "Outlet Class", "Beat", "Distributor Email", "Rep Email", "Credit Limit", "Credit Days", "Payment Terms", "Active"];
+export const SHOP_EDIT_KEYS = ["code", "name", "owner_name", "contact_person", "phone", "email", "gstin", "pan", "address", "city", "state", "state_code", "pincode",
+  "latitude", "longitude", "channel", "outlet_type", "outlet_class", "beat", "distributor_email", "rep_email", "payment_terms", "active"];
 export const SHOP_SAMPLE_ROWS = [
   ["SAMPLE-ROW-1", "Sample Kirana Store (sample row — replace or delete)", "Sample Owner", "Sample Contact", "9000000001", "sample.store1@example.com", "33AAAAA0000A1Z9", "AAAAA0000A", "1 Sample Street", "Chennai", "Tamil Nadu", "33", "600001",
     "13.0827", "80.2707", "General trade", "Kirana", "A", "Sample Beat Monday", "", "", "50000", "15", "15 days credit", "Yes"],
@@ -406,11 +408,29 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
     res.json([...m.values()]);
   }));
 
+  // Single outlet add / edit uses the same checks as the retailer master upload (GSTIN, PAN, state, phone, PIN, lat/long, beat, rep, distributor).
+  const pickShop = (b: any) => Object.fromEntries(SHOP_EDIT_KEYS.filter(k => b?.[k] !== undefined).map(k => [k, b[k] === null ? "" : b[k]]));
+  app.post("/api/shops", auth("company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const { settings } = await getCompany(db, cid);
+    const row = { ...pickShop(req.body), ...(req.body?.custom || {}) };
+    if (empty(row.code) || empty(row.name)) throw bad("Code and Name are required");
+    if ((await db.query("SELECT id FROM shops WHERE company_id=$1 AND code=$2", [cid, String(row.code).trim()])).rows[0]) throw bad(`an outlet with code ${row.code} already exists`, 409);
+    if (/^SAMPLE-ROW/i.test(String(row.code))) throw bad("pick a real outlet code");
+    await importOne({ db, cid, s: settings, role: req.user.role, uid: req.user.uid, addUser }, "shops", row);
+    res.status(201).json((await db.query("SELECT * FROM shops WHERE company_id=$1 AND code=$2", [cid, String(row.code).trim()])).rows[0]);
+  }));
   app.patch("/api/shops/:id", auth("company_admin", "manager"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const { settings } = await getCompany(db, cid);
-    const shop = (await db.query("SELECT * FROM shops WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
+    let shop = (await db.query("SELECT * FROM shops WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
     if (!shop) throw bad("shop not found", 404);
+    const fields = pickShop(req.body); delete fields.code;
+    if (Object.keys(fields).length) {
+      if (fields.name !== undefined && empty(fields.name)) throw bad("Name cannot be blank");
+      await importOne({ db, cid, s: settings, role: req.user.role, uid: req.user.uid, addUser }, "shops", { ...parseJson(shop.custom, {}), ...(req.body?.custom || {}), ...fields, code: shop.code, name: fields.name ?? shop.name });
+      shop = (await db.query("SELECT * FROM shops WHERE id=$1", [shop.id])).rows[0];
+    }
     const custom = req.body?.custom ? JSON.stringify(cleanCustom(settings.customFields.outlet, req.body.custom)) : shop.custom;
     const dl = req.body?.drugLicence !== undefined ? String(req.body.drugLicence || "") || null : shop.drug_licence;
     const lim = (k: string, col: string, int: boolean) => { const v = req.body?.[k]; if (v === undefined) return shop[col]; if (v === null || v === "") return null;
