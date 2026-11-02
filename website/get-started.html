@@ -17,7 +17,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-<link rel="stylesheet" href="/styles.css?v=6">
+<link rel="stylesheet" href="/styles.css?v=7">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"OwnField","applicationCategory":"BusinessApplication","operatingSystem":"Web, Android, iOS (PWA)","url":"https://www.ownfield.in/","license":"https://www.gnu.org/licenses/agpl-3.0.html"}</script>
 </head>
 <body>
@@ -70,7 +70,7 @@ if(!/^[+\d][\d\s-]{6,18}$/.test((d.phone||"").trim()))return bad("phone","Please
 if(!d.size)return bad("size","Please choose your field team size.");if(!d.industry)return bad("industry","Please choose your industry.");
 btn.disabled=true;btn.textContent="Sending…";
 try{const r=await fetch("https://app.ownfield.in/api/public/website-leads",{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(d)});
- if(r.ok){f.hidden=true;document.getElementById("lf-ok").hidden=false;scrollTo(0,0);return;}
+ if(r.ok){f.hidden=true;const ok=document.getElementById("lf-ok");ok.hidden=false;ok.scrollIntoView({block:"center"});return;}
  let m="Something went wrong. Please try again, or email hello@ownfield.in.";try{const j=await r.json();if(j.error)m=j.error;if(j.field)return bad(j.field,m);}catch(_){}bad("",m);
 }catch(_){bad("","Could not send. Please check your connection and try again, or email hello@ownfield.in.");}
 finally{btn.disabled=false;btn.textContent="Send request";}});})();</script>

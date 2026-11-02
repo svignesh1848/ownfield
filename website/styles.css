@@ -187,3 +187,4 @@ select{background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2
 .thanks{text-align:center;padding:24px 8px}.thanks h2{margin-bottom:8px}.thanks .lead{margin:0 auto 20px}
 .ticks.big li{font-size:18px;color:var(--ink)}
 .band[hidden]{display:none}
+@media(max-width:900px){.gsi .ticks,.gsi .small{display:none}.gsi .lead{margin-bottom:0}}
