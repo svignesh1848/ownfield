@@ -33,9 +33,9 @@ h2{font-size:clamp(26px,4vw,38px);line-height:1.2;margin:0 0 12px;letter-spacing
 @media(max-width:600px){.gallery .phone{width:min(280px,78vw)}.gallery{gap:16px}}
 @media(min-width:1180px){.gallery{justify-content:center}}
 .zoom{cursor:zoom-in}.browser{display:block}.browser img{width:100%;height:auto}.tap{margin-top:8px;text-align:center}
-#lb{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.92);overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:48px 8px 16px;touch-action:pan-x pan-y pinch-zoom}
+#lb{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.97);overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:48px 8px 16px;touch-action:pan-x pan-y pinch-zoom}
 #lb[hidden]{display:none}#lb img{max-width:none;width:auto;height:auto;margin:auto}
-@media(max-width:860px){#lb img{width:100%;max-width:780px}}
+@media(max-width:860px){#lb img{width:100%;max-width:780px}#lb.wide{justify-content:flex-start;align-items:center}#lb.wide img{width:220vw;max-width:1920px;margin:0}}
 #lb button{position:fixed;top:8px;right:12px;font-size:32px;line-height:1;background:none;border:0;color:#fff;cursor:pointer;padding:4px 10px}
 
 section{padding:72px 0}section.alt{background:var(--bg)}
