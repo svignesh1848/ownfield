@@ -5,7 +5,9 @@ import type { Express, Response, Request, NextFunction } from "express";
 import { getFlow } from "./flow.js";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import type { Db } from "./db.js";
+import { withTx, type Db } from "./db.js";
+import { smallUpload, savePhoto } from "./photos.js";
+import { photoStore } from "./storage.js";
 import { TEMPLATES, INDUSTRIES, FEATURE_KEYS, FIELD_TYPES, ENTITIES, templateSettings, withDefaults, type Settings, type CustomField, type Uom } from "./templates.js";
 
 export const bad = (msg: string, status = 400) => Object.assign(new Error(msg), { status });
@@ -283,16 +285,28 @@ async function importProduct({ db, cid, s }: Imp, r: any) {
   const uoms = JSON.stringify(empty(r.units) ? s.uoms : parseUnits(r.units));
   const custom = JSON.stringify(cleanCustom(s.customFields.product, r));
   const name = String(r.item_name ?? r.product_name ?? r.name ?? code).trim() || code;
+  const images = empty(r.images ?? r.image_url ?? r.image) ? null : JSON.stringify(parseImages(r.images ?? r.image_url ?? r.image));
+  const active = empty(r.active) ? null : yes(r.active);
   let item = (await db.query("SELECT id FROM items WHERE company_id=$1 AND code=$2", [cid, code])).rows[0];
-  if (item) await db.query("UPDATE items SET updated_at=NOW(), name=$1,category=$2,kind=$3,hsn=$4,uoms=$5,custom=$6 WHERE id=$7", [name, r.category || null, kind, String(r.hsn ?? "") || null, uoms, custom, item.id]);
-  else item = (await db.query("INSERT INTO items (company_id,code,name,category,kind,hsn,uoms,custom) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
-    [cid, code, name, r.category || null, kind, String(r.hsn ?? "") || null, uoms, custom])).rows[0];
+  const hsn = String(r.hsn ?? "").trim() || null;
+  if (hsn && !/^\d{4,8}$/.test(hsn)) throw bad(`HSN/SAC must be 4 to 8 digits (got "${hsn}")`);
+  if (item) await db.query("UPDATE items SET updated_at=NOW(), name=$1,category=$2,kind=$3,hsn=$4,uoms=$5,custom=$6,images=COALESCE($8,images) WHERE id=$7", [name, r.category || null, kind, hsn, uoms, custom, item.id, images]);
+  else item = (await db.query("INSERT INTO items (company_id,code,name,category,kind,hsn,uoms,custom,images) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",
+    [cid, code, name, r.category || null, kind, hsn, uoms, custom, images])).rows[0];
   const v = (await db.query("SELECT id FROM variants WHERE company_id=$1 AND sku=$2", [cid, sku])).rows[0];
   const barcode = empty(r.barcode ?? r.ean ?? r.gtin) ? null : String(r.barcode ?? r.ean ?? r.gtin).trim().slice(0, 64);
   if (barcode && (await db.query("SELECT id FROM variants WHERE company_id=$1 AND barcode=$2 AND sku<>$3", [cid, barcode, sku])).rows[0]) throw bad(`barcode ${barcode} is already used by another product`);
-  if (v) { await db.query("UPDATE variants SET updated_at=NOW(), item_id=$1,attrs=$2,mrp=$3,billing_price=$4,barcode=COALESCE($6,barcode) WHERE id=$5", [item.id, JSON.stringify(attrs), mrp, bp, v.id, barcode]); return "updated"; }
-  await db.query("INSERT INTO variants (company_id,item_id,sku,attrs,mrp,billing_price,barcode) VALUES ($1,$2,$3,$4,$5,$6,$7)", [cid, item.id, sku, JSON.stringify(attrs), mrp, bp, barcode]);
+  if (v) { await db.query("UPDATE variants SET updated_at=NOW(), item_id=$1,attrs=$2,mrp=$3,billing_price=$4,barcode=COALESCE($6,barcode),active=COALESCE($7,active) WHERE id=$5", [item.id, JSON.stringify(attrs), mrp, bp, v.id, barcode, active]); return "updated"; }
+  await db.query("INSERT INTO variants (company_id,item_id,sku,attrs,mrp,billing_price,barcode,active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [cid, item.id, sku, JSON.stringify(attrs), mrp, bp, barcode, active ?? true]);
   return "inserted";
+}
+
+/** Images: up to 6 https:// links (or links to uploaded product photos), separated by commas, spaces or "|". */
+export function parseImages(v: unknown): string[] {
+  const list = (Array.isArray(v) ? v : String(v ?? "").split(/[\s,|]+/)).map(x => String(x).trim()).filter(Boolean);
+  if (list.length > 6) throw bad("at most 6 images per product");
+  for (const u of list) if (!/^https:\/\/[^\s"'<>]{4,500}$/.test(u) && !/^\/api\/product-images\/\d+\/[a-f0-9-]{36}\.(jpeg|png|webp)$/.test(u)) throw bad(`image must be an https:// link (got "${u.slice(0, 60)}")`);
+  return list;
 }
 
 /** Stock upload SETS the quantity for (location, SKU, batch). */
@@ -386,26 +400,75 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
       stock: settings.features.stock ? await runImport(c, "stock", t.sample.stock) : null });
   }));
 
-  const variantRows = async (cid: number) => (await db.query(`SELECT v.id, v.sku, v.barcode, v.attrs, v.mrp, v.billing_price, i.id AS item_id, i.code AS item_code, i.name AS item_name,
-      i.category, i.kind, i.hsn, i.uoms, i.custom FROM variants v JOIN items i ON i.id=v.item_id WHERE v.company_id=$1 ORDER BY i.code, v.id`, [cid])).rows
-    .map(r => ({ ...r, attrs: parseJson(r.attrs, {}), uoms: parseJson(r.uoms, []), custom: parseJson(r.custom, {}), mrp: Number(r.mrp), billing_price: Number(r.billing_price) }));
+  const variantRows = async (cid: number, all = true) => (await db.query(`SELECT v.id, v.sku, v.barcode, v.attrs, v.mrp, v.billing_price, v.active, i.id AS item_id, i.code AS item_code, i.name AS item_name,
+      i.category, i.kind, i.hsn, i.uoms, i.custom, i.images, i.active AS item_active FROM variants v JOIN items i ON i.id=v.item_id WHERE v.company_id=$1 ${all ? "" : "AND v.active=TRUE AND i.active=TRUE"} ORDER BY i.code, v.id`, [cid])).rows
+    .map(r => ({ ...r, attrs: parseJson(r.attrs, {}), uoms: parseJson(r.uoms, []), custom: parseJson(r.custom, {}), images: parseJson(r.images, []), mrp: Number(r.mrp), billing_price: Number(r.billing_price) }));
+  const seesAll = (req: any) => ["company_admin", "manager"].includes(req.user.role);
   app.get("/api/products", auth(...ANY), wrap(async (req, res) => {
-    const cid = tenant(req, res); if (cid == null) return; res.json(await variantRows(cid));
+    const cid = tenant(req, res); if (cid == null) return; res.json(await variantRows(cid, seesAll(req)));
   }));
   // Barcode / QR lookup for scanning (matches the barcode field or the SKU itself).
   app.get("/api/products/scan/:code", auth(...ANY), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const code = String(req.params.code).trim(); const v = (await variantRows(cid)).find(x => x.barcode === code || x.sku === code);
+    const code = String(req.params.code).trim(); const v = (await variantRows(cid, seesAll(req))).find(x => x.barcode === code || x.sku === code);
     if (!v) throw bad("no product with this code", 404); res.json(v);
   }));
   app.get("/api/items", auth(...ANY), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const m = new Map<number, any>();
-    for (const v of await variantRows(cid)) {
-      if (!m.has(v.item_id)) m.set(v.item_id, { id: v.item_id, code: v.item_code, name: v.item_name, category: v.category, kind: v.kind, hsn: v.hsn, uoms: v.uoms, custom: v.custom, variants: [] });
-      m.get(v.item_id).variants.push({ id: v.id, sku: v.sku, barcode: v.barcode, attrs: v.attrs, mrp: v.mrp, billing_price: v.billing_price });
+    for (const v of await variantRows(cid, seesAll(req))) {
+      if (!m.has(v.item_id)) m.set(v.item_id, { id: v.item_id, code: v.item_code, name: v.item_name, category: v.category, kind: v.kind, hsn: v.hsn, uoms: v.uoms, custom: v.custom, images: v.images, active: v.item_active, variants: [] });
+      m.get(v.item_id).variants.push({ id: v.id, sku: v.sku, barcode: v.barcode, attrs: v.attrs, mrp: v.mrp, billing_price: v.billing_price, active: v.active });
     }
     res.json([...m.values()]);
+  }));
+
+  // Single product add / edit (admin): every column of the product upload, same checks (one row per size/variant).
+  // Removing a size from the screen deactivates it (kept for old orders and invoices).
+  const saveItem = async (req: any, cid: number, itemId: number | null) => {
+    const { settings } = await getCompany(db, cid), b = req.body || {};
+    const code = String(b.code ?? "").trim(); if (!code) throw bad("style / item code is required");
+    if (!/^[A-Za-z0-9._\/-]{1,40}$/.test(code)) throw bad("style / item code: letters, digits and . _ / - only (max 40)");
+    if (!String(b.name ?? "").trim()) throw bad("product name is required");
+    const vars = Array.isArray(b.variants) ? b.variants : []; if (!vars.length) throw bad("add at least one size / variant (SKU)");
+    const skus = vars.map((v: any) => String(v.sku ?? "").trim());
+    if (skus.some((s: string) => !s)) throw bad("every size / variant needs a SKU");
+    if (new Set(skus).size !== skus.length) throw bad("the same SKU is listed twice");
+    const ex = itemId ? (await db.query("SELECT * FROM items WHERE id=$1 AND company_id=$2", [itemId, cid])).rows[0] : null;
+    if (itemId && !ex) throw bad("product not found", 404);
+    if (ex && ex.code !== code) throw bad("the style / item code cannot be changed");
+    if (!ex && (await db.query("SELECT id FROM items WHERE company_id=$1 AND code=$2", [cid, code])).rows[0]) throw bad(`a product with code ${code} already exists`, 409);
+    for (const s of skus) { const o = (await db.query("SELECT v.id FROM variants v JOIN items i ON i.id=v.item_id WHERE v.company_id=$1 AND v.sku=$2 AND i.code<>$3", [cid, s, code])).rows[0]; if (o) throw bad(`SKU ${s} belongs to another product`, 409); }
+    const units = Array.isArray(b.units) ? b.units : b.units;
+    const imp: Imp = { db, cid, s: settings, role: req.user.role, uid: req.user.uid, addUser };
+    await withTx(db, async tx => {
+      const c = { ...imp, db: tx };
+      for (const [i, v] of vars.entries()) {
+        const row: Record<string, unknown> = { ...(b.custom || {}), item_code: code, item_name: String(b.name).trim(), category: b.category ?? "", type: b.kind === "service" ? "service" : "goods", hsn: b.hsn ?? "",
+          units: units == null || units === "" || (Array.isArray(units) && !units.length) ? "" : units, sku: skus[i], mrp: v.mrp, billing_price: v.billing_price, barcode: v.barcode ?? "",
+          images: Array.isArray(b.images) ? b.images.join(",") : b.images ?? "", active: v.active === false || b.active === false ? "No" : "Yes" };
+        for (const a of settings.attributes) row[a] = v.attrs?.[a] ?? v[a] ?? "";
+        try { await importOne(c, "products", row); } catch (e: any) { throw bad(`${skus[i]}: ${e.message}`, e.status || 400); }
+      }
+      const it = (await tx.query("SELECT id FROM items WHERE company_id=$1 AND code=$2", [cid, code])).rows[0];
+      await tx.query("UPDATE items SET updated_at=NOW(), active=$1, images=$2 WHERE id=$3", [b.active !== false, JSON.stringify(Array.isArray(b.images) ? parseImages(b.images) : parseImages(b.images ?? "")), it.id]);
+      const gone = (await tx.query("SELECT id, sku FROM variants WHERE item_id=$1", [it.id])).rows.filter((x: any) => !skus.includes(x.sku));
+      for (const g of gone) await tx.query("UPDATE variants SET updated_at=NOW(), active=FALSE WHERE id=$1", [g.id]);
+      itemId = it.id;
+    });
+    return (await variantRows(cid)).filter(v => v.item_id === itemId);
+  };
+  app.post("/api/products/item", auth("company_admin"), wrap(async (req, res) => { const cid = tenant(req, res); if (cid == null) return; res.status(201).json(await saveItem(req, cid, null)); }));
+  app.put("/api/products/item/:id", auth("company_admin"), wrap(async (req, res) => { const cid = tenant(req, res); if (cid == null) return; res.json(await saveItem(req, cid, Number(req.params.id))); }));
+  // Product photo upload for the product screen; served by an unguessable name so <img> tags can show it.
+  app.post("/api/products/images", auth("company_admin"), smallUpload.single("photo"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const p = await savePhoto(cid, req.file); res.status(201).json({ url: `/api/product-images/${p!.file.replace(/\\/g, "/")}` });
+  }));
+  app.get(/^\/api\/product-images\/(\d+)\/([a-f0-9-]{36}\.(?:jpeg|png|webp))$/, wrap(async (req, res) => {
+    const [cidS, name] = [req.params[0], req.params[1]];
+    const buf = await photoStore().get(`${cidS}/${name}`).catch(() => null); if (!buf) return res.status(404).json({ error: "not found" });
+    res.type(name.endsWith(".png") ? "image/png" : name.endsWith(".webp") ? "image/webp" : "image/jpeg").set("Cache-Control", "public, max-age=86400").send(buf);
   }));
 
   // Single outlet add / edit uses the same checks as the retailer master upload (GSTIN, PAN, state, phone, PIN, lat/long, beat, rep, distributor).
