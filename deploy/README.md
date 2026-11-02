@@ -12,4 +12,4 @@ as root. The root `package.json` `postinstall` runs `deploy/server-hook.sh`, whi
    logins from the IPs admins entered in the app, over TLS, and writes `/var/lib/fieldforce-oss-bi/status.json` for the app.
 
 When you turn on `BI_DB_EXPOSE=1`, also allow TCP 5432 in the AWS security group **only** from those IPs (`/32`), never `0.0.0.0/0`.
-3. runs `domain-setup.sh`: serves the app at `app.ownfield.in` (added next to the sslip.io name, cert expanded) and 301-redirects `ownfield.in`/`www` (own cert) to it, each only once DNS points here; renewal via `certbot.timer`.
+3. runs `domain-setup.sh`: serves the app at `app.ownfield.in` (added next to the sslip.io name, cert expanded) and serves the company website (`website/`, copied to `/var/www/ownfield-site`) at `www.ownfield.in` with `ownfield.in` 301 to www (own cert), each only once DNS points here; renewal via `certbot.timer`.
