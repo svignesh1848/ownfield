@@ -17,14 +17,15 @@ import { FlowSettings } from "./flow";
 import { t, t as i18n, LANGS, lang, setLang } from "./i18n";
 import { VanRep, VanAdmin, Inventory, Claims, Leads, Trail, useTracking, Coverage, Surveys, Messages } from "./ops";
 import { UsersAdmin, SecurityPage, MyAccount, ResetPassword, useIdleLogout, deviceId } from "./security";
+import { TeamPage, OutletApprovals, AddOutlet, Returns, RetailerAccount, ProductForm } from "./gaps";
 import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives, RetailerHome } from "./phase3";
 
 export type Session = { token: string; idleMinutes?: number; enrollTotp?: boolean; user: { id: number; name: string; role: string; companyCode: string | null } };
 const SAVED: Record<string, string> = { POST: t("Saved"), PUT: t("Changes saved"), PATCH: t("Changes saved"), DELETE: t("Deleted") };
 // Offline: these lists are cached on the phone and served when there is no network.
-const CACHE_GET = /^\/api\/(shops|items|products|company\/settings|beats|schemes|outstanding|van\/today|leads|visits|audit-templates|surveys\/forms)(\?|$)/;
+const CACHE_GET = /^\/api\/(shops|items|products|company\/settings|beats|schemes|outstanding|van\/today|leads|visits|audit-templates|surveys\/forms|returns\/reasons|returns\/invoices|outlets\/mine)(\?|$)/;
 // Offline: these writes are queued (server dedupes by clientRef) and sent when the network returns.
-const QUEUE_POST = /^\/api\/(orders|payments|van\/sale|visits\/offline|surveys\/responses)$/;
+const QUEUE_POST = /^\/api\/(orders|payments|van\/sale|visits\/offline|surveys\/responses|returns|outlets\/request)$/;
 export const api = async (s: Session | null, url: string, opts: RequestInit = {}): Promise<any> => {
   const m0 = (opts.method || "GET").toUpperCase();
   if (s && m0 === "POST" && QUEUE_POST.test(url) && typeof opts.body === "string" && !navigator.onLine) {
@@ -192,7 +193,7 @@ export const label = (k: string) => t(WORDS[k] || k.replace(/_/g, " ").replace(/
 
 export const TAB_LABEL: Record<string, string> = { home: "Home", beat: "Today's beat", order: "New order", orders: "Orders", collect: "Collect", targets: "Targets", catalog: "Products",
   inbox: "New orders", invoices: "Invoices", collections: "Collections", POs: "Purchase orders", stock: "Stock", profile: "My profile", dashboard: "Team activity", beats: "Beat plans",
-  visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", security: "Security & privacy", integrations: "Integrations", van: "My van", surveys: "Surveys", messages: "WhatsApp / SMS", vans: "Van sales", inventory: "Inventory", claims: "Claims", leads: "Leads", trail: "Location trail", coverage: "Coverage", account: "My account", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules", fieldrules: "Field rules", data: "Data workspace" };
+  visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", security: "Security & privacy", integrations: "Integrations", van: "My van", surveys: "Surveys", messages: "WhatsApp / SMS", vans: "Van sales", inventory: "Inventory", claims: "Claims", leads: "Leads", trail: "Location trail", coverage: "Coverage", account: "My account", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules", fieldrules: "Field rules", data: "Data workspace", team: "Team & territories", outletapprovals: "New outlets", addoutlet: "Add outlet", returns: "Sales returns", statement: "Account statement", productform: "Product form" };
 export type Go = (tab: string) => void;
 export type ViewProps = { s: Session; cfg: Cfg; reload: () => void; onUsage: (u: any) => void; go: Go };
 
@@ -208,20 +209,20 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
   if (!cfg) return err ? <Empty icon="⚠️" title={t("Couldn't load your company")} text={err} action={t("Try again")} onAction={reload} /> : <Loading text={t("Loading your workspace…")} />;
   const f = cfg.settings.features;
   const groups: [string, string[]][] = mgr ? [
-    [t("Sales"), ["home", "dashboard", "orders", "beats", "visits", "targets", "shops", ...(f.schemes ? ["schemes"] : []), ...(f.audits ? ["audits"] : []), ...(f.leave ? ["leave"] : []), ...(f.incentives ? ["incentives"] : []), ...(f.vanSales ? ["vans"] : []), ...(f.leads ? ["leads"] : []), ...(f.surveys ? ["surveys"] : []), ...(f.tracking ? ["trail"] : []), ...(f.coverage ? ["coverage"] : [])]],
+    [t("Sales"), ["home", "dashboard", "orders", "beats", "visits", "targets", "shops", "outletapprovals", "returns", ...(f.schemes ? ["schemes"] : []), ...(f.audits ? ["audits"] : []), ...(f.leave ? ["leave"] : []), ...(f.incentives ? ["incentives"] : []), ...(f.vanSales ? ["vans"] : []), ...(f.leads ? ["leads"] : []), ...(f.surveys ? ["surveys"] : []), ...(f.tracking ? ["trail"] : []), ...(f.coverage ? ["coverage"] : [])]],
     [t("Distributors"), ["distributors", ...(f.purchaseOrders ? ["POs"] : []), ...(f.stock ? ["stock"] : []), ...(f.distInventory ? ["inventory"] : []), ...(f.claims ? ["claims"] : [])]],
     [t("Finance"), [...(f.invoicing ? ["invoices", "collections"] : []), ...(f.expenses ? ["expenses"] : []), ...(f.messaging ? ["messages"] : []), "reports"]],
-    [t("Setup"), ["catalog", "users", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : []), "fieldrules", "integrations", "security"] : []), "data", "account"]]]
-    : role === "retailer" ? [[t("Menu"), ["home", "order", "orders", "catalog", "account"]]]
-    : role === "sales_rep" ? [[t("Menu"), ["home", "beat", "order", "orders", ...(f.vanSales ? ["van"] : []), ...(f.leads ? ["leads"] : []), ...(f.surveys ? ["surveys"] : []), ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "reports", "catalog", "account"]]]
-    : [[t("Menu"), ["home", "inbox", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.distInventory ? ["inventory"] : []), ...(f.claims ? ["claims"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "reports", "catalog", "account"]]];
+    [t("Setup"), ["catalog", ...(admin ? ["productform"] : []), "users", "team", ...(admin ? ["settings", "import", ...(f.audits ? ["checklists"] : []), ...(f.incentives ? ["rules"] : []), "fieldrules", "integrations", "security"] : []), "data", "account"]]]
+    : role === "retailer" ? [[t("Menu"), ["home", "order", "orders", "statement", "catalog", "account"]]]
+    : role === "sales_rep" ? [[t("Menu"), ["home", "beat", "order", "orders", "addoutlet", "returns", ...(f.vanSales ? ["van"] : []), ...(f.leads ? ["leads"] : []), ...(f.surveys ? ["surveys"] : []), ...(f.audits ? ["audit"] : []), ...(f.invoicing ? ["collect"] : []), ...(f.expenses ? ["myexpenses"] : []), ...(f.leave ? ["myleave"] : []), ...(f.incentives ? ["incentives"] : []), "targets", "reports", "catalog", "account"]]]
+    : [[t("Menu"), ["home", "inbox", "returns", ...(f.invoicing && f.distributorBilling ? ["invoices", "collections"] : []), ...(f.stock ? ["stock"] : []), ...(f.distInventory ? ["inventory"] : []), ...(f.claims ? ["claims"] : []), ...(f.purchaseOrders ? ["POs"] : []), "profile", "reports", "catalog", "account"]]];
   const tabs = groups.flatMap(g => g[1]);
   const primary = (mgr ? ["home", "orders", f.invoicing ? "collections" : "dashboard", "reports"] : role === "retailer" ? ["home", "order", "orders", "catalog"] : role === "sales_rep" ? ["home", "beat", "order", f.invoicing ? "collect" : "orders"]
     : ["home", "inbox", f.invoicing && f.distributorBilling ? "invoices" : "catalog", f.stock ? "stock" : f.purchaseOrders ? "POs" : "profile"]).filter(t => tabs.includes(t));
   const cur = s.enrollTotp ? "account" : tabs.includes(tab) ? tab : "home";
   const views: Record<string, any> = { home: mgr ? ManagerHome : role === "retailer" ? RetailerHome : role === "sales_rep" ? RepHome : DistributorHome, dashboard: Dashboard, beats: Beats, orders: Orders, beat: MyBeat, order: OrderForm, inbox: Inbox, shops: ShopsMap,
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: ReportsHub, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
-    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, inventory: Inventory, claims: Claims, leads: Leads, surveys: Surveys, messages: Messages, trail: Trail, coverage: Coverage, account: (p: ViewProps) => <><div className="card"><LangPicker /></div><MyAccount s={p.s} onSignedOut={onLogout} /></>, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules, fieldrules: FlowSettings, data: DataWorkspace };
+    collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, inventory: Inventory, claims: Claims, leads: Leads, surveys: Surveys, messages: Messages, trail: Trail, coverage: Coverage, account: (p: ViewProps) => <><div className="card"><LangPicker /></div><MyAccount s={p.s} onSignedOut={onLogout} /></>, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules, fieldrules: FlowSettings, data: DataWorkspace, team: TeamPage, outletapprovals: OutletApprovals, addoutlet: AddOutlet, returns: Returns, statement: RetailerAccount, productform: ProductForm };
   const C = views[cur];
   const Item = ({ t }: { t: string }) => /* t is a tab id here */ <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{i18n(TAB_LABEL[t] || t)}</span></button>;
   return <div className="shell">

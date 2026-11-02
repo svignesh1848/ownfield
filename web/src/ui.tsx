@@ -62,6 +62,7 @@ export function Field({ label, help, error, children }: { label: string; help?: 
 }
 
 export const ICONS: Record<string, string> = {
+  team: "🧭", outletapprovals: "🏪", addoutlet: "➕", returns: "↩️", statement: "📒", productform: "📝",
   home: "🏠", beat: "🗺️", visit: "📍", order: "🛒", orders: "📦", collect: "💰", collections: "💰", targets: "🎯", catalog: "📚", inbox: "📥",
   invoices: "🧾", stock: "🏬", POs: "📋", profile: "🪪", dashboard: "📊", beats: "🗺️", visits: "📍", reports: "📈", shops: "🏪", schemes: "🏷️",
   distributors: "🚚", surveys: "📋", messages: "💬", users: "👥", settings: "⚙️", import: "⬆️", more: "☰", setup: "✅", audit: "✅", audits: "✅", checklists: "📝", expenses: "🧾", myexpenses: "🧾", leave: "🌴", myleave: "🌴", incentives: "🏆", rules: "🏆", integrations: "🔌", van: "🚐", vans: "🚐", inventory: "📦", claims: "🧾", leads: "🌱", trail: "🧭", coverage: "📊", fieldrules: "📏", data: "🧮",
