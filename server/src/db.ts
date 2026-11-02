@@ -262,6 +262,31 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS approval_level INTEGER NOT NULL DEFA
 CREATE TABLE IF NOT EXISTS channel_prices (
   id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), variant_id INTEGER NOT NULL REFERENCES variants(id), outlet_type TEXT NOT NULL, price NUMERIC NOT NULL,
   UNIQUE (variant_id, outlet_type));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reports_to INTEGER REFERENCES users(id);
+CREATE TABLE IF NOT EXISTS territories (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), name TEXT NOT NULL, level TEXT NOT NULL DEFAULT 'Area', parent_id INTEGER REFERENCES territories(id));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS territory_id INTEGER REFERENCES territories(id);
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS added_by INTEGER REFERENCES users(id);
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS approval_reason TEXT;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES users(id);
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS photo_file TEXT;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS photo_mime TEXT;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS client_ref TEXT;
+CREATE TABLE IF NOT EXISTS sales_returns (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), client_ref TEXT NOT NULL, rep_id INTEGER REFERENCES users(id), shop_id INTEGER NOT NULL REFERENCES shops(id),
+  distributor_id INTEGER REFERENCES users(id), invoice_id INTEGER REFERENCES invoices(id), status TEXT NOT NULL DEFAULT 'pending', reason TEXT NOT NULL, note TEXT, photo_file TEXT, photo_mime TEXT,
+  decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ, decision_note TEXT, credit_note_id INTEGER REFERENCES invoices(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (company_id, client_ref));
+CREATE TABLE IF NOT EXISTS sales_return_lines (
+  id SERIAL PRIMARY KEY, return_id INTEGER NOT NULL REFERENCES sales_returns(id), variant_id INTEGER NOT NULL REFERENCES variants(id), invoice_line_id INTEGER REFERENCES invoice_lines(id),
+  qty INTEGER NOT NULL, approved_qty INTEGER, condition TEXT NOT NULL DEFAULT 'saleable', rate NUMERIC);
+CREATE TABLE IF NOT EXISTS damaged_stock (
+  id SERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), distributor_id INTEGER REFERENCES users(id), variant_id INTEGER NOT NULL REFERENCES variants(id),
+  qty INTEGER NOT NULL, return_id INTEGER REFERENCES sales_returns(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+ALTER TABLE items ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS images TEXT;
+ALTER TABLE variants ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 `;
 
 export function createPool(url = process.env.DATABASE_URL): Db {
