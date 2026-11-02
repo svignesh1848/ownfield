@@ -27,7 +27,7 @@ describe("i18n", () => {
   });
   // Every UI key must be translated in every language. Bodo and Kashmiri are still in progress (no reliable
   // translation source yet) — they must not lose keys, and should be removed from this list once complete.
-  const PENDING: Record<string, number> = { brx: 137, ks: 137 };
+  const PENDING: Record<string, number> = { brx: 133, ks: 133 }; // 137 before the DEMO sample-login hint keys were removed from the login page
   for (const l of Object.keys(LANGS).filter(l => l !== "en")) it(`${l}: has every key`, () => {
     const d: Record<string, string> = JSON.parse(fs.readFileSync(path.join(dir, `${l}.json`), "utf8"));
     const missing = Object.keys(en).filter(k => !(k in d));

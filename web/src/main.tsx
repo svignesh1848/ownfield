@@ -51,7 +51,6 @@ function LangPicker() {
 function Login({ onLogin }: { onLogin: (s: Session) => void }) {
   const [f, setF] = useState({ companyCode: "", email: "", password: "", totp: "" }); const [show, setShow] = useState(false); const [needTotp, setNeedTotp] = useState(false);
   const [err, setErr] = useState<{ field?: string; text: string } | null>(null); const [busy, setBusy] = useState(false);
-  const demo = f.companyCode.trim().toUpperCase() === "DEMO";
   const submit = async (e: any) => {
     e.preventDefault();
     if (!f.companyCode.trim()) return setErr({ field: "companyCode", text: t("Enter your company code") });
@@ -67,11 +66,6 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     <div className="brand"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><div><h1>{t("OwnField")}</h1><p className="muted">{t("Own your sales.")}</p><p className="muted small">{t("Sales & distributor app")}</p></div></div>
     <Field label={t("Company code")} help={t("The short code your company uses, e.g. DEMO. Ask your administrator if you don't know it.")} error={fe("companyCode")}>
       <input autoCapitalize="characters" autoComplete="organization" value={f.companyCode} onChange={e => setF({ ...f, companyCode: e.target.value })} /></Field>
-    {demo && <div className="hint"><b>{t("Sample logins for the DEMO company")}</b><br />{t("Admin: admin@example.com / Demo@2026")}<br />{t("Sales rep: rep@example.com / Demo@2026")}<br />{t("Distributor: distributor@example.com / Demo@2026")}<br />{t("Shop (retailer): retailer@example.com / Demo@2026")}<br /><span className="muted">{t("All DEMO data is sample data.")}</span>
-      <div className="row-btns"><button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "admin@example.com", password: "Demo@2026" })}>{t("Use admin")}</button>
-        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "rep@example.com", password: "Demo@2026" })}>{t("Use sales rep")}</button>
-        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "manager@example.com", password: "Demo@2026" })}>{t("Use manager")}</button>
-        <button type="button" className="sm ghost" onClick={() => setF({ ...f, email: "retailer@example.com", password: "Demo@2026" })}>{t("Use shop")}</button></div></div>}
     <Field label={t("Email")} help={t("The email address you were registered with.")} error={fe("email")}>
       <input type="email" inputMode="email" autoComplete="username" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
     <Field label={t("Password")} error={fe("password")}>
@@ -83,7 +77,6 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     <button className="block" disabled={busy}>{busy ? t("Signing in…") : t("Sign in")}</button>
     <p className="center"><a href="#reset">{t("Have a reset code from your administrator?")}</a></p>
     <p className="center"><a href="#signup">{t("New here? Create your company")}</a></p>
-    <p className="muted small center">{t("Platform owner? Use company code PLATFORM.")}</p>
     <LangPicker /><p className="muted small center copy">© 2026 Vignesh S. OwnField is a trademark of Vignesh S. · <a href="/privacy.html">{t("Privacy")}</a></p></form></div>;
 }
 
