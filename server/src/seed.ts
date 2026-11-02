@@ -127,6 +127,36 @@ export async function seedDemo(db: Db, code = "DEMO") {
   if (tpl) { const qs = parseJson<any[]>(tpl.questions, []); const f = qs.find(q => q.key === "facings" && q.type === "number"); if (f && !f.target) { f.target = 12; await db.query("UPDATE audit_templates SET questions=$1 WHERE id=$2", [JSON.stringify(qs), tpl.id]); } }
   await db.query("UPDATE schemes SET budget=5000 WHERE id=(SELECT MIN(id) FROM schemes WHERE company_id=$1) AND budget IS NULL", [cid]);
   });
+  // 7b) Sales hierarchy (once): Zone > Region > Area sample territories; the manager reports to the admin and every
+  // sales rep without a manager reports to the sample manager, so the manager keeps seeing the same reps as before.
+  await step("hierarchy", async () => {
+  if (await one(db, "SELECT k FROM company_kv WHERE company_id=$1 AND k='hierarchySeeded'", [cid])) return;
+  const mk = async (name: string, level: string, parent: number | null) => (await one(db, "SELECT id FROM territories WHERE company_id=$1 AND name=$2", [cid, name]))
+    || await one(db, "INSERT INTO territories (company_id,name,level,parent_id) VALUES ($1,$2,$3,$4) RETURNING id", [cid, name, level, parent]);
+  const z = await mk("South Zone (sample)", "Zone", null), r = await mk("Tamil Nadu Region (sample)", "Region", z.id), a = await mk("Chennai Area (sample)", "Area", r.id);
+  const admin = await one(db, "SELECT id FROM users WHERE company_id=$1 AND role='company_admin' ORDER BY id", [cid]);
+  const m = await one(db, "SELECT id FROM users WHERE company_id=$1 AND email='manager@example.com'", [cid]);
+  if (admin) await db.query("UPDATE users SET territory_id=COALESCE(territory_id,$1) WHERE id=$2", [z.id, admin.id]);
+  if (m) {
+    await db.query("UPDATE users SET reports_to=COALESCE(reports_to,$1), territory_id=COALESCE(territory_id,$2) WHERE id=$3", [admin?.id ?? null, r.id, m.id]);
+    await db.query("UPDATE users SET reports_to=$1, territory_id=COALESCE(territory_id,$2) WHERE company_id=$3 AND role='sales_rep' AND reports_to IS NULL", [m.id, a.id, cid]);
+  }
+  await kvSet(db, cid, "hierarchySeeded", { at: new Date().toISOString() });
+  });
+  // 7c) New-outlet approval and sales returns: one pending sample of each, so the screens are not empty.
+  await step("approvals-returns", async () => {
+  if (!rep) return;
+  if (!(await one(db, "SELECT id FROM shops WHERE company_id=$1 AND code='SAMPLE-NEW-1'", [cid])))
+    await db.query(`INSERT INTO shops (company_id,code,name,owner_name,phone,city,lat,lng,approval_status,added_by,rep_id,client_ref) VALUES ($1,'SAMPLE-NEW-1','Sample New Outlet (sample, pending approval)','Sample Owner','9000000011','Chennai',13.0850,80.2101,'pending',$2,$2,'sample-new-outlet-1')`, [cid, rep.id]);
+  if (!(await one(db, "SELECT id FROM sales_returns WHERE company_id=$1", [cid]))) {
+    const sh = await one(db, "SELECT id, distributor_id FROM shops WHERE company_id=$1 AND distributor_id IS NOT NULL AND COALESCE(approval_status,'approved')='approved' ORDER BY id", [cid]);
+    const v = await one(db, "SELECT v.id, v.billing_price FROM variants v JOIN items i ON i.id=v.item_id WHERE i.company_id=$1 AND i.kind='goods' ORDER BY v.id", [cid]);
+    if (sh && v) {
+      const r = await one(db, "INSERT INTO sales_returns (company_id,client_ref,rep_id,shop_id,distributor_id,reason,note) VALUES ($1,'sample-return-1',$2,$3,$4,'Damaged','Sample return — 2 pieces torn in transit') RETURNING id", [cid, rep.id, sh.id, sh.distributor_id]);
+      await db.query("INSERT INTO sales_return_lines (return_id,variant_id,qty,condition,rate) VALUES ($1,$2,2,'damaged',$3),($1,$2,1,'saleable',$3)", [r.id, v.id, v.billing_price]);
+    }
+  }
+  });
   // 8) Order history for the AI suggestions and manager summary: ~60 days of sample orders (fulfilled, no stock moves), topped up on each start.
   await step("order-history", async () => {
   if (!rep) return;

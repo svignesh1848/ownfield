@@ -37,6 +37,10 @@ import "./connectors/service.js";
 import { diskStatus } from "./disk.js";
 import { registerCustomReportRoutes } from "./reports/routes.js";
 import { registerWorkspaceRoutes } from "./workspace/routes.js";
+import { registerHierarchyRoutes, teamIds, inTeam, resolveReportsTo, resolveTerritory } from "./hierarchy.js";
+import { registerReturnRoutes } from "./returns.js";
+import { registerOutletApprovalRoutes, visibleShopSql } from "./outlets.js";
+import { registerAccountRoutes2 } from "./account.js";
 
 export const ROLES = ["platform_owner", "company_admin", "manager", "sales_rep", "distributor", "retailer"] as const;
 export type Role = (typeof ROLES)[number];
@@ -115,10 +119,14 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
       if (!sh) throw Object.assign(new Error("retailer needs an outlet (shop code)"), { status: 400 });
       shopId = sh.id;
     }
+    // Sales hierarchy (optional columns in the user upload): Reports To (email of the manager) and Territory (name).
+    const rtRaw = u.reports_to ?? u.reportsTo ?? u.reports_to_email ?? u.manager_email;
+    const reportsTo = await resolveReportsTo(db, companyId, null, rtRaw);
+    const territoryId = await resolveTerritory(db, companyId, u.territory ?? u.territoryId ?? u.territory_id);
     const hash = await bcrypt.hash(String(u.password), 10);
     const r = await db.query(
-      "INSERT INTO users (company_id,email,name,phone,role,password_hash,drug_licence,shop_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,email,name,role,shop_id",
-      [companyId, String(u.email).toLowerCase().trim(), u.name, String(u.phone ?? "") || null, role, hash, String(u.drug_licence ?? "").trim() || null, shopId]);
+      "INSERT INTO users (company_id,email,name,phone,role,password_hash,drug_licence,shop_id,reports_to,territory_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,email,name,role,shop_id,reports_to,territory_id",
+      [companyId, String(u.email).toLowerCase().trim(), u.name, String(u.phone ?? "") || null, role, hash, String(u.drug_licence ?? "").trim() || null, shopId, reportsTo, territoryId]);
     return r.rows[0];
   }
 
@@ -248,7 +256,8 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   }));
   app.get("/api/users", auth("company_admin", "manager"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    res.json((await db.query("SELECT id,email,name,phone,role,drug_licence,active,shop_id FROM users WHERE company_id=$1 ORDER BY id", [cid])).rows);
+    const team = await teamIds(db, cid, req.user); // managers with a team see their own people (plus distributors / retailers)
+    res.json((await db.query(`SELECT id,email,name,phone,role,drug_licence,active,shop_id,reports_to,territory_id FROM users WHERE company_id=$1 ${team ? `AND (role IN ('distributor','retailer')${inTeam("id", team).replace(" AND", " OR")})` : ""} ORDER BY id`, [cid])).rows);
   }));
   app.post("/api/users", auth("company_admin"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
@@ -259,8 +268,10 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   app.get("/api/shops", anyCompanyRole, wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     // Retailers see their own outlet; distributors see only the outlets mapped to them; reps see active outlets.
-    const own = req.user.role === "retailer", dist = req.user.role === "distributor";
-    res.json((await db.query(`SELECT * FROM shops WHERE company_id=$1 ${own ? "AND id=(SELECT shop_id FROM users WHERE id=$2)" : dist ? "AND distributor_id=$2" : ""} ${req.user.role === "sales_rep" ? "AND active=TRUE" : ""} ORDER BY name`, own || dist ? [cid, req.user.uid] : [cid])).rows.map(r => ({ ...r, custom: parseJson(r.custom, {}) })));
+    // Reps see approved active outlets on their own beats plus the outlets they added (company setting, default on).
+    const own = req.user.role === "retailer", dist = req.user.role === "distributor", rep = req.user.role === "sales_rep";
+    const repSql = rep ? await visibleShopSql(db, cid, req.user.uid) : "";
+    res.json((await db.query(`SELECT * FROM shops WHERE company_id=$1 ${own ? "AND id=(SELECT shop_id FROM users WHERE id=$2)" : dist ? "AND distributor_id=$2" : ""} ${rep ? `AND active=TRUE ${repSql}` : ""} ORDER BY name`, own || dist ? [cid, req.user.uid] : [cid])).rows.map(r => ({ ...r, custom: parseJson(r.custom, {}) })));
   }));
   registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, companyUsage });
   registerFieldRoutes({ app, db, auth, wrap, tenant });
@@ -289,6 +300,10 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   registerIntegrationRoutes({ app, db, auth, wrap, tenant });
   registerCustomReportRoutes({ app, db, auth, wrap, tenant });
   registerWorkspaceRoutes({ app, db, auth, wrap, tenant });
+  registerHierarchyRoutes({ app, db, auth, wrap, tenant });
+  registerReturnRoutes({ app, db, auth, wrap, tenant });
+  registerOutletApprovalRoutes({ app, db, auth, wrap, tenant });
+  registerAccountRoutes2({ app, db, auth, wrap, tenant });
   registerInbound(app, db);
   registerApiV1(app, db);
 
