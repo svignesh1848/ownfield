@@ -89,9 +89,11 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
 
   // ---- Beats ----
+  // Visiting day: 0 = Sunday … 6 = Saturday; blank = every working day (Mon–Sat), same rule as coverage.
+  const beatDay = (v: unknown) => { if (v == null || v === "") return null; const n = Number(v); if (!Number.isInteger(n) || n < 0 || n > 6) throw bad("weekday must be 0 (Sunday) to 6 (Saturday)"); return n; };
   app.post("/api/beats", auth(...MGR), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const { name, repId, shopIds = [], weekday = null } = req.body || {};
+    const { name, repId, shopIds = [] } = req.body || {}; const weekday = beatDay(req.body?.weekday);
     if (!name) throw bad("name required");
     if (repId != null && !(await userIn(cid, repId, "sales_rep"))) throw bad("rep not found", 404);
     for (const s of shopIds) if (!(await shopIn(cid, s))) throw bad(`shop ${s} not found`, 404);
@@ -99,13 +101,35 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     for (const [i, s] of (shopIds as unknown[]).entries()) await db.query("INSERT INTO beat_shops (beat_id,shop_id,seq) VALUES ($1,$2,$3)", [b.id, Number(s), i + 1]);
     res.status(201).json(b);
   }));
+  // Edit a beat (journey plan): name, rep, visiting day and the outlets in visiting order.
+  app.put("/api/beats/:id", auth(...MGR), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const b = (await db.query("SELECT * FROM beats WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
+    if (!b) throw bad("beat not found", 404);
+    const body = req.body || {};
+    const name = body.name !== undefined ? String(body.name).trim() : b.name; if (!name) throw bad("name required");
+    const repId = body.repId !== undefined ? (body.repId == null || body.repId === "" ? null : Number(body.repId)) : b.rep_id;
+    if (repId != null && !(await userIn(cid, repId, "sales_rep"))) throw bad("rep not found", 404);
+    const weekday = body.weekday !== undefined ? beatDay(body.weekday) : b.weekday;
+    if (body.shopIds !== undefined) {
+      if (!Array.isArray(body.shopIds)) throw bad("shopIds must be a list");
+      for (const x of body.shopIds) if (!(await shopIn(cid, x))) throw bad(`shop ${x} not found`, 404);
+    }
+    const r = (await db.query("UPDATE beats SET name=$1, rep_id=$2, weekday=$3 WHERE id=$4 RETURNING *", [name, repId, weekday, b.id])).rows[0];
+    if (body.shopIds !== undefined) {
+      await db.query("DELETE FROM beat_shops WHERE beat_id=$1", [b.id]);
+      for (const [i, x] of (body.shopIds as unknown[]).entries()) await db.query("INSERT INTO beat_shops (beat_id,shop_id,seq) VALUES ($1,$2,$3)", [b.id, Number(x), i + 1]);
+    }
+    res.json(r);
+  }));
   app.get("/api/beats", auth("company_admin", "manager", "sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const mine = req.user.role === "sales_rep";
     const beats = (await db.query(`SELECT b.*, u.name AS rep_name FROM beats b LEFT JOIN users u ON u.id=b.rep_id
       WHERE b.company_id=$1 ${mine ? "AND b.rep_id=$2" : ""} ORDER BY b.id`, mine ? [cid, req.user.uid] : [cid])).rows;
-    const leaveCache = new Map<number, boolean>();
+    const leaveCache = new Map<number, boolean>(), wd = new Date(Date.now() + 5.5 * 36e5).getUTCDay();
     for (const b of beats) {
+      b.today = b.weekday == null ? wd !== 0 : Number(b.weekday) === wd;
       b.shops = (await db.query(`SELECT s.id,s.code,s.name,s.city,bs.seq FROM beat_shops bs JOIN shops s ON s.id=bs.shop_id
       WHERE bs.beat_id=$1 ORDER BY bs.seq`, [b.id])).rows;
       if (b.rep_id) { if (!leaveCache.has(b.rep_id)) leaveCache.set(b.rep_id, !!(await onLeave(db, cid, b.rep_id))); if (leaveCache.get(b.rep_id)) b.onLeaveToday = true; }
@@ -138,9 +162,13 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (isNaN(+tin) || +tin > now + 60_000 || +tin < now - 3 * 864e5 || (tout && (isNaN(+tout) || tout < tin || +tout > now + 60_000))) throw bad("visit times look wrong");
     const { settings } = await getCompany(db, cid);
     const [lat, lng] = coordOpt(false, b.lat, b.lng);
+    const [olat, olng] = b.outLat != null && b.outLng != null ? coordOpt(false, b.outLat, b.outLng) : [lat, lng];
     await geofenceCheck(db, cid, Number(b.shopId), lat, lng);
-    res.status(201).json((await db.query("INSERT INTO visits (company_id,rep_id,shop_id,check_in_at,in_lat,in_lng,check_out_at,out_lat,out_lng,notes,custom,client_ref) VALUES ($1,$2,$3,$4,$5,$6,$7,$5,$6,$8,$9,$10) RETURNING *",
-      [cid, req.user.uid, Number(b.shopId), tin.toISOString(), lat, lng, tout ? tout.toISOString() : tin.toISOString(), b.notes ?? null, JSON.stringify(cleanCustom(settings.customFields.visit, b.custom || {}, false)), String(b.clientRef).slice(0, 60)])).rows[0]);
+    // Keep the no-order reason the rep picked offline (orders taken offline may sync later, so it is not forced here).
+    const flow = await getFlow(db, cid); const reason = b.noOrderReason ? String(b.noOrderReason).trim().slice(0, 80) : null;
+    if (reason && flow.noOrderReasons.length && !flow.noOrderReasons.includes(reason)) throw bad("pick one of the listed reasons");
+    res.status(201).json((await db.query("INSERT INTO visits (company_id,rep_id,shop_id,check_in_at,in_lat,in_lng,check_out_at,out_lat,out_lng,notes,custom,client_ref,no_order_reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$11,$12,$8,$9,$10,$13) RETURNING *",
+      [cid, req.user.uid, Number(b.shopId), tin.toISOString(), lat, lng, tout ? tout.toISOString() : tin.toISOString(), b.notes ?? null, JSON.stringify(cleanCustom(settings.customFields.visit, b.custom || {}, false)), String(b.clientRef).slice(0, 60), olat, olng, reason])).rows[0]);
   }));
   app.post("/api/visits/:id/checkout", auth("sales_rep"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
