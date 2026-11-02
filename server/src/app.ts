@@ -258,8 +258,9 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret
   }));
   app.get("/api/shops", anyCompanyRole, wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const own = req.user.role === "retailer";
-    res.json((await db.query(`SELECT * FROM shops WHERE company_id=$1 ${own ? "AND id=(SELECT shop_id FROM users WHERE id=$2)" : ""} ${req.user.role === "sales_rep" ? "AND active=TRUE" : ""} ORDER BY name`, own ? [cid, req.user.uid] : [cid])).rows.map(r => ({ ...r, custom: parseJson(r.custom, {}) })));
+    // Retailers see their own outlet; distributors see only the outlets mapped to them; reps see active outlets.
+    const own = req.user.role === "retailer", dist = req.user.role === "distributor";
+    res.json((await db.query(`SELECT * FROM shops WHERE company_id=$1 ${own ? "AND id=(SELECT shop_id FROM users WHERE id=$2)" : dist ? "AND distributor_id=$2" : ""} ${req.user.role === "sales_rep" ? "AND active=TRUE" : ""} ORDER BY name`, own || dist ? [cid, req.user.uid] : [cid])).rows.map(r => ({ ...r, custom: parseJson(r.custom, {}) })));
   }));
   registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, companyUsage });
   registerFieldRoutes({ app, db, auth, wrap, tenant });
