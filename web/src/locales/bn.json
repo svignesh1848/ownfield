@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "{1} এ #{0} অর্ডার করার জন্য আপনার অনুমোদন প্রয়োজন",
  "Out for delivery": "ডেলিভারির জন্য আউট",
  "{0} (ordered {1})": "{0} (আদেশ {1})",
- "Use manager": "ম্যানেজার ব্যবহার করুন"
+ "Use manager": "ম্যানেজার ব্যবহার করুন",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "প্রতিটি কাজের দিন",
+ "Add outlet": "আউটলেট যোগ করুন",
+ "Latitude": "অক্ষাংশ",
+ "Longitude": "দ্রাঘিমাংশ",
+ "Outlet class": "আউটলেট শ্রেণি",
+ "Payment terms": "পেমেন্টের শর্ত"
 }

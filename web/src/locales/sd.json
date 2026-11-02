@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "آرڊر #{0} تي {1} توهان جي منظوري جي ضرورت آهي",
  "Out for delivery": "پهچائڻ لاء ٻاهر",
  "{0} (ordered {1})": "{0} (حڪم ڏنو {1})",
- "Use manager": "مئنيجر استعمال ڪريو"
+ "Use manager": "مئنيجر استعمال ڪريو",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "هر ڪم جو ڏينهن",
+ "Add outlet": "آئوٽليٽ شامل ڪريو",
+ "Latitude": "ويڪرائي ڦاڪ",
+ "Longitude": "ڊگهائي ڦاڪ",
+ "Outlet class": "آئوٽليٽ جو درجو",
+ "Payment terms": "ادائگي جون شرطون"
 }

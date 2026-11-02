@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "{1} इत्यत्र #{0} आदेशं भवतः अनुमोदनस्य आवश्यकता अस्ति",
  "Out for delivery": "प्रसवार्थं बहिः",
  "{0} (ordered {1})": "{0} (ordered {1})",
- "Use manager": "प्रबन्धकस्य उपयोगं कुर्वन्तु"
+ "Use manager": "प्रबन्धकस्य उपयोगं कुर्वन्तु",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "प्रत्येकं कार्यदिनम्",
+ "Add outlet": "आपणं योजयतु",
+ "Latitude": "अक्षांशः",
+ "Longitude": "रेखांशः",
+ "Outlet class": "आपणवर्गः",
+ "Payment terms": "शुल्कनियमाः"
 }

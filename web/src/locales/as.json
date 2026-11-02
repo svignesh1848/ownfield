@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "{1} ত #{0} অৰ্ডাৰৰ বাবে আপোনাৰ অনুমোদনৰ প্ৰয়োজন",
  "Out for delivery": "ডেলিভাৰীৰ বাবে ওলাইছে",
  "{0} (ordered {1})": "{0} (ক্ৰম কৰা হৈছে {1})",
- "Use manager": "মেনেজাৰ ব্যৱহাৰ কৰক"
+ "Use manager": "মেনেজাৰ ব্যৱহাৰ কৰক",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "প্ৰতিটো কামৰ দিন",
+ "Add outlet": "আউটলেট যোগ কৰক",
+ "Latitude": "অক্ষাংশ",
+ "Longitude": "দ্ৰাঘিমাংশ",
+ "Outlet class": "আউটলেট শ্ৰেণী",
+ "Payment terms": "পেমেণ্টৰ চৰ্ত"
 }

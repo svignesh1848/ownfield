@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "{1}ꯗꯥ ꯂꯩꯕꯥ ꯑꯣꯔꯗꯔ #{0} ꯑꯁꯤ ꯅꯍꯥꯛꯀꯤ ꯑꯌꯥꯕꯥ ꯃꯊꯧ ꯇꯥꯏ꯫",
  "Out for delivery": "ꯗꯦꯂꯤꯕꯔꯤꯒꯤꯗꯃꯛ ꯊꯣꯀꯈꯤ꯫",
  "{0} (ordered {1})": "{0} (ꯑꯔꯗꯥꯔ ꯇꯧꯔꯕꯥ {1})",
- "Use manager": "ꯃꯦꯅꯦꯖꯔ ꯁꯤꯖꯤꯟꯅꯧ꯫"
+ "Use manager": "ꯃꯦꯅꯦꯖꯔ ꯁꯤꯖꯤꯟꯅꯧ꯫",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "ꯊꯕꯛ ꯇꯧꯕ ꯅꯨꯃꯤꯠ ꯈꯨꯗꯤꯡꯃꯛ",
+ "Add outlet": "ꯑꯥꯎꯇꯂꯦꯠ ꯍꯥꯞꯆꯤꯟꯕ",
+ "Latitude": "ꯂꯦꯇꯤꯇ꯭ꯌꯨꯗ",
+ "Longitude": "ꯂꯣꯡꯒꯤꯇ꯭ꯌꯨꯗ",
+ "Outlet class": "ꯑꯥꯎꯇꯂꯦꯠ ꯀ꯭ꯂꯥꯁ",
+ "Payment terms": "ꯄꯦꯃꯦꯟꯇꯀꯤ ꯃꯑꯣꯡ"
 }

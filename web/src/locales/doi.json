@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "{1} पर आर्डर #{0} गी तुंदी मंजूरी दी लोड़ ऐ",
  "Out for delivery": "डिलीवरी दे वास्ते बाहर",
  "{0} (ordered {1})": "{0} (आर्डर कीता गेदा {1})",
- "Use manager": "मैनेजर दा इस्तेमाल करो"
+ "Use manager": "मैनेजर दा इस्तेमाल करो",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "हर कम्मै दा दिन",
+ "Add outlet": "आउटलेट जोड़ो",
+ "Latitude": "अक्षांश",
+ "Longitude": "देशांतर",
+ "Outlet class": "आउटलेट श्रेणी",
+ "Payment terms": "भुगतान दियां शर्तां"
 }

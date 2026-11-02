@@ -1322,5 +1322,13 @@
  "Order #{0} at {1} needs your approval": "{1} हांगाच्या #{0} ऑर्डराक तुमची मान्यताय जाय",
  "Out for delivery": "डिलिव्हरी खातीर भायर सरलो",
  "{0} (ordered {1})": "{0} (ordered {1})",
- "Use manager": "मॅनेजर वापरात"
+ "Use manager": "मॅनेजर वापरात",
+ "GSTIN": "GSTIN",
+ "PAN": "PAN",
+ "Every working day": "दर एक कामाचो दीस",
+ "Add outlet": "आउटलेट जोडात",
+ "Latitude": "अक्षांश",
+ "Longitude": "रेखांश",
+ "Outlet class": "आउटलेट वर्ग",
+ "Payment terms": "पैशे फारीक करपाच्यो अटी"
 }

@@ -40,27 +40,74 @@ export function Dashboard({ s }: { s: Session }) {
     <Table rows={rows.map(r => ({ ...r, value: inr(r.value) }))} cols={["day", "rep", "visits", "orders", "value"]} empty={{ title: t("No activity in this period"), text: t("Visits and orders appear here once reps start working.") }} /></>;
 }
 
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export function Beats({ s }: { s: Session }) {
   const [beats, setBeats] = useState<any[]>([]); const [reps, setReps] = useState<any[]>([]); const [shops, setShops] = useState<any[]>([]);
-  const [f, setF] = useState<{ name: string; repId: string; shopIds: number[] }>({ name: "", repId: "", shopIds: [] }); const [msg, setMsg] = useState("");
+  const blank = { name: "", repId: "", weekday: "", shopIds: [] as number[] };
+  const [f, setF] = useState<{ name: string; repId: string; weekday: string; shopIds: number[] }>(blank); const [msg, setMsg] = useState(""); const [editId, setEditId] = useState<number | null>(null);
   const load = () => api(s, "/api/beats").then(setBeats);
   useEffect(() => { load(); api(s, "/api/reps").then(setReps); api(s, "/api/shops").then(setShops); }, []);
+  const startEdit = (b: any) => { setEditId(b.id); setF({ name: b.name, repId: b.rep_id ? String(b.rep_id) : "", weekday: b.weekday == null ? "" : String(b.weekday), shopIds: b.shops.map((x: any) => x.id) }); window.scrollTo(0, document.body.scrollHeight); };
+  const move = (id: number, d: number) => { const l = [...f.shopIds], i = l.indexOf(id), j = i + d; if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; setF({ ...f, shopIds: l }); };
   return <><h2>{t("Beat plans")}</h2><p className="muted">A <Term k="Beat">{t("beat")}</Term> {t("is the route of outlets a rep visits.")}</p>{!beats.length && <Empty icon="🗺️" title={t("No beats yet")} text={t("Create one below: name it, pick a rep, tick the outlets in visiting order.")} />}
-    {beats.map(b => <div className="row" key={b.id}><b>{b.name}</b> · {b.rep_name || "unassigned"}<div className="muted">{b.shops.map((x: any) => x.name).join(" → ")}</div></div>)}
-    <form onSubmit={async e => { e.preventDefault(); try { await api(s, "/api/beats", { method: "POST", body: JSON.stringify({ ...f, repId: f.repId ? Number(f.repId) : null }) }); setF({ name: "", repId: "", shopIds: [] }); setMsg(t("Beat created")); load(); } catch (x: any) { setMsg(x.message); } }}>
-      <h3>{t("New beat")}</h3><input placeholder={t("Beat name")} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required />
+    {beats.map(b => <div className="row" key={b.id}><b>{b.name}</b> · {b.rep_name || "unassigned"} · {b.weekday == null ? t("Every working day") : t(DAYS[b.weekday])} <button className="sm ghost" onClick={() => startEdit(b)}>{t("Edit")}</button><div className="muted">{b.shops.map((x: any) => x.name).join(" → ")}</div></div>)}
+    <form onSubmit={async e => { e.preventDefault(); try { const body = JSON.stringify({ ...f, repId: f.repId ? Number(f.repId) : null, weekday: f.weekday === "" ? null : Number(f.weekday) });
+        if (editId) await api(s, `/api/beats/${editId}`, { method: "PUT", body }); else await api(s, "/api/beats", { method: "POST", body });
+        setF(blank); setMsg(editId ? t("Changes saved") : t("Beat created")); setEditId(null); load(); } catch (x: any) { setMsg(x.message); } }}>
+      <h3>{editId ? t("Edit") : t("New beat")}</h3><input placeholder={t("Beat name")} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required />
       <select value={f.repId} onChange={e => setF({ ...f, repId: e.target.value })}><option value="">{t("Assign rep…")}</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+      <select value={f.weekday} onChange={e => setF({ ...f, weekday: e.target.value })}><option value="">{t("Every working day")}</option>{DAYS.map((d, i) => <option key={d} value={i}>{t(d)}</option>)}</select>
+      {f.shopIds.length > 0 && <div className="muted">{f.shopIds.map((id, i) => { const x = shops.find(y => y.id === id); return <span key={id} className="pill">{i + 1}. {x?.name} <a onClick={() => move(id, -1)}>↑</a> <a onClick={() => move(id, 1)}>↓</a></span>; })}</div>}
       {shops.map(x => <label key={x.id} className="chk"><input type="checkbox" checked={f.shopIds.includes(x.id)} onChange={e => setF({ ...f, shopIds: e.target.checked ? [...f.shopIds, x.id] : f.shopIds.filter(i => i !== x.id) })} />{x.name} <span className="muted">{x.city}</span></label>)}
-      <button>{t("Create beat")}</button><p>{msg}</p></form></>;
+      <button>{editId ? t("Save") : t("Create beat")}</button>{editId && <button type="button" className="ghost" onClick={() => { setEditId(null); setF(blank); }}>{t("Cancel")}</button>}<p>{msg}</p></form></>;
+}
+
+const OUTLET_FIELDS: [string, string, string?][] = [["code", "Outlet code"], ["name", "Name"], ["owner_name", "Owner"], ["phone", "Phone", "tel"], ["email", "Email", "email"],
+  ["gstin", "GSTIN"], ["pan", "PAN"], ["address", "Address"], ["city", "City"], ["state", "State"], ["pincode", "PIN code"], ["latitude", "Latitude"], ["longitude", "Longitude"],
+  ["channel", "Channel"], ["outlet_type", "Outlet type"], ["outlet_class", "Outlet class"], ["beat", "Beat"], ["credit_limit", "Credit limit", "number"], ["credit_days", "Credit days", "number"], ["payment_terms", "Payment terms"]];
+const outletToForm = (x: any) => ({ code: x.code ?? "", name: x.name ?? "", owner_name: x.owner_name ?? "", contact_person: "", phone: x.phone ?? "", email: x.email ?? "", gstin: x.gstin ?? "", pan: x.pan ?? "",
+  address: x.address ?? "", city: x.city ?? "", state: x.state_code ?? "", pincode: x.pincode ?? "", latitude: x.lat ?? "", longitude: x.lng ?? "", channel: x.channel ?? "", outlet_type: x.outlet_type ?? "",
+  outlet_class: x.outlet_class ?? "", beat: "", credit_limit: x.credit_limit ?? "", credit_days: x.credit_days ?? "", payment_terms: x.payment_terms ?? "", active: x.active !== false, rep_id: x.rep_id ?? "", distributor_id: x.distributor_id ?? "", custom: x.custom || {} });
+
+/** Add or edit one outlet with every field the retailer master upload has (same checks on the server). */
+function OutletForm({ s, cfg, shop, reps, dists, done }: { s: Session; cfg: Cfg; shop: any | null; reps: any[]; dists: any[]; done: () => void }) {
+  const [f, setF] = useState<any>(() => outletToForm(shop || {})); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr(""); setBusy(true);
+    const body: any = { ...f, active: f.active ? "Yes" : "No", rep_email: reps.find(r => String(r.id) === String(f.rep_id))?.email, distributor_email: dists.find(d => String(d.id) === String(f.distributor_id))?.email };
+    delete body.rep_id; delete body.distributor_id; delete body.credit_limit; delete body.credit_days;
+    for (const k of Object.keys(body)) if (body[k] === "" || body[k] === undefined) delete body[k];
+    try {
+      const r = shop ? await api(s, `/api/shops/${shop.id}`, { method: "PATCH", body: JSON.stringify(body) }) : await api(s, "/api/shops", { method: "POST", body: JSON.stringify(body) });
+      await api(s, `/api/shops/${r.id}`, { method: "PATCH", body: JSON.stringify({ creditLimit: f.credit_limit === "" ? null : f.credit_limit, creditDays: f.credit_days === "" ? null : f.credit_days }) });
+      if (shop && String(f.distributor_id || "") !== String(shop.distributor_id || "")) await api(s, `/api/shops/${r.id}/distributor`, { method: "POST", body: JSON.stringify({ distributorId: f.distributor_id ? Number(f.distributor_id) : null }) });
+      done();
+    } catch (x: any) { setErr(x.message); } finally { setBusy(false); }
+  };
+  return <form className="card" onSubmit={save}><h3>{shop ? t("Edit") : t("Add outlet")}</h3>
+    {OUTLET_FIELDS.filter(([k]) => !(shop && k === "code")).map(([k, l, type]) => <Field key={k} label={t(l)}><input type={type || "text"} value={f[k]} required={k === "code" || k === "name"} onChange={e => setF({ ...f, [k]: e.target.value })} /></Field>)}
+    <Field label={t("Sales rep")}><select value={f.rep_id} onChange={e => setF({ ...f, rep_id: e.target.value })}><option value="">{"—"}</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field>
+    <Field label={t("Distributor")}><select value={f.distributor_id} onChange={e => setF({ ...f, distributor_id: e.target.value })}><option value="">{t("Company direct (no distributor)")}</option>{dists.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
+    {cfg.settings.customFields.outlet.length > 0 && <CustomInputs defs={cfg.settings.customFields.outlet} value={f.custom} onChange={(c: any) => setF({ ...f, custom: c })} />}
+    <label className="chk"><input type="checkbox" checked={f.active} onChange={e => setF({ ...f, active: e.target.checked })} />{t("Active")}</label>
+    
+    <button disabled={busy}>{shop ? t("Save") : t("Add outlet")}</button> <button type="button" className="ghost" onClick={done}>{t("Cancel")}</button><p className="err">{err}</p></form>;
 }
 
 export function ShopsMap({ s, cfg }: { s: Session; cfg: Cfg }) {
-  const [shops, setShops] = useState<any[]>([]); const [d, setD] = useState<any[]>([]);
+  const [shops, setShops] = useState<any[]>([]); const [d, setD] = useState<any[]>([]); const [reps, setReps] = useState<any[]>([]);
+  const [edit, setEdit] = useState<any | null | undefined>(undefined); const [q, setQ] = useState("");
   const mgr = ["company_admin", "manager"].includes(s.user.role), defs = cfg.settings.customFields.outlet;
   const load = () => api(s, "/api/shops").then(setShops);
-  useEffect(() => { load(); if (mgr) api(s, "/api/distributors").then(setD); }, []);
-  return <><h2>{t("Outlets & distributor mapping")}</h2>{shops.map(x => <div className="row" key={x.id}><b>{x.name}</b> <span className="muted">{x.code} · {x.city}</span>
+  useEffect(() => { load(); if (mgr) { api(s, "/api/distributors").then(setD); api(s, "/api/reps").then(setReps); } }, []);
+  const shown = shops.filter(x => !q || `${x.name} ${x.code} ${x.city ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  return <><h2>{t("Outlets & distributor mapping")}</h2>
+    {mgr && edit === undefined && <button className="sm" onClick={() => setEdit(null)}>{"+ " + t("Add outlet")}</button>}
+    {mgr && edit !== undefined && <OutletForm s={s} cfg={cfg} shop={edit} reps={reps} dists={d} done={() => { setEdit(undefined); load(); }} />}
+    {shops.length > 8 && <input placeholder={t("Search outlet name, code or city")} value={q} onChange={e => setQ(e.target.value)} />}
+    {shown.map(x => <div className="row" key={x.id}><b>{x.name}</b> <span className="muted">{x.code} · {x.city}{x.active === false ? " · ✕" : ""}</span>
     <div className="muted">{cfg.settings.features.drugLicence && t("DL: {0} ", x.drug_licence || "—")}{defs.filter(f => x.custom?.[f.key] != null).map(f => `${f.label}: ${x.custom[f.key]}`).join(" · ")}</div>
+    {mgr && <button className="sm ghost" onClick={() => setEdit(x)}>{t("Edit")}</button>}
     {mgr && <input className="sm-input" placeholder={t("Outlet type (e.g. Grocery)")} defaultValue={x.outlet_type ?? ""} onBlur={async e => { if (e.target.value !== (x.outlet_type ?? "")) { await api(s, `/api/shops/${x.id}/type`, { method: "PUT", body: JSON.stringify({ outletType: e.target.value }) }); load(); } }} />}
     {mgr && <select value={x.distributor_id ?? ""} onChange={async e => { await api(s, `/api/shops/${x.id}/distributor`, { method: "POST", body: JSON.stringify({ distributorId: e.target.value ? Number(e.target.value) : null }) }); load(); }}>
       <option value="">{t("Company direct (no distributor)")}</option>{d.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>}</div>)}</>;
@@ -80,7 +127,7 @@ export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
   };
   const checkout = async (o: any, p: any) => {
     if (!o.offline) return api(s, `/api/visits/${o.id}/checkout`, { method: "POST", body: JSON.stringify({ ...p, custom: vc, noOrderReason: why || undefined }) });
-    await api(s, "/api/visits/offline", { method: "POST", body: JSON.stringify({ clientRef: o.clientRef, shopId: o.shop_id, checkInAt: o.check_in_at, checkOutAt: new Date().toISOString(), lat: o.lat, lng: o.lng, custom: vc }) });
+    await api(s, "/api/visits/offline", { method: "POST", body: JSON.stringify({ clientRef: o.clientRef, shopId: o.shop_id, checkInAt: o.check_in_at, checkOutAt: new Date().toISOString(), lat: o.lat, lng: o.lng, outLat: p.lat, outLng: p.lng, custom: vc, noOrderReason: why || undefined }) });
     localStorage.removeItem(OV);
   };
   const open = visits.find(v => !v.check_out_at), gpsOn = cfg.settings.features.gps, vdefs = cfg.settings.customFields.visit;
@@ -92,7 +139,7 @@ export function MyBeat({ s, cfg }: { s: Session; cfg: Cfg }) {
       {flow?.noOrderReasons?.length > 0 && <Field label={t("No order? Pick a reason")} help={t("Leave blank if you took an order in this visit.")}><select value={why} onChange={e => setWhy(e.target.value)}><option value="">{t("I took an order")}</option>{flow.noOrderReasons.map((r: string) => <option key={r} value={r}>{t(r)}</option>)}</select></Field>}
       <button className="sm" onClick={() => act(async p => { await checkout(open, p); setWhy(""); })}>{t("Check out")}</button></div>}
     {!beats.length && <Empty icon="🗺️" title={t("No beat assigned yet")} text={t("A beat is your list of outlets to visit. Ask your manager to assign one.")} />}
-    {beats.map(b => <div key={b.id}><h3>{b.name}</h3>{b.shops.map((x: any) => {
+    {[...beats].sort((x, y) => Number(!!y.today) - Number(!!x.today)).map(b => <div key={b.id}><h3>{b.name} {b.today ? <span className="pill">{t("Today")}</span> : <span className="muted">{b.weekday != null ? t(DAYS[b.weekday]) : ""}</span>}</h3>{b.shops.map((x: any) => {
       const done = visits.some(v => v.shop_id === x.id && v.check_out_at && new Date(v.check_in_at).toDateString() === new Date().toDateString());
       return <div className="row" key={x.id}>{x.seq}. <b>{x.name}</b> <span className="muted">{x.city}</span> {done ? <span className="pill">visited</span>
         : !open && <button className="sm" onClick={() => act(p => checkin(x, p))}>{t("Check in")}{gpsOn ? " 📍" : ""}</button>}</div>;
