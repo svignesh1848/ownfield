@@ -165,3 +165,25 @@ footer h4{color:#fff;margin:0 0 10px;font-size:13px;text-transform:uppercase;let
 .row:not(.rev) .ov{right:0}.row.rev .ov{left:0}.ov img{width:100%;height:auto}
 @media(max-width:760px){.ov{display:none}.combo,.row:not(.rev) .combo,.row.rev .combo{padding:0}.row.rev{grid-template-columns:1fr}}
 header.top a,.drawer a,footer a,.tile a{text-decoration:none}
+/* get started form */
+.gs{background:linear-gradient(180deg,var(--tint),#fff 60%);padding:56px 0 72px}
+.gsg{display:grid;grid-template-columns:1fr 1.05fr;gap:56px;align-items:start}
+.gsi h1{font-size:clamp(30px,4.4vw,46px)}
+@media(max-width:900px){.gsg{grid-template-columns:1fr;gap:28px}.gs{padding:32px 0 56px}}
+.choice{border:0;padding:0;margin:0 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.choice legend{font-weight:700;font-size:15px;margin-bottom:8px;padding:0}
+.opt{display:flex!important;gap:10px;align-items:flex-start;border:2px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;font-weight:400}
+.opt input{width:auto;margin-top:4px;accent-color:var(--accent);-webkit-appearance:radio;appearance:auto}
+.opt b{display:block;font-size:15.5px}.opt small{display:block;color:var(--muted);font-size:13.5px;line-height:1.35}
+.opt:has(input:checked){border-color:var(--accent);background:var(--tint)}
+.two-f{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:560px){.two-f{grid-template-columns:1fr}.choice{grid-template-columns:1fr}}
+.opt-l{font-weight:400;color:var(--muted)}
+.hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+select{background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f5d63' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") right 12px center/18px no-repeat;padding-right:40px}
+.bad{border-color:#c62828!important;outline:2px solid #c62828}
+.ferr{color:#b71c1c;background:#fdecea;border-radius:8px;padding:10px 12px;margin:0;font-weight:600;font-size:15px}
+.ferr[hidden],.thanks[hidden],form[hidden]{display:none}
+.thanks{text-align:center;padding:24px 8px}.thanks h2{margin-bottom:8px}.thanks .lead{margin:0 auto 20px}
+.ticks.big li{font-size:18px;color:var(--ink)}
+.band[hidden]{display:none}

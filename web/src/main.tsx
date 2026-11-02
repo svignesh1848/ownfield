@@ -170,10 +170,16 @@ function Usage({ u }: { u: any }) {
 function Platform({ s }: { s: Session }) {
   const [list, setList] = useState<any[]>([]); const [msg, setMsg] = useState(""); const [tpl, setTpl] = useState<any[]>([]);
   const [f, setF] = useState({ code: "", name: "", userLimit: "10", email: "", adminName: "", password: "" }); const [industry, setIndustry] = useState("apparel");
+  const [leads, setLeads] = useState<any[]>([]);
   const load = () => api(s, "/api/platform/companies").then(setList);
-  useEffect(() => { load(); api(null, "/api/templates").then(setTpl); }, []);
+  useEffect(() => { load(); api(null, "/api/templates").then(setTpl); api(s, "/api/platform/leads").then(setLeads).catch(() => {}); }, []);
   return <>
     <DiskAlert s={s} />
+    <section className="card"><h2>Website requests</h2>
+      {!leads.length && <p className="muted">No requests yet.</p>}
+      {leads.map(l => <div key={l.id} className="row"><b>{l.company}</b> {l.name} <span className="pill">{l.kind === "trial" ? "Start free trial" : "Book a demo"}</span>
+        <div className="muted small">{l.email} · {l.phone} · {l.team_size} · {l.industry} · {new Date(l.created_at).toLocaleString()}</div>{l.message && <div className="small">{l.message}</div>}</div>)}
+    </section>
     <section className="card"><h2>{t("Companies")}</h2>
       {list.map(c => <div key={c.id} className="row"><b>{c.code}</b> {c.name} <span className="pill">{c.industry}</span><Usage u={c.usage} />
         <button className="sm" onClick={async () => { const v = prompt(t("New user limit"), c.user_limit); if (v) { await api(s, `/api/platform/companies/${c.id}`, { method: "PATCH", body: JSON.stringify({ userLimit: Number(v) }) }); load(); } }}>{t("Set limit")}</button></div>)}
