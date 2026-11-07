@@ -28,12 +28,12 @@ export const toast = (text: string, kind: "ok" | "err" = "ok") => push({ text, k
 export function Toasts() {
   const [list, setList] = useState<Toast[]>([]);
   useEffect(() => { push = t => { const id = Date.now() + Math.random(); setList(l => [...l, { ...t, id }]); setTimeout(() => setList(l => l.filter(x => x.id !== id)), 3500); }; }, []);
-  return <div className="toasts" role="status" aria-live="polite">{list.map(t => <div key={t.id} className={`toast ${t.kind}`}>{t.kind === "ok" ? "✓ " : "⚠ "}{t.text}</div>)}</div>;
+  return <div className="toasts" role="status" aria-live="polite">{list.map(t => <div key={t.id} className={`toast ${t.kind}`}>{t.kind === "ok" ? <L.CircleCheck size={18} aria-hidden /> : <L.TriangleAlert size={18} aria-hidden />}<span>{t.text}</span></div>)}</div>;
 }
 
 // ---------- Empty / loading / tooltips ----------
 export function Empty({ icon = "📭", title, text, action, onAction }: { icon?: string; title: string; text?: string; action?: string; onAction?: () => void }) {
-  return <div className="empty"><div className="empty-ic">{icon}</div><b>{title}</b>{text && <p>{text}</p>}{action && onAction && <button onClick={onAction}>{action}</button>}</div>;
+  return <div className="empty"><div className="empty-ic"><Icon name={icon} size={28} /></div><b>{title}</b>{text && <p>{text}</p>}{action && onAction && <button onClick={onAction}>{action}</button>}</div>;
 }
 export const Loading = ({ text = t("Loading…") }: { text?: string }) => <div className="loading"><span className="spin" />{text}</div>;
 
@@ -61,9 +61,27 @@ export function Field({ label, help, error, children }: { label: string; help?: 
   return <label className={`field ${error ? "bad" : ""}`}><span className="flabel">{label}</span>{children}{error ? <span className="ferr">{error}</span> : help ? <span className="fhelp">{help}</span> : null}</label>;
 }
 
-export const ICONS: Record<string, string> = {
-  team: "🧭", outletapprovals: "🏪", addoutlet: "➕", returns: "↩️", statement: "📒", productform: "📝",
-  home: "🏠", beat: "🗺️", visit: "📍", order: "🛒", orders: "📦", collect: "💰", collections: "💰", targets: "🎯", catalog: "📚", inbox: "📥",
-  invoices: "🧾", stock: "🏬", POs: "📋", profile: "🪪", dashboard: "📊", beats: "🗺️", visits: "📍", reports: "📈", shops: "🏪", schemes: "🏷️",
-  distributors: "🚚", surveys: "📋", messages: "💬", users: "👥", settings: "⚙️", import: "⬆️", more: "☰", setup: "✅", audit: "✅", audits: "✅", checklists: "📝", expenses: "🧾", myexpenses: "🧾", leave: "🌴", myleave: "🌴", incentives: "🏆", rules: "🏆", integrations: "🔌", van: "🚐", vans: "🚐", inventory: "📦", claims: "🧾", leads: "🌱", trail: "🧭", coverage: "📊", fieldrules: "📏", data: "🧮",
+import * as L from "lucide-react";
+type LI = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string; "aria-hidden"?: boolean }>;
+/** Tab id -> line icon. */
+const TAB_IC: Record<string, LI> = {
+  team: L.Network, outletapprovals: L.Store, addoutlet: L.CirclePlus, returns: L.Undo2, statement: L.BookOpen, productform: L.FilePen,
+  home: L.House, beat: L.Route, visit: L.MapPin, order: L.ShoppingCart, orders: L.Package, collect: L.Wallet, collections: L.Wallet, targets: L.Target, catalog: L.Shirt, inbox: L.Inbox,
+  invoices: L.ReceiptText, stock: L.Warehouse, POs: L.ClipboardList, profile: L.IdCard, dashboard: L.ChartColumn, beats: L.Route, visits: L.MapPin, reports: L.ChartLine, shops: L.Store, schemes: L.Tag,
+  distributors: L.Truck, surveys: L.ClipboardCheck, messages: L.MessageSquare, users: L.Users, settings: L.Settings, import: L.Upload, more: L.Menu, setup: L.CircleCheck, audit: L.ClipboardCheck, audits: L.ClipboardCheck, checklists: L.ListChecks, expenses: L.Receipt, myexpenses: L.Receipt, leave: L.CalendarDays, myleave: L.CalendarDays, incentives: L.Trophy, rules: L.Trophy, integrations: L.Plug, van: L.Truck, vans: L.Truck, inventory: L.Boxes, claims: L.FileText, leads: L.Sprout, trail: L.Navigation, coverage: L.ChartPie, fieldrules: L.Ruler, data: L.Table2, security: L.ShieldCheck, account: L.CircleUser, chev: L.ChevronRight, bell: L.Bell, search: L.Search, check: L.Check, alert: L.TriangleAlert, clock: L.Clock, pin: L.MapPin, phone: L.Phone, plus: L.Plus, minus: L.Minus, logout: L.LogOut, filter: L.SlidersHorizontal, image: L.ImageOff, x: L.X, back: L.ChevronLeft,
 };
+/** Legacy emoji -> line icon, so older call sites render an SVG instead of an emoji. */
+const EMOJI_IC: Record<string, LI> = {
+  "🧭": L.Navigation, "🏪": L.Store, "➕": L.CirclePlus, "↩️": L.Undo2, "📒": L.BookOpen, "📝": L.FilePen, "🏠": L.House, "🗺️": L.Route, "📍": L.MapPin, "🛒": L.ShoppingCart, "📦": L.Package,
+  "💰": L.Wallet, "🎯": L.Target, "📚": L.Shirt, "📥": L.Inbox, "🧾": L.ReceiptText, "🏬": L.Warehouse, "📋": L.ClipboardList, "🪪": L.IdCard, "📊": L.ChartColumn, "📈": L.ChartLine,
+  "🏷️": L.Tag, "🚚": L.Truck, "💬": L.MessageSquare, "👥": L.Users, "⚙️": L.Settings, "⬆️": L.Upload, "☰": L.Menu, "✅": L.CircleCheck, "🌴": L.CalendarDays, "🏆": L.Trophy, "🔌": L.Plug,
+  "🚐": L.Truck, "🌱": L.Sprout, "📏": L.Ruler, "🧮": L.Table2, "⚠️": L.TriangleAlert, "🔒": L.Lock, "🎉": L.CircleCheck, "🔍": L.Search, "📭": L.Inbox, "🌐": L.Globe,
+};
+/** One consistent SVG icon. `name` may be a tab id or a legacy emoji. */
+export function Icon({ name, size = 20, className }: { name: string; size?: number; className?: string }) {
+  const C = TAB_IC[name] || EMOJI_IC[name] || EMOJI_IC[name.replace(/\uFE0F/g, "")];
+  if (!C) return <span className={className} aria-hidden>{name}</span>;
+  return <C size={size} strokeWidth={1.9} className={className} aria-hidden />;
+}
+/** Kept for compatibility: tab ids that have an icon. */
+export const ICONS: Record<string, string> = Object.fromEntries(Object.keys(TAB_IC).map(k => [k, k]));

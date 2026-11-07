@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 import { api, Table, label, type Session, type Cfg } from "./main";
 import { CustomInputs, attrText } from "./config";
 import { VisitPhotos, openPrint } from "./step4";
-import { inr, inr0, fmtDate, Empty, toast, Term, Loading } from "./ui";
+import { inr, inr0, fmtDate, Empty, toast, Term, Loading, Icon } from "./ui";
 
 // ---------- Offline order queue (localStorage; retried on reconnect; server dedupes by clientRef) ----------
 const QKEY = "ff-order-queue";
@@ -31,13 +31,26 @@ const gps = () => new Promise<{ lat: number; lng: number }>((ok, no) =>
   navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => ok({ lat: p.coords.latitude, lng: p.coords.longitude }), e => no(new Error(e.message)), { enableHighAccuracy: true, timeout: 15000 }) : no(new Error("GPS unavailable")));
 
 export function Dashboard({ s }: { s: Session }) {
-  const [rows, setRows] = useState<any[]>([]); const [days, setDays] = useState(7);
-  useEffect(() => { api(s, `/api/dashboard?days=${days}`).then(setRows); }, [days]);
-  const tot = rows.reduce((a, r) => ({ v: a.v + r.visits, o: a.o + r.orders, val: a.val + r.value }), { v: 0, o: 0, val: 0 });
-  return <><h2>{t("Team activity")}</h2><p className="muted">{t("Visits and orders by each sales rep.")}</p>
-    <select value={days} onChange={e => setDays(Number(e.target.value))}>{[1, 7, 30].map(d => <option key={d} value={d}>{t("Last")}{" "}{d} {t("day(s)")}</option>)}</select>
-    <div className="kpis"><div><b>{tot.v}</b>visits</div><div><b>{tot.o}</b>orders</div><div><b>₹{tot.val.toLocaleString("en-IN")}</b>value</div></div>
-    <Table rows={rows.map(r => ({ ...r, value: inr(r.value) }))} cols={["day", "rep", "visits", "orders", "value"]} empty={{ title: t("No activity in this period"), text: t("Visits and orders appear here once reps start working.") }} /></>;
+  const [rows, setRows] = useState<any[] | null>(null); const [days, setDays] = useState(7);
+  useEffect(() => { setRows(null); api(s, `/api/dashboard?days=${days}`).then(setRows); }, [days]);
+  const list = rows || [];
+  const tot = list.reduce((a, r) => ({ v: a.v + r.visits, o: a.o + r.orders, val: a.val + Number(r.value || 0) }), { v: 0, o: 0, val: 0 });
+  return <div className="home">
+    <div className="page-h"><div><h2>{t("Team activity")}</h2><p className="muted small">{t("Visits and orders by each sales rep.")}</p></div>
+      <select className="period" value={days} onChange={e => setDays(Number(e.target.value))}>{[1, 7, 30].map(d => <option key={d} value={d}>{t("Last")}{" "}{d} {t("day(s)")}</option>)}</select></div>
+    <div className="kpi-grid">
+      <div className="kpi"><span className="kpi-h"><span className="kpi-ic"><Icon name="visits" size={18} /></span>{t("Visits")}</span><b className="kpi-v num">{tot.v}</b></div>
+      <div className="kpi"><span className="kpi-h"><span className="kpi-ic"><Icon name="orders" size={18} /></span>{t("Orders")}</span><b className="kpi-v num">{tot.o}</b></div>
+      <div className="kpi kpi-span"><span className="kpi-h"><span className="kpi-ic"><Icon name="order" size={18} /></span>{t("Value")}</span><b className="kpi-v num">{inr0(tot.val)}</b></div>
+    </div>
+    {rows == null ? <Loading /> : !list.length ? <Empty icon="📊" title={t("No activity in this period")} text={t("Visits and orders appear here once reps start working.")} />
+      : <div className="dash-rows">{list.map((r, i) => <div className="dash-row" key={i}>
+        <div className="dash-row-h"><b>{r.rep}</b><span className="muted small">{fmtDate(r.day)}</span></div>
+        <div className="dash-stats">
+          <span><b className="num">{r.visits}</b>{t("Visits")}</span>
+          <span><b className="num">{r.orders}</b>{t("Orders")}</span>
+          <span className="val"><b className="num">{inr0(r.value)}</b>{t("Value")}</span>
+        </div></div>)}</div>}</div>;
 }
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -291,7 +304,7 @@ export function Bell({ s, go, source = "/api/notifications" }: { s: Session; go?
   useEffect(() => { load(); const h = setInterval(load, 60000); return () => clearInterval(h); }, []);
   const unread = rows.filter(r => !r.read_at).length;
   const toggle = () => { setOpen(!open); if (!open && unread) api(s, `${source}/read`, { method: "POST", body: "{}" }).then(load).catch(() => {}); };
-  return <span className="bell"><button className="sm ghost" aria-label={t("Updates")} onClick={toggle}>🔔{unread > 0 && <b className="badge">{unread}</b>}</button>
+  return <span className="bell"><button className="sm ghost" aria-label={t("Updates")} onClick={toggle}><Icon name="bell" size={20} />{unread > 0 && <b className="badge">{unread}</b>}</button>
     {open && <div className="bell-list">{!rows.length ? <p className="muted small">{t("No updates yet")}</p> : rows.map(r => <div key={r.id} className={`row small ${r.read_at ? "" : "unread"}`}
       onClick={() => { setOpen(false); if (r.link && go) go(r.link.split("#")[0]); }}>{t(r.template, ...r.args.map((a: any) => typeof a === "string" ? (STATUS[a] || a) : a))}{r.note ? ` — ${r.note}` : ""}<div className="muted">{fmtDate(r.created_at, true)}</div></div>)}</div>}</span>;
 }

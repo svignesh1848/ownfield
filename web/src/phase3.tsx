@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { api, Table, type ViewProps, type Session } from "./main";
 import { t, t as i18n } from "./i18n";
-import { Empty, Loading, Field, toast, inr0, fmtDate, today } from "./ui";
+import { Empty, Loading, Field, toast, inr0, fmtDate, today, Icon } from "./ui";
 
 /** Shrink a photo on the phone before upload (max 1280px, JPEG ~70%) so uploads stay small. */
 export async function compressPhoto(file: File, max = 1280, quality = 0.7): Promise<Blob> {
@@ -222,14 +222,15 @@ export function RetailerHome({ s, go }: ViewProps) {
   if (!me) return <Loading />;
   if (me.err) return <Empty icon="⚠️" title={t("Your shop app is not ready")} text={me.err} />;
   const open = (orders || []).filter(o => ["placed", "accepted"].includes(o.status)).length;
-  return <><h2 className="hello">{t("Welcome,")}{" "}{me.name}</h2>
-    {h?.announcements?.map((a: any, i: number) => <div key={i} className="banner">📢 {a.text}</div>)}
-    {h?.outstanding > 0 && <p><b>{t("You owe {0}", inr0(h.outstanding))}</b></p>}
-    <p className="muted">{me.distributor_name ? <>{t("Your orders go to")}{" "}<b>{me.distributor_name}</b>.</> : t("Your supplier will confirm your orders.")}</p>
-    <div className="tiles">
-      <button className="tile accent" onClick={() => go("order")}><span className="tile-ic">🛒</span><span className="tile-t">{t("Place an order")}</span><span className="tile-s">{t("Pick products and quantities")}</span></button>
-      <button className="tile" onClick={() => go("orders")}><span className="tile-ic">📦</span><span className="tile-t">{t("My orders")}</span><span className="tile-s">{open ? t("{0} on the way", open) : t("See past orders")}</span></button>
-      <button className="tile" onClick={() => go("catalog")}><span className="tile-ic">📚</span><span className="tile-t">{t("Products")}</span><span className="tile-s">{t("Prices and what's available")}</span></button>
+  return <div className="home">
+    <div className="page-h"><div><h2 className="hello">{t("Welcome,")}{" "}{me.name}</h2>
+      <p className="muted small">{me.distributor_name ? <>{t("Your orders go to")}{" "}<b>{me.distributor_name}</b>.</> : t("Your supplier will confirm your orders.")}</p></div></div>
+    {h?.announcements?.map((a: any, i: number) => <div key={i} className="banner">{a.text}</div>)}
+    {h?.outstanding > 0 && <div className="hero-card"><span className="eyebrow">{t("Outstanding")}</span><b>{t("You owe {0}", inr0(h.outstanding))}</b><button onClick={() => go("orders")}>{t("See my orders")}</button></div>}
+    <div className="acts">
+      <button type="button" className="act primary" onClick={() => go("order")}><span className="act-ic"><Icon name="order" size={20} /></span><span className="act-t"><b>{t("Place an order")}</b><span>{t("Pick products and quantities")}</span></span><Icon name="chev" size={18} className="chev" /></button>
+      <button type="button" className="act" onClick={() => go("orders")}><span className="act-ic"><Icon name="orders" size={20} /></span><span className="act-t"><b>{t("My orders")}</b><span>{open ? t("{0} on the way", open) : t("See past orders")}</span></span>{!!open && <span className="count">{open}</span>}<Icon name="chev" size={18} className="chev" /></button>
+      <button type="button" className="act" onClick={() => go("catalog")}><span className="act-ic"><Icon name="catalog" size={20} /></span><span className="act-t"><b>{t("Products")}</b><span>{t("Prices and what's available")}</span></span><Icon name="chev" size={18} className="chev" /></button>
     </div>
-    {!!h?.schemes?.length && <div className="card"><h3>{t("Offers running now")}</h3>{h.schemes.map((x: any) => <div key={x.id} className="row"><b>{x.name}</b> <span className="muted small">· {x.rule}{x.ends_on ? ` · ${t("till {0}", fmtDate(x.ends_on))}` : ""}</span></div>)}</div>}</>;
+    {!!h?.schemes?.length && <section className="panel"><div className="panel-h"><b>{t("Offers running now")}</b></div>{h.schemes.map((x: any) => <div key={x.id} className="row"><b>{x.name}</b> <span className="muted small">· {x.rule}{x.ends_on ? ` · ${t("till {0}", fmtDate(x.ends_on))}` : ""}</span></div>)}</section>}</div>;
 }
