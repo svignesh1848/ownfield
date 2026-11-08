@@ -188,3 +188,9 @@ select{background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2
 .ticks.big li{font-size:18px;color:var(--ink)}
 .band[hidden]{display:none}
 @media(max-width:900px){.gsi .ticks,.gsi .small{display:none}.gsi .lead{margin-bottom:0}}
+
+.price.p4{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}.price .card{position:relative;display:flex;flex-direction:column}.price .card ul{flex:1}
+.price .amt{font-size:34px;font-weight:700;margin:4px 0 0;letter-spacing:-.02em}.price .per{font-size:13px;color:var(--muted,#5b6474);margin:2px 0 8px;min-height:36px}
+.price .tag{position:absolute;top:-11px;left:16px;background:var(--accent,#0f766e);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px}
+.pnotes{margin-top:28px;border-top:1px solid #e2e8f0;padding-top:16px}.pnotes p{margin:6px 0}
+main.legal.pricing{max-width:1120px}@media (min-width:1000px){.price.p4{grid-template-columns:repeat(4,1fr)}}
