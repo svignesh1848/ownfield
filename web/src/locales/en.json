@@ -835,6 +835,7 @@
  "Reps must share location when checking in": "Reps must share location when checking in",
  "Reps start and end their day (with GPS)": "Reps start and end their day (with GPS)",
  "Require two-step sign-in (authenticator app) for everyone": "Require two-step sign-in (authenticator app) for everyone",
+ "Require two-step sign-in for admins": "Require two-step sign-in for admins",
  "Reset 2-step": "Reset 2-step",
  "Reset code": "Reset code",
  "Reset device": "Reset device",

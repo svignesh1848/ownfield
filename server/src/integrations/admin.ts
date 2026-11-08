@@ -1,3 +1,4 @@
+import { sealField } from "../fieldcrypt.js";
 // Admin endpoints behind the Integrations screen (company_admin only), plus the public inbound webhook.
 import crypto from "node:crypto";
 import multer from "multer";
@@ -66,7 +67,7 @@ export function registerIntegrationRoutes({ app, db, auth, wrap, tenant }: Ctx) 
     const events = cleanEvents(req.body?.events);
     if (Number((await db.query("SELECT COUNT(*) AS n FROM webhooks WHERE company_id=$1", [cid])).rows[0].n) >= 20) throw bad("At most 20 webhooks");
     const secret = "whsec_" + crypto.randomBytes(24).toString("base64url");
-    const r = (await db.query("INSERT INTO webhooks (company_id,url,events,secret) VALUES ($1,$2,$3,$4) RETURNING id, url, active, created_at", [cid, url, JSON.stringify(events), secret])).rows[0];
+    const r = (await db.query("INSERT INTO webhooks (company_id,url,events,secret) VALUES ($1,$2,$3,$4) RETURNING id, url, active, created_at", [cid, url, JSON.stringify(events), sealField(secret)])).rows[0];
     await log(req, cid, "webhook.create", url, { events });
     res.status(201).json({ ...r, events, secret, note: "Use this secret to check the X-FieldForce-Signature header. It is not shown again." });
   }));
