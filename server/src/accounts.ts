@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
 import type { Db } from "./db.js";
-import { audit } from "./security.js";
+import { audit, HitCounter } from "./security.js";
 import { passwordProblem, PLATFORM_CODE } from "./app.js";
 
 // ---- TOTP (RFC 6238, SHA-1, 6 digits, 30 s) without extra dependencies ----
@@ -110,8 +110,11 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
     await log(req, "user.reset_code", u.email, { mailed });
     res.json({ code, link, expiresInMin: 30, mailed });
   }));
+  const resetHits = new HitCounter(Number(process.env.RESET_MAX || 10), 15 * 60_000);
   app.post("/api/auth/reset", wrap(async (req: any, res: any) => {
     const { companyCode, email, code, password } = req.body || {};
+    const rk = `${String(companyCode || "").toUpperCase().trim()}|${String(email || "").toLowerCase().trim()}`;
+    if (resetHits.hit("ip:" + (req.ip || "?")) > resetHits.max || resetHits.hit("acct:" + rk) > resetHits.max) return res.status(429).json({ error: "Too many attempts. Please wait 15 minutes and try again." });
     const cc = String(companyCode || "").toUpperCase().trim();
     const bad = () => res.status(400).json({ error: "This reset code is not valid or has expired. Ask your administrator for a new one." });
     if (!code || cc === PLATFORM_CODE) return bad();
