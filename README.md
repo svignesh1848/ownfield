@@ -265,7 +265,7 @@ npm test                 # API tests
 npm run demo -w server   # in-memory demo with SAMPLE data on :8080 (run `npm run build -w web` first)
 npm run dev -w web       # Vite dev server proxying /api
 ```
-Demo logins (hosted demo, sample data): `DEMO / admin@example.com / Demo@2026`, `DEMO / rep@example.com / Demo@2026`, `DEMO / distributor@example.com / Demo@2026`, `DEMO / retailer@example.com / Demo@2026` (retailer app). Local `npm run demo`: `PLATFORM / owner@example.com / demo`, `DEMO / admin@example.com / demo`, `DEMO / rep@example.com / changeme123`.
+Local `npm run demo` logins (in-memory sample data only): `PLATFORM / owner@example.com / demo`, `DEMO / admin@example.com / demo`, `DEMO / rep@example.com / changeme123`. The hosted demo is by request at [ownfield.in](https://www.ownfield.in).
 
 Upload templates are in `sample-data/`. All sample data there is made up.
 

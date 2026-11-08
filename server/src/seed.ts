@@ -1,6 +1,9 @@
 // Idempotent sample data for the DEMO company, run on server start. Everything created here is labelled "sample".
 // It only touches the company with code DEMO and only adds what is missing.
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
+// Sample logins get DEMO_PASSWORD; without it a random one is used (nobody can sign in with a published password).
+const DEMO_PW = () => process.env.DEMO_PASSWORD || randomBytes(18).toString("base64url");
 import type { Db } from "./db.js";
 import { parseJson } from "./catalog.js";
 import { savePhoto, SAMPLE_PNG } from "./photos.js";
@@ -70,17 +73,17 @@ export async function seedDemo(db: Db, code = "DEMO") {
       await db.query("INSERT INTO targets (company_id,rep_id,month,metric,target) VALUES ($1,$2,$3,'value',$4)", [cid, rep.id, month, 5000]);
   }
   });
-  // 4b) Manager login for testers (the "Use manager" button on the login page): manager@example.com / Demo@2026
+  // 4b) Manager login for testers (the "Use manager" button on the login page): manager@example.com (password: DEMO_PASSWORD)
   await step("manager", async () => {
   const m = await one(db, "SELECT id FROM users WHERE company_id=$1 AND email='manager@example.com'", [cid]);
-  if (!m) await db.query("INSERT INTO users (company_id,email,name,role,password_hash) VALUES ($1,'manager@example.com','Sample Manager','manager',$2)", [cid, await bcrypt.hash("Demo@2026", 10)]);
+  if (!m) await db.query("INSERT INTO users (company_id,email,name,role,password_hash) VALUES ($1,'manager@example.com','Sample Manager','manager',$2)", [cid, await bcrypt.hash(DEMO_PW(), 10)]);
   });
-  // 5) Retailer app: retailer@example.com / Demo@2026 linked to a sample outlet that has a distributor
+  // 5) Retailer app: retailer@example.com (password: DEMO_PASSWORD) linked to a sample outlet that has a distributor
   await step("retailer", async () => {
   await enable(db, cid, ["retailerApp"]);
   if (!(await one(db, "SELECT id FROM users WHERE company_id=$1 AND email='retailer@example.com'", [cid]))) {
     const shop = await one(db, "SELECT id FROM shops WHERE company_id=$1 AND distributor_id IS NOT NULL ORDER BY id", [cid]) || await one(db, "SELECT id FROM shops WHERE company_id=$1 ORDER BY id", [cid]);
-    if (shop) await db.query("INSERT INTO users (company_id,email,name,role,password_hash,shop_id) VALUES ($1,'retailer@example.com','Sample Retailer','retailer',$2,$3)", [cid, await bcrypt.hash("Demo@2026", 10), shop.id]);
+    if (shop) await db.query("INSERT INTO users (company_id,email,name,role,password_hash,shop_id) VALUES ($1,'retailer@example.com','Sample Retailer','retailer',$2,$3)", [cid, await bcrypt.hash(DEMO_PW(), 10), shop.id]);
   }
   });
   // 6) Field-ops modules (van sales, distributor inventory, claims, barcode, leads, tracking, coverage, surveys, messaging), all labelled sample.

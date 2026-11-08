@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import express, { NextFunction, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -64,7 +65,10 @@ export function usageInfo(count: number, limit: number) {
   return { count, limit, pct, warning: pct >= 80, atLimit: count >= limit };
 }
 
-export function createApp(db: Db, secret = process.env.JWT_SECRET || "dev-secret-change-me") {
+// No built-in fallback key: without JWT_SECRET a random key is used, so sign-ins simply reset on restart.
+const RANDOM_SECRET = randomBytes(32).toString("hex");
+export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECRET) {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") console.warn("JWT_SECRET is not set: using a random key (users are signed out on every restart).");
   const app = express();
   app.set("trust proxy", 1); // one hop: nginx on the same box
   app.disable("x-powered-by");
