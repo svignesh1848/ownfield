@@ -835,6 +835,7 @@
  "Reps must share location when checking in": "प्रतिनिधिभिः चेक इन करणसमये स्थानं साझां कर्तव्यम्",
  "Reps start and end their day (with GPS)": "प्रतिनिधिः स्वदिनस्य आरम्भं समाप्तं च करोति (जीपीएस-सहितम्)",
  "Require two-step sign-in (authenticator app) for everyone": "सर्वेषां कृते द्विचरणीय-प्रवेश-प्रवेशः (प्रमाणक-अनुप्रयोगः) आवश्यकः",
+ "Require two-step sign-in for admins": "Require two-step sign-in for admins",
  "Reset 2-step": "२-चरणं पुनः सेट् कुर्वन्तु",
  "Reset code": "कोडं पुनः सेट् कुर्वन्तु",
  "Reset device": "उपकरणं पुनः सेट् कुर्वन्तु",

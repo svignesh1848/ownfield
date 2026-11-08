@@ -835,6 +835,7 @@
  "Reps must share location when checking in": "چیک ان کرتے وقت نمائندوں کو مقام کا اشتراک کرنا چاہیے۔",
  "Reps start and end their day (with GPS)": "نمائندے اپنا دن شروع اور ختم کرتے ہیں (GPS کے ساتھ)",
  "Require two-step sign-in (authenticator app) for everyone": "ہر ایک کے لیے دو قدمی سائن ان (Authenticator app) کی ضرورت ہے۔",
+ "Require two-step sign-in for admins": "Require two-step sign-in for admins",
  "Reset 2-step": "2 قدم کو دوبارہ ترتیب دیں۔",
  "Reset code": "کوڈ کو دوبارہ ترتیب دیں۔",
  "Reset device": "ڈیوائس کو ری سیٹ کریں۔",

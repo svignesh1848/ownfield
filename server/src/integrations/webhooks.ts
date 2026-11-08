@@ -1,3 +1,4 @@
+import { openField } from "../fieldcrypt.js";
 // Outgoing webhooks: a small DB-backed queue (webhook_deliveries) drained by an in-process timer. No extra infra.
 import crypto from "node:crypto";
 import dns from "node:dns/promises";
@@ -91,7 +92,7 @@ export async function drain(db: Db, opts: { limit?: number; fetchImpl?: Fetch; t
       const ts = String(Math.floor(Date.now() / 1000));
       const r = await f(d.url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(opts.timeoutMs || 8000),
         headers: { "Content-Type": "application/json", "User-Agent": "OwnField-Webhooks/1", "X-FieldForce-Event": d.event, "X-FieldForce-Delivery": String(d.id),
-          "X-FieldForce-Timestamp": ts, "X-FieldForce-Signature": sign(d.secret, ts, d.payload) }, body: d.payload });
+          "X-FieldForce-Timestamp": ts, "X-FieldForce-Signature": sign(openField(d.secret)!, ts, d.payload) }, body: d.payload });
       code = r.status; if (r.status < 200 || r.status >= 300) err = `HTTP ${r.status}`;
     } catch (e: any) { err = String(e.message || e).slice(0, 300); }
     if (!err) await db.query("UPDATE webhook_deliveries SET status='delivered', attempts=$1, response_code=$2, last_error=NULL, delivered_at=NOW() WHERE id=$3", [attempts, code, d.id]);

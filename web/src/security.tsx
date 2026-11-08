@@ -32,6 +32,7 @@ export function SecurityPage({ s }: ViewProps) {
   return <><h2>{t("Security & privacy")}</h2>
     <form className="card" onSubmit={async e => { e.preventDefault(); try { setCfg(await api(s, "/api/company/security", { method: "PUT", body: JSON.stringify(cfg) })); } catch (x: any) { toast(x.message, "err"); } }}>
       <label><input type="checkbox" checked={cfg.requireTotp} onChange={e => setCfg({ ...cfg, requireTotp: e.target.checked })} /> {t("Require two-step sign-in (authenticator app) for everyone")}</label>
+      <label><input type="checkbox" checked={!!cfg.requireTotpAdmins} onChange={e => setCfg({ ...cfg, requireTotpAdmins: e.target.checked })} /> {t("Require two-step sign-in for admins")}</label>
       <label><input type="checkbox" checked={cfg.deviceBinding} onChange={e => setCfg({ ...cfg, deviceBinding: e.target.checked })} /> {t("Lock each sales rep to one phone (reset from Users)")}</label>
       <Field label={t("Sign out after inactivity (minutes)")}><input type="number" min={5} max={720} value={cfg.idleMinutes} onChange={e => setCfg({ ...cfg, idleMinutes: Number(e.target.value) })} /></Field>
       <button>{t("Save")}</button></form>

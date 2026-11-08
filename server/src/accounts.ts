@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
 import type { Db } from "./db.js";
 import { audit, HitCounter } from "./security.js";
+import { sealField, openField } from "./fieldcrypt.js";
 import { passwordProblem, PLATFORM_CODE } from "./app.js";
 
 // ---- TOTP (RFC 6238, SHA-1, 6 digits, 30 s) without extra dependencies ----
@@ -61,20 +62,20 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
     const u = (await db.query("SELECT email, totp_enabled FROM users WHERE id=$1", [req.user.uid])).rows[0];
     if (u.totp_enabled) return res.status(409).json({ error: "Two-step sign-in is already on" });
     const secret = b32encode(crypto.randomBytes(20));
-    await db.query("UPDATE users SET totp_secret=$1 WHERE id=$2", [secret, req.user.uid]);
+    await db.query("UPDATE users SET totp_secret=$1 WHERE id=$2", [sealField(secret), req.user.uid]);
     const uri = `otpauth://totp/OwnField:${encodeURIComponent(u.email)}?secret=${secret}&issuer=OwnField`;
     res.json({ secret, uri, qr: await QRCode.toDataURL(uri) });
   }));
   app.post("/api/me/totp/enable", auth(), wrap(async (req: any, res: any) => {
     const u = (await db.query("SELECT * FROM users WHERE id=$1", [req.user.uid])).rows[0];
-    if (!totpVerify(u.totp_secret, String(req.body?.code || ""))) return res.status(400).json({ error: "That code did not match. Try the newest code." });
+    if (!totpVerify(openField(u.totp_secret)!, String(req.body?.code || ""))) return res.status(400).json({ error: "That code did not match. Try the newest code." });
     await db.query("UPDATE users SET totp_enabled=TRUE, token_version=token_version+1 WHERE id=$1", [u.id]);
     await log(req, "user.totp_enabled", u.email); res.json({ ok: true, signInAgain: true });
   }));
   app.post("/api/me/totp/disable", auth(), wrap(async (req: any, res: any) => {
-    const u = (await db.query("SELECT u.*, c.require_totp FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1", [req.user.uid])).rows[0];
-    if (u.require_totp) return res.status(403).json({ error: "Your company requires two-step sign-in" });
-    if (!totpVerify(u.totp_secret, String(req.body?.code || ""))) return res.status(400).json({ error: "That code did not match" });
+    const u = (await db.query("SELECT u.*, c.require_totp, c.require_totp_admins FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1", [req.user.uid])).rows[0];
+    if (u.require_totp || (u.require_totp_admins && u.role === "company_admin")) return res.status(403).json({ error: "Your company requires two-step sign-in" });
+    if (!totpVerify(openField(u.totp_secret)!, String(req.body?.code || ""))) return res.status(400).json({ error: "That code did not match" });
     await db.query("UPDATE users SET totp_enabled=FALSE, totp_secret=NULL WHERE id=$1", [u.id]);
     await log(req, "user.totp_disabled", u.email); res.json({ ok: true });
   }));
@@ -137,16 +138,16 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
   // ---- admin: company security settings ----
   app.get("/api/company/security", auth("company_admin", "manager"), wrap(async (req: any, res: any) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const c = (await db.query("SELECT require_totp, device_binding, idle_minutes FROM companies WHERE id=$1", [cid])).rows[0];
-    res.json({ requireTotp: !!c.require_totp, deviceBinding: !!c.device_binding, idleMinutes: c.idle_minutes ?? Number(process.env.IDLE_LOGOUT_MIN || 60) });
+    const c = (await db.query("SELECT require_totp, require_totp_admins, device_binding, idle_minutes FROM companies WHERE id=$1", [cid])).rows[0];
+    res.json({ requireTotp: !!c.require_totp, requireTotpAdmins: !!c.require_totp_admins, deviceBinding: !!c.device_binding, idleMinutes: c.idle_minutes ?? Number(process.env.IDLE_LOGOUT_MIN || 60) });
   }));
   app.put("/api/company/security", admin, wrap(async (req: any, res: any) => {
     const cid = tenant(req, res); if (cid == null) return;
     const b = req.body || {}, idle = Number(b.idleMinutes);
     if (!Number.isInteger(idle) || idle < 5 || idle > 720) return res.status(400).json({ error: "Idle time must be 5–720 minutes" });
-    await db.query("UPDATE companies SET require_totp=$1, device_binding=$2, idle_minutes=$3 WHERE id=$4", [!!b.requireTotp, !!b.deviceBinding, idle, cid]);
-    await log(req, "company.security", undefined, { requireTotp: !!b.requireTotp, deviceBinding: !!b.deviceBinding, idleMinutes: idle });
-    res.json({ requireTotp: !!b.requireTotp, deviceBinding: !!b.deviceBinding, idleMinutes: idle });
+    await db.query("UPDATE companies SET require_totp=$1, device_binding=$2, idle_minutes=$3, require_totp_admins=$5 WHERE id=$4", [!!b.requireTotp, !!b.deviceBinding, idle, cid, !!b.requireTotpAdmins]);
+    await log(req, "company.security", undefined, { requireTotp: !!b.requireTotp, requireTotpAdmins: !!b.requireTotpAdmins, deviceBinding: !!b.deviceBinding, idleMinutes: idle });
+    res.json({ requireTotp: !!b.requireTotp, requireTotpAdmins: !!b.requireTotpAdmins, deviceBinding: !!b.deviceBinding, idleMinutes: idle });
   }));
 
   // ---- admin: audit log ----
@@ -155,6 +156,13 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
     const alerts = req.query.alerts === "1";
     res.json((await db.query(`SELECT l.id,l.at,l.action,l.target,l.detail,l.ip,u.name AS by_user FROM security_audit_log l LEFT JOIN users u ON u.id=l.user_id
       WHERE l.company_id=$1 ${alerts ? "AND l.action IN ('login.new_device','login.locked','login.device_blocked','login.failed')" : ""} ORDER BY l.id DESC LIMIT 300`, [cid])).rows);
+  }));
+
+  // ---- platform owner: audit log across all companies ----
+  app.get("/api/platform/audit-log", auth("platform_owner"), wrap(async (req: any, res: any) => {
+    const cid = req.query.companyId ? Number(req.query.companyId) : null;
+    res.json((await db.query(`SELECT l.id,l.at,l.action,l.target,l.detail,l.ip,l.company_id,c.code AS company_code,u.name AS by_user FROM security_audit_log l
+      LEFT JOIN users u ON u.id=l.user_id LEFT JOIN companies c ON c.id=l.company_id ${cid ? "WHERE l.company_id=$1" : ""} ORDER BY l.id DESC LIMIT 500`, cid ? [cid] : [])).rows);
   }));
 
   // ---- DPDP: export and delete ----

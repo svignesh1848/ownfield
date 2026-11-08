@@ -8,16 +8,18 @@ import path from "node:path";
 
 export const backupDir = () => process.env.BACKUP_DIR || path.join(os.homedir(), "backups");
 export function prune(dir: string, keep: number) {
-  const files = fs.readdirSync(dir).filter(f => /^db-.*\.sql\.gz$/.test(f)).sort();
+  const files = fs.readdirSync(dir).filter(f => /^db-.*\.sql\.gz(\.enc)?$/.test(f)).sort();
   for (const f of files.slice(0, Math.max(0, files.length - keep))) fs.rmSync(path.join(dir, f));
   return files.slice(-keep);
 }
 export function runBackup(url = process.env.DATABASE_URL!): Promise<string> {
   const dir = backupDir(); fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const file = path.join(dir, `db-${new Date().toISOString().slice(0, 10)}.sql.gz`);
+  const pass = process.env.BACKUP_PASSPHRASE; // set it to encrypt backups (AES-256, openssl); keep a copy of it off the server
+  const file = path.join(dir, `db-${new Date().toISOString().slice(0, 10)}.sql.gz${pass ? ".enc" : ""}`);
   return new Promise((resolve, reject) => {
     const out = fs.createWriteStream(file, { mode: 0o600 });
-    const sh = spawn("sh", ["-c", 'nice -n 19 pg_dump --no-owner --dbname="$DBURL" | gzip -6'], { env: { PATH: process.env.PATH, DBURL: url }, stdio: ["ignore", "pipe", "pipe"] });
+    const sh = spawn("sh", ["-c", 'nice -n 19 pg_dump --no-owner --dbname="$DBURL" | gzip -6' + (pass ? ' | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BKPASS' : '')],
+      { env: { PATH: process.env.PATH, DBURL: url, ...(pass ? { BKPASS: pass } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
     let err = ""; sh.stderr.on("data", d => { err += d; }); sh.stdout.pipe(out);
     sh.on("close", code => out.close(() => {
       if (code !== 0 || err.trim()) { fs.rmSync(file, { force: true }); return reject(new Error(`pg_dump failed: ${err.trim() || code}`)); }
