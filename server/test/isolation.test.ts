@@ -89,7 +89,7 @@ describe("company data isolation", () => {
   it("every :id route rejects or hides another company's ids", async () => {
     // Sweep all id routes found in the source with B's ids; nothing may come back containing B's data.
     const dir = path.join(__dirname, "../src"); const routes = new Set<string>();
-    const walk = (d: string) => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else if (p.endsWith(".ts")) for (const m of fs.readFileSync(p, "utf8").matchAll(/app\.(get|put|patch|post|delete)\("(\/api\/[^"]*:id[^"]*)"/g)) routes.add(m[1] + " " + m[2]); } };
+    const walk = (d: string) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p); else if (p.endsWith(".ts")) for (const m of fs.readFileSync(p, "utf8").matchAll(/app\.(get|put|patch|post|delete)\("(\/api\/[^"]*:id[^"]*)"/g)) routes.add(m[1] + " " + m[2]); } };
     walk(dir);
     const ids = [...new Set(Object.values(B))];
     const bad: string[] = [];
