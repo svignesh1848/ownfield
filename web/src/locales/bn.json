@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} পর্যন্ত",
  "{0} sizes": "{0}টি সাইজ",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP ও বিলিং মূল্য 0-এর বেশি হতে হবে",
- "{0}: billing price cannot be more than MRP": "{0}: বিলিং মূল্য MRP-এর বেশি হতে পারে না"
+ "{0}: billing price cannot be more than MRP": "{0}: বিলিং মূল্য MRP-এর বেশি হতে পারে না",
+ "Add user": "ব্যবহারকারী যোগ করুন",
+ "Role": "ভূমিকা",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} এই এককালীন লিংক দিয়ে নিজের পাসওয়ার্ড সেট করতে পারবেন ({1} মিনিট বৈধ):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "পাসওয়ার্ড লাগবে না। আপনি শেয়ার করার জন্য একটি এককালীন লিংক পাবেন, আর তাঁরা নিজের পাসওয়ার্ড সেট করবেন।",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "এই আউটলেটটি অনুমোদনের অপেক্ষায় আছে, তাই এখনও অর্ডার নিতে পারবে না। আমরা আপনার ম্যানেজারকে অনুমোদন দিতে মনে করিয়ে দিয়েছি।",
+ "This order goes to its distributor — the distributor accepts and delivers it": "এই অর্ডারটি তার ডিস্ট্রিবিউটরের কাছে যায় — ডিস্ট্রিবিউটরই এটি গ্রহণ করে ও ডেলিভারি দেয়"
 }

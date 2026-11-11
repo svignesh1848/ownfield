@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, Table, label, type ViewProps, type Session } from "./main";
+import { api, Table, label, ROLE, type ViewProps, type Session } from "./main";
 import { t } from "./i18n";
 import { Field, toast, Loading } from "./ui";
 
@@ -13,7 +13,9 @@ export function UsersAdmin({ s, cfg, go }: ViewProps) {
   const act = async (fn: () => Promise<any>) => { try { await fn(); load(); } catch (e: any) { toast(e.message, "err"); } };
   if (!rows) return <Loading />;
   return <><h2>{t("Users")}</h2>
-    {code && <div className="hint"><b>{t("One-time reset code for")}{" "}{code.email}:</b> <code>{code.code}</code> {t("(valid")}{" "}{code.expiresInMin} {t("min)")}<br />{t("Link:")}{" "}<code>{location.origin + code.link}</code><br /><span className="muted">{t("Share it privately. It works once.")}</span></div>}
+    {admin && <AddUser s={s} bosses={rows.filter(r => r.active && ["company_admin", "manager", "sales_rep"].includes(r.role))} onAdded={(u, setup) => { load(); if (setup) setCode({ ...setup, email: u.email, invite: true }); }} />}
+    {code?.invite && <div className="hint"><b>{t("{0} can set their own password with this one-time link (valid {1} min):", code.email, code.expiresInMin)}</b><br /><code>{location.origin + code.link}</code><br /><span className="muted">{t("Share it privately. It works once.")}</span></div>}
+    {code && !code.invite && <div className="hint"><b>{t("One-time reset code for")}{" "}{code.email}:</b> <code>{code.code}</code> {t("(valid")}{" "}{code.expiresInMin} {t("min)")}<br />{t("Link:")}{" "}<code>{location.origin + code.link}</code><br /><span className="muted">{t("Share it privately. It works once.")}</span></div>}
     <Table rows={rows.map(r => ({ ...r, actions: r.id }))} cols={["name", "email", "role", ...(cfg.settings.features.drugLicence ? ["drug_licence"] : []), "active"]}
       empty={{ title: t("No users yet"), text: t("Add sales reps, managers and distributors by uploading a users sheet."), action: t("Upload users"), onAction: () => go("import") }} />
     {admin && <div className="scroll"><table><thead><tr><th>{t("User")}</th><th>{t("Actions")}</th></tr></thead><tbody>{rows.filter(r => r.id !== s.user.id && !/@invalid$/.test(r.email)).map(r => <tr key={r.id}><td>{r.name}</td><td className="row-btns">
@@ -22,6 +24,32 @@ export function UsersAdmin({ s, cfg, go }: ViewProps) {
       <button className="sm ghost" onClick={() => act(() => api(s, `/api/users/${r.id}`, { method: "PATCH", body: JSON.stringify({ resetDevice: true }) }))}>{t("Reset device")}</button>
       <button className="sm ghost" onClick={() => act(() => api(s, `/api/users/${r.id}`, { method: "PATCH", body: JSON.stringify({ resetTotp: true }) }))}>{t("Reset 2-step")}</button>
       <button className="sm ghost" onClick={() => confirm(t("Delete {0}? Their personal data is anonymised.", r.name)) && act(() => api(s, `/api/users/${r.id}`, { method: "DELETE" }))}>{t("Delete")}</button></td></tr>)}</tbody></table></div>}</>;
+}
+
+/** Add one user (no upload needed). No password is typed: the admin gets a one-time link and the user sets their own password. */
+function AddUser({ s, bosses, onAdded }: { s: Session; bosses: any[]; onAdded: (u: any, setup: any) => void }) {
+  const blank = { name: "", email: "", phone: "", role: "sales_rep", reportsTo: "", shopCode: "" };
+  const [open, setOpen] = useState(false); const [f, setF] = useState(blank); const [busy, setBusy] = useState(false);
+  const inp = (k: keyof typeof blank, l: string, type = "text") => <Field label={l}><input type={type} value={f[k]} onChange={e => setF({ ...f, [k]: e.target.value })} /></Field>;
+  const submit = async (e: any) => {
+    e.preventDefault(); setBusy(true);
+    try {
+      const body: any = { name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), role: f.role };
+      if (["sales_rep", "manager"].includes(f.role) && f.reportsTo) body.reportsTo = f.reportsTo;
+      if (f.role === "retailer") body.shopCode = f.shopCode.trim();
+      const r = await api(s, "/api/users", { method: "POST", body: JSON.stringify(body) });
+      setF(blank); setOpen(false); onAdded(r.user, r.setup);
+    } catch (x: any) { toast(x.message, "err"); } finally { setBusy(false); }
+  };
+  if (!open) return <button className="sm" onClick={() => setOpen(true)}>+ {t("Add user")}</button>;
+  return <form className="card" onSubmit={submit}><b>{t("Add user")}</b>
+    <p className="muted small">{t("No password needed. You get a one-time link to share, and they set their own password.")}</p>
+    {inp("name", t("Name"))}{inp("email", t("Email"), "email")}{inp("phone", t("Phone"), "tel")}
+    <Field label={t("Role")}><select value={f.role} onChange={e => setF({ ...f, role: e.target.value })}>{["sales_rep", "manager", "distributor", "retailer", "company_admin"].map(r => <option key={r} value={r}>{ROLE[r]}</option>)}</select></Field>
+    {["sales_rep", "manager"].includes(f.role) && <Field label={t("Reports to")}><select value={f.reportsTo} onChange={e => setF({ ...f, reportsTo: e.target.value })}><option value="">{t("Nobody (top)")}</option>
+      {bosses.filter(b => b.role !== "sales_rep").map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>}
+    {f.role === "retailer" && inp("shopCode", t("Outlet code"))}
+    <div className="row-btns"><button disabled={busy || !f.name.trim() || !f.email.trim()}>{busy ? t("Saving…") : t("Add user")}</button><button type="button" className="ghost" onClick={() => setOpen(false)}>{t("Cancel")}</button></div></form>;
 }
 
 export function SecurityPage({ s }: ViewProps) {

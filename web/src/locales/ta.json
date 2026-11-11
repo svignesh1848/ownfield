@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} வரை",
  "{0} sizes": "{0} அளவுகள்",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP மற்றும் பில்லிங் விலை 0 க்கு மேல் இருக்க வேண்டும்",
- "{0}: billing price cannot be more than MRP": "{0}: பில்லிங் விலை MRP ஐ விட அதிகமாக இருக்கக்கூடாது"
+ "{0}: billing price cannot be more than MRP": "{0}: பில்லிங் விலை MRP ஐ விட அதிகமாக இருக்கக்கூடாது",
+ "Add user": "பயனரைச் சேர்",
+ "Role": "பங்கு",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} இந்த ஒருமுறை இணைப்பின் மூலம் தங்கள் கடவுச்சொல்லைத் தாங்களே அமைக்கலாம் ({1} நிமிடம் செல்லுபடியாகும்):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "கடவுச்சொல் தேவையில்லை. பகிர ஒருமுறை இணைப்பு உங்களுக்குக் கிடைக்கும், அவர்கள் தங்கள் கடவுச்சொல்லைத் தாங்களே அமைப்பார்கள்.",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "இந்தக் கடை ஒப்புதலுக்காகக் காத்திருக்கிறது, எனவே இன்னும் ஆர்டர் எடுக்க முடியாது. உங்கள் மேலாளருக்கு ஒப்புதல் அளிக்க நினைவூட்டியுள்ளோம்.",
+ "This order goes to its distributor — the distributor accepts and delivers it": "இந்த ஆர்டர் அதன் விநியோகஸ்தருக்குச் செல்கிறது — விநியோகஸ்தரே அதை ஏற்று டெலிவரி செய்வார்"
 }

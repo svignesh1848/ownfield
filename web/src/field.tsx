@@ -229,7 +229,8 @@ export function OrderForm({ s, cfg, go }: { s: Session; cfg: Cfg; go?: (t: strin
     return <><Steps n={1} /><h2>{t("Which outlet is this order for?")}</h2>
       <input type="search" placeholder={t("Search outlet name, code or city")} value={shopQ} onChange={e => setShopQ(e.target.value)} />
       {!shops.length ? <Empty icon="🏪" title={t("No outlets yet")} text={t("Your administrator needs to upload outlets before you can take orders.")} />
-        : list.map(x => <button key={x.id} className="pick" onClick={() => { setShopId(String(x.id)); setStep("items"); }}><b>{x.name}</b><span className="muted small">{[x.code, x.city].filter(Boolean).join(" · ")}</span></button>)}</>;
+        : list.map(x => <button key={x.id} className="pick" onClick={() => { setShopId(String(x.id)); setStep("items"); }}><b>{x.name}</b><span className="muted small">{[x.code, x.city].filter(Boolean).join(" · ")}</span>
+          {x.approval_status === "pending" && <span className="pill placed">{t("Waiting for approval")}</span>}</button>)}</>;
   }
 
   if (step === "review") {
@@ -306,10 +307,15 @@ export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {
   const mgr = ["company_admin", "manager"].includes(s.user.role), admin = s.user.role === "company_admin";
   const go = async (fn: () => Promise<any>) => { try { await fn(); setMsg(""); setEdit(0); load(); } catch (e: any) { setMsg(e.message); } };
   const [edit, setEdit] = useState(0);
+  // Company-direct orders (no distributor) are accepted and delivered here by an admin or the rep's manager.
+  const move = (o: any, status: string, reason?: string) => go(() => api(s, `/api/orders/${o.id}/status`, { method: "POST", body: JSON.stringify({ status, reason }) }));
   const canEdit = (o: any) => ["placed", "pending_approval"].includes(o.status) && (mgr || s.user.role === "retailer" || o.rep_id === s.user.id);
   const save = (o: any, q: Record<number, number>) => go(() => api(s, `/api/orders/${o.id}`, { method: "PUT", body: JSON.stringify({ lines: o.lines.filter((l: any) => !l.free).map((l: any) => ({ variantId: l.variant_id, uom: l.uom, qty: q[l.id] })) }) }));
   return <><h2>{t("Orders")}</h2>{!rows.length && <Empty icon="📦" title={t("No orders yet")} text={s.user.role === "sales_rep" ? t("Orders you take will show here.") : t("Orders from your sales reps will appear here as soon as they're placed.")} />}{rows.map(o => <OrderCard key={o.id} o={o}>
-    {admin && o.status === "placed" && <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/status`, { method: "POST", body: JSON.stringify({ status: "accepted" }) }))}>{t("Accept")}</button>}
+    {(admin || (mgr && !o.distributor_id)) && o.status === "placed" && <button className="sm" onClick={() => move(o, "accepted")}>{t("Accept")}</button>}
+    {mgr && !o.distributor_id && o.status === "placed" && <button className="sm ghost" onClick={() => { const r = prompt(t("Why reject this order?")); if (r !== null) move(o, "rejected", r); }}>{t("Reject")}</button>}
+    {mgr && !o.distributor_id && o.status === "accepted" && <button className="sm" onClick={() => move(o, "dispatched")}>{t("Out for delivery")}</button>}
+    {mgr && !o.distributor_id && ["accepted", "dispatched"].includes(o.status) && <button className="sm" onClick={() => move(o, "fulfilled")}>{t("Mark delivered")}</button>}
     {mgr && cfg.settings.features.invoicing && ["accepted", "fulfilled"].includes(o.status) && !(cfg.settings.features.distributorBilling && o.distributor_id && !o.invoice) && (o.invoice
       ? <button className="sm ghost" onClick={() => openPrint(s, o.invoice.id).catch(e => setMsg(e.message))}>{t("Print")}{" "}{o.invoice.number}</button>
       : <button className="sm" onClick={() => go(() => api(s, `/api/orders/${o.id}/invoice`, { method: "POST", body: "{}" }))}>{t("Create GST invoice")}</button>)}

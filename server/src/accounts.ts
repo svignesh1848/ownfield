@@ -30,6 +30,16 @@ export const setMailer = (m: Mailer | null) => { mailer = m; };
 const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 /** Log a login alert when a user signs in from an IP + device never seen before (and they have signed in before). */
+/** One-time code (30 min) the user opens to set a new password. Used by "Reset code" and when an admin adds a user without a password. */
+export async function issueResetCode(db: Db, cid: number, u: { id: number; email: string }, subject = "Reset your OwnField password") {
+  const code = crypto.randomBytes(6).toString("hex").toUpperCase();
+  await db.query("UPDATE users SET reset_hash=$1, reset_expires=$2 WHERE id=$3 AND company_id=$4", [sha(code), new Date(Date.now() + 30 * 60_000), u.id, cid]);
+  const company = (await db.query("SELECT code FROM companies WHERE id=$1", [cid])).rows[0].code;
+  const link = `/?reset=${code}&company=${company}&email=${encodeURIComponent(u.email)}`;
+  let mailed = false;
+  if (mailer) { try { await mailer(u.email, subject, `Use code ${code} within 30 minutes, or open ${link}`); mailed = true; } catch (e: any) { console.error("mailer failed:", e.message); } }
+  return { code, link, expiresInMin: 30, mailed };
+}
 export async function newDeviceCheck(db: Db, u: any, ip: string, ua: string) {
   const prev = (await db.query("SELECT ip, detail FROM security_audit_log WHERE user_id=$1 AND action='login.success' ORDER BY id DESC LIMIT 50", [u.id])).rows;
   if (!prev.length) return;
@@ -102,14 +112,9 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
   app.post("/api/users/:id/reset-code", admin, wrap(async (req: any, res: any) => {
     const cid = tenant(req, res); if (cid == null) return;
     const u = await own(cid, Number(req.params.id)); if (!u) return res.status(404).json({ error: "not found" });
-    const code = crypto.randomBytes(6).toString("hex").toUpperCase();
-    await db.query("UPDATE users SET reset_hash=$1, reset_expires=$2 WHERE id=$3", [sha(code), new Date(Date.now() + 30 * 60_000), u.id]);
-    const company = (await db.query("SELECT code FROM companies WHERE id=$1", [cid])).rows[0].code;
-    const link = `/?reset=${code}&company=${company}&email=${encodeURIComponent(u.email)}`;
-    let mailed = false;
-    if (mailer) { try { await mailer(u.email, "Reset your OwnField password", `Use code ${code} within 30 minutes, or open ${link}`); mailed = true; } catch (e: any) { console.error("mailer failed:", e.message); } }
-    await log(req, "user.reset_code", u.email, { mailed });
-    res.json({ code, link, expiresInMin: 30, mailed });
+    const r = await issueResetCode(db, cid, u);
+    await log(req, "user.reset_code", u.email, { mailed: r.mailed });
+    res.json(r);
   }));
   const resetHits = new HitCounter(Number(process.env.RESET_MAX || 10), 15 * 60_000);
   app.post("/api/auth/reset", wrap(async (req: any, res: any) => {

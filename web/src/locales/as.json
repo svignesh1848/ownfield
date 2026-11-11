@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} লৈকে",
  "{0} sizes": "{0}টা আকাৰ",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP আৰু বিলিং মূল্য 0তকৈ বেছি হ'ব লাগিব",
- "{0}: billing price cannot be more than MRP": "{0}: বিলিং মূল্য MRPতকৈ বেছি হ'ব নোৱাৰে"
+ "{0}: billing price cannot be more than MRP": "{0}: বিলিং মূল্য MRPতকৈ বেছি হ'ব নোৱাৰে",
+ "Add user": "ব্যৱহাৰকাৰী যোগ কৰক",
+ "Role": "ভূমিকা",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0}-এ এই এবাৰৰ লিংকেৰে নিজৰ পাছৱৰ্ড নিজে ছেট কৰিব পাৰিব ({1} মিনিটলৈ বৈধ):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "পাছৱৰ্ডৰ প্ৰয়োজন নাই। আপুনি শ্বেয়াৰ কৰিবলৈ এটা এবাৰৰ লিংক পাব, আৰু তেওঁলোকে নিজৰ পাছৱৰ্ড নিজে ছেট কৰিব।",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "এই আউটলেটটো অনুমোদনৰ বাবে অপেক্ষা কৰি আছে, সেয়েহে এতিয়াও অৰ্ডাৰ ল'ব নোৱাৰে। আমি আপোনাৰ মেনেজাৰক অনুমোদন দিবলৈ সোঁৱৰাই দিছোঁ।",
+ "This order goes to its distributor — the distributor accepts and delivers it": "এই অৰ্ডাৰটো ইয়াৰ ডিষ্ট্ৰিবিউটৰৰ ওচৰলৈ যায় — ডিষ্ট্ৰিবিউটৰেহে ইয়াক গ্ৰহণ কৰে আৰু ডেলিভাৰি দিয়ে"
 }

@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} मेरेन",
  "{0} sizes": "{0} साइज",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP आनी बिलिंग मोल 0 परस चड जाय",
- "{0}: billing price cannot be more than MRP": "{0}: बिलिंग मोल MRP परस चड जावंक शकना"
+ "{0}: billing price cannot be more than MRP": "{0}: बिलिंग मोल MRP परस चड जावंक शकना",
+ "Add user": "वापरपी जोडात",
+ "Role": "भूमिका",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} ह्या एकदाच्या लिंकान आपलो पासवर्ड आपूण सेट करूंक शकता ({1} मिनटां मेरेन वैध):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "पासवर्डाची गरज ना. तुमकां शेअर करपाक एकदाची लिंक मेळटली, आनी ते आपलो पासवर्ड आपूण सेट करतले.",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "हें आउटलेट मान्यतायेची वाट पळयता, देखून अजून ऑर्डर घेवंक शकना. आमी तुमच्या मॅनेजराक मान्यताय दिवपाचो उगडास करून दिला.",
+ "This order goes to its distributor — the distributor accepts and delivers it": "ही ऑर्डर तिच्या वितरकाकडेन वता — वितरकूच ती स्वीकारता आनी पावयता"
 }
