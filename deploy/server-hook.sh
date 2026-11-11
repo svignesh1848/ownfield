@@ -15,7 +15,17 @@ install -m 644 "$D/options.env" /etc/fieldforce-oss-options.env
 printf 'APPU=%s\nAPPDB=%s\n' "$APPU" "$APPDB" >/etc/fieldforce-oss-bi-sync.env
 printf '[Unit]\nDescription=OwnField BI database allow-list sync\nAfter=postgresql.service\n[Service]\nType=oneshot\nEnvironmentFile=/etc/fieldforce-oss-bi-sync.env\nExecStart=/usr/local/sbin/fieldforce-oss-bi-sync\n' >/etc/systemd/system/fieldforce-oss-bi-sync.service
 printf '[Unit]\nDescription=OwnField BI allow-list sync every 2 min\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=2min\n[Install]\nWantedBy=timers.target\n' >/etc/systemd/system/fieldforce-oss-bi-sync.timer
+# Off-server backups: AWS CLI v2 (signature-checked), options.env into the app's env (BACKUP_S3_BUCKET), and a
+# timer that restores the newest S3 backup into a scratch DB to prove it works (status shown to the platform owner).
+timeout 900 bash "$D/aws-cli-install.sh" || echo "server-hook: aws cli step failed"
+mkdir -p /etc/systemd/system/fieldforce-oss.service.d
+printf '[Service]\nEnvironmentFile=-/etc/fieldforce-oss-options.env\n' >/etc/systemd/system/fieldforce-oss.service.d/options.conf
+install -m 755 "$D/backup-restore-test.sh" /usr/local/sbin/fieldforce-oss-restore-test
+printf 'APPDB=%s\n' "$APPDB" >/etc/fieldforce-oss-restore-test.env
+printf '[Unit]\nDescription=OwnField backup restore test (scratch DB)\nAfter=postgresql.service\n[Service]\nType=oneshot\nNice=19\nEnvironmentFile=/etc/fieldforce-oss-restore-test.env\nExecStart=/usr/local/sbin/fieldforce-oss-restore-test\n' >/etc/systemd/system/fieldforce-oss-restore-test.service
+printf '[Unit]\nDescription=OwnField backup restore test check every 15 min\n[Timer]\nOnBootSec=20min\nOnUnitActiveSec=15min\n[Install]\nWantedBy=timers.target\n' >/etc/systemd/system/fieldforce-oss-restore-test.timer
 systemctl daemon-reload && systemctl enable --now fieldforce-oss-bi-sync.timer >/dev/null 2>&1
+systemctl enable --now fieldforce-oss-restore-test.timer >/dev/null 2>&1 || echo "server-hook: restore-test timer failed"
 timeout 120 env APPU="$APPU" APPDB="$APPDB" /usr/local/sbin/fieldforce-oss-bi-sync || echo "server-hook: bi sync failed"
 timeout 300 bash "$D/domain-setup.sh" || echo "server-hook: domain setup failed"
 exit 0
