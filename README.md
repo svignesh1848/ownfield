@@ -244,7 +244,7 @@ All photos (visit photos, day-start selfies, store audit photos, expense bills) 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PHOTO_STORAGE` | `local` | `local` = files in `UPLOAD_DIR`; `s3` = an S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, Wasabi…) |
-| `UPLOAD_DIR` | `./uploads` | Folder for local photos (a Docker volume) |
+| `UPLOAD_DIR` | `./uploads` | Folder for local photos (a Docker volume). If `./uploads` is not writable by the app, photos go to `~/uploads` of the service user |
 | `S3_BUCKET` | – | Bucket name (required for `s3`) |
 | `S3_REGION` | `us-east-1` | Bucket region (`auto` for R2) |
 | `S3_ENDPOINT` | AWS | Custom endpoint for non-AWS providers, e.g. `https://<account>.r2.cloudflarestorage.com` |

@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { localStore, s3Store } from "../src/storage";
+import { localStore, s3Store, resolveUploadDir } from "../src/storage";
 import { diskStatus, cleanTemp } from "../src/disk";
 
 describe("photo storage", () => {
@@ -12,6 +12,15 @@ describe("photo storage", () => {
     const st = localStore(); await st.put("7/a.png", Buffer.from("hi"), "image/png");
     expect((await st.get("7/a.png")).toString()).toBe("hi");
     await expect(st.get("../etc/passwd")).rejects.toThrow();
+  });
+  it("photos go to a writable folder when the release folder is read-only (live visit-photo 500)", () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "of-rel-")), home = fs.mkdtempSync(path.join(os.tmpdir(), "of-home-"));
+    expect(resolveUploadDir({ UPLOAD_DIR: "/data/up" }, cwd, home)).toBe("/data/up");
+    expect(resolveUploadDir({}, cwd, home, () => true)).toBe(path.join(cwd, "uploads"));
+    expect(resolveUploadDir({}, cwd, home, () => false)).toBe(path.join(home, "uploads")); // root-owned release dir on the server
+    fs.mkdirSync(path.join(cwd, "uploads"));
+    expect(resolveUploadDir({}, cwd, home, d => d === path.join(cwd, "uploads"))).toBe(path.join(cwd, "uploads")); // existing writable ./uploads kept
+    expect(resolveUploadDir({}, cwd, home, d => d === cwd)).toBe(path.join(home, "uploads")); // existing but read-only ./uploads
   });
   it("s3 store sends signed PUT/GET to the bucket (custom endpoint)", async () => {
     const calls: any[] = [];
