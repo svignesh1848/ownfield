@@ -20,7 +20,7 @@ import { registerIncentiveRoutes } from "./incentives.js";
 import { getCompany } from "./catalog.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 import { openField } from "./fieldcrypt.js";
-import { securityHeaders, tightCors, loginGuard, audit, errorHandler } from "./security.js";
+import { securityHeaders, tightCors, loginGuard, audit, errorHandler, HitCounter } from "./security.js";
 import { registerAccountRoutes, newDeviceCheck, totpVerify } from "./accounts.js";
 import { registerVanRoutes } from "./van.js";
 import { registerFlowRoutes } from "./flow.js";
@@ -144,7 +144,9 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
   });
 
   // Backup status (last run, S3 upload, restore test). Platform owner only; no secrets or data in it.
-  app.get("/api/platform/backup-status", auth("platform_owner"), (_q, res) => { res.json(backupStatus()); });
+  const bkHits = new HitCounter(30, 60_000);
+  app.get("/api/platform/backup-status", (req, res, next) => bkHits.hit(req.ip || "?") > bkHits.max ? res.status(429).json({ error: "Too many requests. Please wait a minute." }) : next(),
+    auth("platform_owner"), (_q, res) => { res.json(backupStatus()); });
 
   app.post("/api/auth/login", guard.ipLimiter, wrap(async (req, res) => {
     const { companyCode, email, password, totp, deviceId } = req.body || {};
