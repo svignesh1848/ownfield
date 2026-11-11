@@ -21,7 +21,7 @@ import { getCompany } from "./catalog.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 import { openField } from "./fieldcrypt.js";
 import { securityHeaders, tightCors, loginGuard, audit, errorHandler, HitCounter } from "./security.js";
-import { registerAccountRoutes, newDeviceCheck, totpVerify } from "./accounts.js";
+import { registerAccountRoutes, newDeviceCheck, totpVerify, issueResetCode } from "./accounts.js";
 import { registerVanRoutes } from "./van.js";
 import { registerFlowRoutes } from "./flow.js";
 import { registerWorkdayRoutes } from "./workday.js";
@@ -271,11 +271,15 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
     const team = await teamIds(db, cid, req.user); // managers with a team see their own people (plus distributors / retailers)
     res.json((await db.query(`SELECT id,email,name,phone,role,drug_licence,active,shop_id,reports_to,territory_id FROM users WHERE company_id=$1 ${team ? `AND (role IN ('distributor','retailer')${inTeam("id", team).replace(" AND", " OR")})` : ""} ORDER BY id`, [cid])).rows);
   }));
+  // Add one user from the Users screen. Without a password, the admin gets a one-time code/link (30 min) to share, and the user sets their own password.
   app.post("/api/users", auth("company_admin"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const u = await addUser(cid, req.body || {});
-    await audit(db, { companyId: cid, userId: req.user.uid, action: "user.create", target: u.email, detail: { role: u.role }, ip: req.ip });
-    res.status(201).json({ user: u, usage: await companyUsage(cid) });
+    const b = { ...(req.body || {}) }, invite = !b.password;
+    if (invite) b.password = randomBytes(24).toString("base64url");
+    const u = await addUser(cid, b);
+    await audit(db, { companyId: cid, userId: req.user.uid, action: "user.create", target: u.email, detail: { role: u.role, invite }, ip: req.ip });
+    const setup = invite ? await issueResetCode(db, cid, u, "Set your OwnField password") : null;
+    res.status(201).json({ user: u, usage: await companyUsage(cid), ...(setup ? { setup } : {}) });
   }));
   app.get("/api/shops", anyCompanyRole, wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;

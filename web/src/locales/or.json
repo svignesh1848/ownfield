@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} ପର୍ଯ୍ୟନ୍ତ",
  "{0} sizes": "{0}ଟି ସାଇଜ",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP ଓ ବିଲିଂ ମୂଲ୍ୟ 0 ରୁ ଅଧିକ ହେବା ଦରକାର",
- "{0}: billing price cannot be more than MRP": "{0}: ବିଲିଂ ମୂଲ୍ୟ MRP ରୁ ଅଧିକ ହୋଇପାରିବ ନାହିଁ"
+ "{0}: billing price cannot be more than MRP": "{0}: ବିଲିଂ ମୂଲ୍ୟ MRP ରୁ ଅଧିକ ହୋଇପାରିବ ନାହିଁ",
+ "Add user": "ବ୍ୟବହାରକାରୀ ଯୋଡନ୍ତୁ",
+ "Role": "ଭୂମିକା",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} ଏହି ଏକଥର ଲିଙ୍କ ଦ୍ୱାରା ନିଜ ପାସୱାର୍ଡ ନିଜେ ସେଟ କରିପାରିବେ ({1} ମିନିଟ ପାଇଁ ବୈଧ):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "ପାସୱାର୍ଡ ଦରକାର ନାହିଁ। ଆପଣ ସେୟାର କରିବା ପାଇଁ ଏକ ଏକଥର ଲିଙ୍କ ପାଇବେ, ଏବଂ ସେମାନେ ନିଜ ପାସୱାର୍ଡ ନିଜେ ସେଟ କରିବେ।",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ଏହି ଆଉଟଲେଟ ଅନୁମୋଦନ ପାଇଁ ଅପେକ୍ଷା କରୁଛି, ତେଣୁ ଏବେ ଅର୍ଡର ନେଇପାରିବ ନାହିଁ। ଆମେ ଆପଣଙ୍କ ମ୍ୟାନେଜରଙ୍କୁ ଅନୁମୋଦନ ଦେବାକୁ ମନେ ପକାଇ ଦେଇଛୁ।",
+ "This order goes to its distributor — the distributor accepts and delivers it": "ଏହି ଅର୍ଡର ଏହାର ବିତରକଙ୍କ ପାଖକୁ ଯାଏ — ବିତରକ ହିଁ ଏହାକୁ ଗ୍ରହଣ କରନ୍ତି ଏବଂ ଡେଲିଭରି କରନ୍ତି"
 }

@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} വരെ",
  "{0} sizes": "{0} സൈസുകൾ",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP യും ബില്ലിംഗ് വിലയും 0 ൽ കൂടുതലായിരിക്കണം",
- "{0}: billing price cannot be more than MRP": "{0}: ബില്ലിംഗ് വില MRP യേക്കാൾ കൂടരുത്"
+ "{0}: billing price cannot be more than MRP": "{0}: ബില്ലിംഗ് വില MRP യേക്കാൾ കൂടരുത്",
+ "Add user": "ഉപയോക്താവിനെ ചേർക്കുക",
+ "Role": "റോൾ",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0}-ന് ഈ ഒറ്റത്തവണ ലിങ്ക് വഴി സ്വന്തം പാസ്‌വേഡ് സ്വയം സജ്ജമാക്കാം ({1} മിനിറ്റ് സാധുത):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "പാസ്‌വേഡ് വേണ്ട. പങ്കിടാൻ ഒരു ഒറ്റത്തവണ ലിങ്ക് നിങ്ങൾക്ക് ലഭിക്കും, അവർ സ്വന്തം പാസ്‌വേഡ് സ്വയം സജ്ജമാക്കും.",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ഈ ഔട്ട്‌ലെറ്റ് അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു, അതിനാൽ ഇപ്പോൾ ഓർഡർ എടുക്കാൻ കഴിയില്ല. അംഗീകരിക്കാൻ നിങ്ങളുടെ മാനേജരെ ഓർമ്മിപ്പിച്ചിട്ടുണ്ട്.",
+ "This order goes to its distributor — the distributor accepts and delivers it": "ഈ ഓർഡർ അതിന്റെ വിതരണക്കാരനിലേക്ക് പോകുന്നു — വിതരണക്കാരനാണ് അത് സ്വീകരിച്ച് ഡെലിവർ ചെയ്യുന്നത്"
 }

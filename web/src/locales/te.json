@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} వరకు",
  "{0} sizes": "{0} సైజులు",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP మరియు బిల్లింగ్ ధర 0 కంటే ఎక్కువ ఉండాలి",
- "{0}: billing price cannot be more than MRP": "{0}: బిల్లింగ్ ధర MRP కంటే ఎక్కువ ఉండకూడదు"
+ "{0}: billing price cannot be more than MRP": "{0}: బిల్లింగ్ ధర MRP కంటే ఎక్కువ ఉండకూడదు",
+ "Add user": "వినియోగదారుని జోడించండి",
+ "Role": "పాత్ర",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} ఈ ఒక్కసారి లింక్‌తో తమ పాస్‌వర్డ్‌ను తామే సెట్ చేసుకోవచ్చు ({1} నిమిషాలు చెల్లుతుంది):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "పాస్‌వర్డ్ అవసరం లేదు. షేర్ చేయడానికి మీకు ఒక్కసారి లింక్ వస్తుంది, వారు తమ పాస్‌వర్డ్‌ను తామే సెట్ చేసుకుంటారు.",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ఈ అవుట్‌లెట్ ఆమోదం కోసం వేచి ఉంది, కాబట్టి ఇంకా ఆర్డర్లు తీసుకోలేదు. ఆమోదించమని మీ మేనేజర్‌కు గుర్తు చేశాం.",
+ "This order goes to its distributor — the distributor accepts and delivers it": "ఈ ఆర్డర్ దాని పంపిణీదారుకు వెళ్తుంది — పంపిణీదారే దాన్ని అంగీకరించి డెలివరీ చేస్తారు"
 }

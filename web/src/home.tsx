@@ -80,9 +80,9 @@ export function DailySummary({ s }: { s: any }) {
 export function ManagerHome(p: ViewProps) {
   const { s, cfg, go } = p, f = cfg.settings.features;
   const [d, setD] = useState<any>(null);
-  useEffect(() => { Promise.all([safe(api(s, "/api/dashboard?days=1"), []), safe(api(s, "/api/orders"), []), f.purchaseOrders ? safe(api(s, "/api/pos"), []) : [], f.invoicing ? safe(api(s, "/api/outstanding"), []) : []]).then(([dash, o, po, out]) =>
+  useEffect(() => { Promise.all([safe(api(s, "/api/dashboard?days=1"), []), safe(api(s, "/api/orders"), []), f.purchaseOrders ? safe(api(s, "/api/pos"), []) : [], f.invoicing ? safe(api(s, "/api/outstanding"), []) : [], safe(api(s, "/api/outlets/pending"), [])]).then(([dash, o, po, out, outlets]) =>
     setD({ visits: dash.reduce((a: number, r: any) => a + r.visits, 0), orders: dash.reduce((a: number, r: any) => a + r.orders, 0), value: dash.reduce((a: number, r: any) => a + r.value, 0),
-      approve: o.filter((x: any) => x.status === "placed" && !x.distributor_id).length, pos: po.filter((x: any) => ["submitted", "approved", "partially_dispatched"].includes(x.status)).length,
+      approve: o.filter((x: any) => x.status === "placed" && !x.distributor_id).length, waiting: o.filter((x: any) => x.status === "pending_approval").length, outlets: outlets.length, pos: po.filter((x: any) => ["submitted", "approved", "partially_dispatched"].includes(x.status)).length,
       due: out.reduce((a: number, r: any) => a + r.outstanding, 0), overdue: out.reduce((a: number, r: any) => a + r.overdue, 0) })); }, []);
   return <>{s.user.role === "company_admin" && <><DiskAlert s={s} /><SetupChecklist {...p} /></>}
     <h2 className="hello">{hello(s.user.name)}</h2>
@@ -94,6 +94,8 @@ export function ManagerHome(p: ViewProps) {
       <h3>{t("Approvals pending")}</h3>
       <div className="tiles">
         <Tile icon="📦" title={t("Orders to accept")} text={d.approve ? t("{0} company orders waiting", d.approve) : t("Nothing waiting")} badge={d.approve} tone={d.approve ? "warn" : undefined} onClick={() => go("orders")} />
+        {d.waiting > 0 && <Tile icon="⏳" title={t("Waiting for approval")} text={t("{0} waiting for you", d.waiting)} badge={d.waiting} tone="warn" onClick={() => go("orders")} />}
+        <Tile icon="🏪" title={t("New outlets")} text={d.outlets ? t("{0} waiting for you", d.outlets) : t("Nothing waiting")} badge={d.outlets} tone={d.outlets ? "warn" : undefined} onClick={() => go("outletapprovals")} />
         {f.purchaseOrders && <Tile icon="📋" title={t("Purchase orders")} text={d.pos ? t("{0} to approve or dispatch", d.pos) : t("Nothing waiting")} badge={d.pos} tone={d.pos ? "warn" : undefined} onClick={() => go("POs")} />}
       </div>
       <h3>{t("Shortcuts")}</h3>

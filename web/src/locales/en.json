@@ -1436,5 +1436,11 @@
  "up to {0}": "up to {0}",
  "{0} sizes": "{0} sizes",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP and billing price must be more than 0",
- "{0}: billing price cannot be more than MRP": "{0}: billing price cannot be more than MRP"
+ "{0}: billing price cannot be more than MRP": "{0}: billing price cannot be more than MRP",
+ "Add user": "Add user",
+ "Role": "Role",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} can set their own password with this one-time link (valid {1} min):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "No password needed. You get a one-time link to share, and they set their own password.",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.",
+ "This order goes to its distributor — the distributor accepts and delivers it": "This order goes to its distributor — the distributor accepts and delivers it"
 }

@@ -223,6 +223,16 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     if (o.rep_id !== by) await notify(q, cid, o.rep_id, "Order #{0} at {1}: {2}", [o.id, name, status], reason, `orders#${o.id}`);
     if (status === "placed" && o.distributor_id && o.distributor_id !== by) await notify(q, cid, o.distributor_id, "New order #{0} from {1}", [o.id, name], null, `inbox#${o.id}`);
   };
+  /** Active admins, plus managers whose team includes this user (a manager without a team sees everyone). */
+  const orderApprovers = async (q: Db, cid: number, uid: number) => {
+    const out: number[] = [];
+    for (const m of (await q.query("SELECT id, role FROM users WHERE company_id=$1 AND role IN ('company_admin','manager') AND active ORDER BY id", [cid])).rows) {
+      if (m.role === "company_admin") { out.push(m.id); continue; }
+      const team = await teamIds(q, cid, { uid: m.id, role: "manager" });
+      if (!team || team.includes(Number(uid))) out.push(m.id);
+    }
+    return out;
+  };
   const needsApproval = (settings: any, total: number) => { const a = settings.approval || { levels: 0, above: 0 }; return a.levels > 0 && total >= (a.above || 0); };
   const checkCart = async (cid: number, settings: any, shop: any, lines: any, editing: number | null = null) => {
     if (shop.active === false) throw bad("this retailer is marked inactive — ask the admin to reactivate it", 409);
@@ -266,8 +276,8 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       if (settings.features.stock) await allocateStock(tx, cid, o);
       await orderEvent(tx, o.id, status, req.user.uid, credit.ok ? null : credit.reasons.join("; "));
       if (status === "placed") await tell(tx, cid, o, "placed", req.user.uid);
-      else for (const m of (await tx.query("SELECT id FROM users WHERE company_id=$1 AND role IN ('company_admin','manager') AND active", [cid])).rows)
-        await notify(tx, cid, m.id, "Order #{0} at {1} needs your approval", [o.id, shop.name], null, `orders#${o.id}`);
+      else for (const m of await orderApprovers(tx, cid, o.rep_id)) // only people who can actually approve it (admins + the rep's managers)
+        await notify(tx, cid, m, "Order #{0} at {1} needs your approval", [o.id, shop.name], null, `orders#${o.id}`);
       await emit(tx, cid, "order.created", { id: o.id, client_ref: o.client_ref, shop_id: o.shop_id, distributor_id: o.distributor_id, total: Number(o.total), status: o.status });
       return o;
     });
@@ -352,10 +362,15 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     }
     res.json(orders);
   }));
-  app.post("/api/orders/:id/status", auth("distributor", "company_admin"), wrap(async (req, res) => {
+  // Distributor orders: the distributor (or an admin). Company-direct orders (no distributor): an admin, or a manager for their own team.
+  app.post("/api/orders/:id/status", auth("distributor", "company_admin", "manager"), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
     const o = (await db.query("SELECT * FROM orders WHERE id=$1 AND company_id=$2", [Number(req.params.id), cid])).rows[0];
     if (!o || (req.user.role === "distributor" && (o.distributor_id !== req.user.uid || o.status === "pending_approval"))) throw bad("order not found", 404);
+    if (req.user.role === "manager") {
+      if (o.distributor_id) throw bad("This order goes to its distributor — the distributor accepts and delivers it", 403);
+      await assertTeam(db, cid, req.user, o.rep_id);
+    }
     const to = String(req.body?.status || "");
     const reason = String(req.body?.reason || "").trim().slice(0, 300) || null;
     if (!(TRANSITIONS[o.status] || []).includes(to)) throw bad(`cannot move ${o.status} -> ${to}`, 409);

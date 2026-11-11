@@ -241,7 +241,7 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
       <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div></div></div>}
   </div>;
 }
-const ROLE: Record<string, string> = { company_admin: t("Administrator"), manager: t("Manager"), sales_rep: t("Sales rep"), distributor: t("Distributor"), retailer: t("Retailer (shop)"), platform_owner: t("Platform owner") };
+export const ROLE: Record<string, string> = { company_admin: t("Administrator"), manager: t("Manager"), sales_rep: t("Sales rep"), distributor: t("Distributor"), retailer: t("Retailer (shop)"), platform_owner: t("Platform owner") };
 
 function Users({ s, cfg, go }: ViewProps) {
   const [rows, setRows] = useState<any[] | null>(null); useEffect(() => { api(s, "/api/users").then(setRows); }, []);

@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} पर्यन्तम्",
  "{0} sizes": "{0} आकाराः",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP बिलिंग्-मूल्यं च 0 तः अधिकं भवेत्",
- "{0}: billing price cannot be more than MRP": "{0}: बिलिंग्-मूल्यं MRP तः अधिकं न भवितुम् अर्हति"
+ "{0}: billing price cannot be more than MRP": "{0}: बिलिंग्-मूल्यं MRP तः अधिकं न भवितुम् अर्हति",
+ "Add user": "उपयोक्तारं योजयतु",
+ "Role": "भूमिका",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} अनेन एकवारिक-लिङ्केन स्वकीयं गूढशब्दं स्वयं स्थापयितुं शक्नोति ({1} निमेषपर्यन्तं मान्यम्):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "गूढशब्दस्य आवश्यकता नास्ति। साझाकरणाय भवान् एकवारिकं लिङ्कं प्राप्स्यति, ते च स्वकीयं गूढशब्दं स्वयं स्थापयिष्यन्ति।",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "इदं आउटलेट अनुमोदनस्य प्रतीक्षां करोति, अतः अधुना आदेशान् स्वीकर्तुं न शक्नोति। वयं भवतः प्रबन्धकम् अनुमोदनाय स्मारितवन्तः।",
+ "This order goes to its distributor — the distributor accepts and delivers it": "अयम् आदेशः स्वस्य वितरकं प्रति गच्छति — वितरकः एव तं स्वीकरोति प्रापयति च"
 }

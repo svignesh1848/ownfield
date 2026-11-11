@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} ವರೆಗೆ",
  "{0} sizes": "{0} ಗಾತ್ರಗಳು",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP ಮತ್ತು ಬಿಲ್ಲಿಂಗ್ ಬೆಲೆ 0 ಕ್ಕಿಂತ ಹೆಚ್ಚಿರಬೇಕು",
- "{0}: billing price cannot be more than MRP": "{0}: ಬಿಲ್ಲಿಂಗ್ ಬೆಲೆ MRP ಗಿಂತ ಹೆಚ್ಚಿರಬಾರದು"
+ "{0}: billing price cannot be more than MRP": "{0}: ಬಿಲ್ಲಿಂಗ್ ಬೆಲೆ MRP ಗಿಂತ ಹೆಚ್ಚಿರಬಾರದು",
+ "Add user": "ಬಳಕೆದಾರರನ್ನು ಸೇರಿಸಿ",
+ "Role": "ಪಾತ್ರ",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} ಈ ಒಂದು ಬಾರಿಯ ಲಿಂಕ್ ಮೂಲಕ ತಮ್ಮ ಪಾಸ್‌ವರ್ಡ್ ಅನ್ನು ತಾವೇ ಹೊಂದಿಸಬಹುದು ({1} ನಿಮಿಷ ಮಾನ್ಯ):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "ಪಾಸ್‌ವರ್ಡ್ ಬೇಕಿಲ್ಲ. ಹಂಚಿಕೊಳ್ಳಲು ನಿಮಗೆ ಒಂದು ಬಾರಿಯ ಲಿಂಕ್ ಸಿಗುತ್ತದೆ, ಅವರು ತಮ್ಮ ಪಾಸ್‌ವರ್ಡ್ ಅನ್ನು ತಾವೇ ಹೊಂದಿಸುತ್ತಾರೆ.",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ಈ ಔಟ್‌ಲೆಟ್ ಅನುಮೋದನೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಇನ್ನೂ ಆರ್ಡರ್ ತೆಗೆದುಕೊಳ್ಳಲು ಸಾಧ್ಯವಿಲ್ಲ. ಅನುಮೋದಿಸಲು ನಿಮ್ಮ ಮ್ಯಾನೇಜರ್‌ಗೆ ನೆನಪಿಸಿದ್ದೇವೆ.",
+ "This order goes to its distributor — the distributor accepts and delivers it": "ಈ ಆರ್ಡರ್ ಅದರ ವಿತರಕರಿಗೆ ಹೋಗುತ್ತದೆ — ವಿತರಕರೇ ಅದನ್ನು ಸ್ವೀಕರಿಸಿ ತಲುಪಿಸುತ್ತಾರೆ"
 }

@@ -21,12 +21,30 @@ export async function visibleShopSql(db: Db, cid: number, uid: number) {
   if (!r.repOwnBeatsOnly) return notRejected;
   return `${notRejected} AND (id IN (SELECT bs.shop_id FROM beat_shops bs JOIN beats b ON b.id=bs.beat_id WHERE b.company_id=${Number(cid) | 0} AND b.rep_id=${u}) OR added_by=${u} OR rep_id=${u} OR (COALESCE(approval_status,'approved')='approved' AND NOT EXISTS (SELECT 1 FROM beats b2 WHERE b2.company_id=${Number(cid) | 0} AND b2.rep_id=${u})))`; // a rep with no beats yet still sees approved outlets
 }
-/** Throws when an outlet may not take an order (pending without permission, or rejected). */
+/** Who approves an outlet added by this rep: the rep's nearest manager, or (no manager set) every active admin and manager. */
+export async function outletApprovers(db: Db, cid: number, repId: number): Promise<number[]> {
+  const ups = await managersOf(db, cid, repId);
+  if (ups.length) { const m = (await db.query("SELECT id FROM users WHERE id=$1 AND company_id=$2 AND active", [ups[0], cid])).rows[0]; if (m) return [m.id]; }
+  return (await db.query("SELECT id FROM users WHERE company_id=$1 AND role IN ('company_admin','manager') AND active", [cid])).rows.map((r: any) => r.id);
+}
+const NEW_OUTLET_NOTE = "New outlet {0} needs your approval";
+/** Notify the approvers of a waiting outlet, at most once every 6 hours per approver (so offline retries don't spam them). */
+export async function remindOutletApprovers(db: Db, cid: number, shop: any) {
+  const since = new Date(Date.now() - 6 * 3600_000).toISOString(), args = JSON.stringify([shop.name]);
+  for (const m of await outletApprovers(db, cid, shop.added_by ?? shop.rep_id)) {
+    const recent = (await db.query("SELECT 1 FROM notifications WHERE company_id=$1 AND user_id=$2 AND template=$3 AND args=$4 AND created_at>=$5 LIMIT 1", [cid, m, NEW_OUTLET_NOTE, args, since])).rows[0];
+    if (!recent) await notify(db, cid, m, NEW_OUTLET_NOTE, [shop.name], null, "outletapprovals");
+  }
+}
+/** Throws when an outlet may not take an order (pending without permission, or rejected). A blocked order reminds the approver. */
 export async function assertCanOrder(db: Db, cid: number, shop: any) {
   const st = shop?.approval_status || "approved";
   if (st === "approved") return;
   if (st === "rejected") throw bad("This outlet was rejected and cannot take orders", 409);
-  if (!(await outletRules(db, cid)).pendingCanOrder) throw bad("This outlet is waiting for approval and cannot take orders yet", 409);
+  if (!(await outletRules(db, cid)).pendingCanOrder) {
+    if (shop.added_by || shop.rep_id) await remindOutletApprovers(db, cid, shop);
+    throw bad("This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.", 409);
+  }
 }
 
 const MAGIC: [string, (b: Buffer) => boolean][] = [["image/jpeg", b => b[0] === 0xff && b[1] === 0xd8], ["image/png", b => b.subarray(0, 4).toString("hex") === "89504e47"],
@@ -73,9 +91,7 @@ export function registerOutletApprovalRoutes({ app, db, auth, wrap, tenant }: Ct
       [req.user.uid, ref, photo?.file ?? null, photo?.mime ?? null, cid, code])).rows[0];
     const beat = b.beatId ? (await db.query("SELECT id FROM beats WHERE id=$1 AND company_id=$2 AND rep_id=$3", [Number(b.beatId), cid, req.user.uid])).rows[0] : null;
     if (beat) { const n = (await db.query("SELECT COALESCE(MAX(seq),0) AS n FROM beat_shops WHERE beat_id=$1", [beat.id])).rows[0].n; await db.query("INSERT INTO beat_shops (beat_id,shop_id,seq) VALUES ($1,$2,$3)", [beat.id, shop.id, Number(n) + 1]); }
-    const ups = await managersOf(db, cid, req.user.uid);
-    const approvers = ups.length ? ups.slice(0, 1) : (await db.query("SELECT id FROM users WHERE company_id=$1 AND role IN ('company_admin','manager') AND active", [cid])).rows.map((r: any) => r.id);
-    for (const m of approvers) await notify(db, cid, m, "New outlet {0} needs your approval", [shop.name], null, "outletapprovals");
+    for (const m of await outletApprovers(db, cid, req.user.uid)) await notify(db, cid, m, NEW_OUTLET_NOTE, [shop.name], null, "outletapprovals");
     res.status(201).json(shop);
   }));
   app.get("/api/outlets/mine", auth("sales_rep"), wrap(async (req, res) => {

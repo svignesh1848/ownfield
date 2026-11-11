@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} तक",
  "{0} sizes": "{0} साइज़",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP और बिलिंग मूल्य 0 से ज़्यादा होने चाहिए",
- "{0}: billing price cannot be more than MRP": "{0}: बिलिंग मूल्य MRP से ज़्यादा नहीं हो सकता"
+ "{0}: billing price cannot be more than MRP": "{0}: बिलिंग मूल्य MRP से ज़्यादा नहीं हो सकता",
+ "Add user": "यूज़र जोड़ें",
+ "Role": "भूमिका",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} इस एक बार के लिंक से अपना पासवर्ड खुद सेट कर सकते हैं ({1} मिनट तक मान्य):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "पासवर्ड की ज़रूरत नहीं। आपको शेयर करने के लिए एक बार का लिंक मिलेगा, और वे अपना पासवर्ड खुद सेट करेंगे।",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "यह आउटलेट मंजूरी का इंतजार कर रहा है, इसलिए अभी ऑर्डर नहीं ले सकता। हमने आपके मैनेजर को इसे मंजूर करने की याद दिला दी है।",
+ "This order goes to its distributor — the distributor accepts and delivers it": "यह ऑर्डर अपने वितरक के पास जाता है — वितरक ही इसे स्वीकार करता है और डिलीवर करता है"
 }

@@ -1436,5 +1436,11 @@
  "up to {0}": "{0} तगर",
  "{0} sizes": "{0} साइज",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP ते बिलिंग मुल्ल 0 थमां मता होना चाहिदा",
- "{0}: billing price cannot be more than MRP": "{0}: बिलिंग मुल्ल MRP थमां मता नेईं होई सकदा"
+ "{0}: billing price cannot be more than MRP": "{0}: बिलिंग मुल्ल MRP थमां मता नेईं होई सकदा",
+ "Add user": "यूजर जोड़ो",
+ "Role": "भूमिका",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} इस इक बारी दे लिंक कन्नै अपना पासवर्ड आपूं सेट करी सकदे न ({1} मिंटें तगर मान्य):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "पासवर्ड दी लोड़ नेईं। तुसें गी शेयर करने आस्तै इक बारी दा लिंक मिलग, ते ओह् अपना पासवर्ड आपूं सेट करङन।",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "एह् आउटलेट मंजूरी दी उडीक करा करदा ऐ, इस करी अजें आर्डर नेईं लेई सकदा। असें तुंदे मैनेजर गी मंजूरी देने दी याद कराई दित्ती ऐ।",
+ "This order goes to its distributor — the distributor accepts and delivers it": "एह् आर्डर अपने वितरक कोल जंदा ऐ — वितरक गै इसगी मंजूर करदा ते पजांदा ऐ"
 }

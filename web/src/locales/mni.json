@@ -1436,5 +1436,11 @@
  "up to {0}": "up to {0}",
  "{0} sizes": "{0} sizes",
  "{0}: MRP and billing price must be more than 0": "{0}: MRP and billing price must be more than 0",
- "{0}: billing price cannot be more than MRP": "{0}: billing price cannot be more than MRP"
+ "{0}: billing price cannot be more than MRP": "{0}: billing price cannot be more than MRP",
+ "Add user": "ꯁꯤꯖꯤꯟꯅꯔꯤꯕ ꯑꯃꯥ ꯍꯥꯄꯆꯤꯟꯕꯤꯌꯨ",
+ "Role": "ꯊꯧꯗꯥꯡ",
+ "{0} can set their own password with this one-time link (valid {1} min):": "{0} ꯅꯥ ꯑꯃꯨꯛ ꯍꯟꯅꯥ ꯊꯕꯛ ꯇꯧꯕ ꯂꯤꯉ꯭ꯛ ꯑꯁꯤꯅꯥ ꯃꯁꯥꯒꯤ ꯄꯥꯁꯋꯥꯔꯗ ꯃꯁꯥꯅꯥ ꯁꯦꯠ ꯇꯧꯕ ꯌꯥꯏ ({1} ꯃꯤꯅꯤꯠ ꯐꯥꯑꯣꯕꯥ ꯆꯠꯅꯤ):",
+ "No password needed. You get a one-time link to share, and they set their own password.": "ꯄꯥꯁꯋꯥꯔꯗ ꯃꯊꯧ ꯇꯥꯗꯦ꯫ ꯁꯦꯌꯔ ꯇꯧꯅꯕꯥ ꯑꯃꯨꯛ ꯍꯟꯅꯥ ꯊꯕꯛ ꯇꯧꯕ ꯂꯤꯉ꯭ꯛ ꯑꯃꯥ ꯐꯪꯒꯅꯤ, ꯑꯗꯨꯒꯥ ꯃꯈꯣꯌꯅꯥ ꯃꯈꯣꯌꯒꯤ ꯄꯥꯁꯋꯥꯔꯗ ꯃꯈꯣꯌꯅꯥ ꯁꯦꯠ ꯇꯧꯒꯅꯤ꯫",
+ "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ꯑꯥꯎꯇꯂꯦꯠ ꯑꯁꯤ ꯑꯌꯥꯕꯥ ꯄꯤꯅꯕꯥ ꯉꯥꯏꯗꯨꯅꯥ ꯂꯩꯔꯤ, ꯃꯔꯝ ꯑꯗꯨꯅꯥ ꯍꯧꯖꯤꯛ ꯐꯥꯑꯣꯕꯥ ꯑꯣꯔꯗꯔ ꯂꯧꯕ ꯉꯃꯗ꯭ꯔꯤ꯫ ꯑꯩꯈꯣꯌꯅꯥ ꯅꯍꯥꯛꯀꯤ ꯃꯦꯅꯦꯖꯔꯗꯥ ꯑꯌꯥꯕꯥ ꯄꯤꯅꯕꯥ ꯅꯤꯡꯁꯤꯡꯍꯜꯂꯦ꯫",
+ "This order goes to its distributor — the distributor accepts and delivers it": "ꯑꯣꯔꯗꯔ ꯑꯁꯤ ꯃꯁꯤꯒꯤ ꯗꯤꯁ꯭ꯠꯔꯤꯕ꯭ꯌꯨꯇꯔꯗꯥ ꯆꯠꯂꯤ — ꯗꯤꯁ꯭ꯠꯔꯤꯕ꯭ꯌꯨꯇꯔꯅꯥ ꯃꯁꯤ ꯂꯧꯁꯤꯟꯗꯨꯅꯥ ꯄꯤꯖꯩ"
 }
