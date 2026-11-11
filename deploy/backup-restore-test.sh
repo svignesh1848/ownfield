@@ -2,8 +2,9 @@
 # Proves the off-server backups restore (root, from a systemd timer installed by server-hook.sh). Finds the newest
 # db-*.sql.gz in s3://$BACKUP_S3_BUCKET/fieldforce/, downloads it to a root-only temp dir, loads it into a SCRATCH
 # database (ownfield_restore_test, never the app database), counts the tables, then drops the scratch DB and deletes
-# the download. Runs on the first backup, retries a failed test every 6 h, and re-tests weekly after a pass.
-# Writes /var/lib/fieldforce-oss-backup/restore-test.json (time, S3 key, size, table count; no data, no secrets).
+# the download. Uses the newest object even if recent nights were skipped (no new upload), so a skip is not a failure.
+# Runs on the first backup, retries a failed test every 6 h, and re-tests weekly after a pass. Exits 0 if the bucket is
+# empty. Writes /var/lib/fieldforce-oss-backup/restore-test.json (time, S3 key, size, table count; no data, no secrets).
 . /etc/fieldforce-oss-options.env 2>/dev/null
 B=$BACKUP_S3_BUCKET; export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-south-1}
 [ -n "$B" ] && command -v aws >/dev/null && id postgres >/dev/null 2>&1 || exit 0
