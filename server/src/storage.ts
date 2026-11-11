@@ -6,10 +6,26 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 
 export interface PhotoStore { name: string; put(key: string, body: Buffer, mime: string): Promise<void>; get(key: string): Promise<Buffer>; }
 
-export const uploadDir = () => process.env.UPLOAD_DIR || path.resolve(process.cwd(), "uploads");
+const canWrite = (d: string) => { try { fs.accessSync(d, fs.constants.W_OK); return true; } catch { return false; } };
+/** Where local photos go. UPLOAD_DIR wins. Otherwise ./uploads, but only if the app may write there: on servers the
+ *  release folder is often read-only for the service user (and replaced on every deploy), which made every photo
+ *  upload fail. Then photos go to <home of the service user>/uploads, which is writable and survives deploys. */
+export function resolveUploadDir(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd(), home = os.homedir(), writable = canWrite) {
+  if (env.UPLOAD_DIR) return env.UPLOAD_DIR;
+  const local = path.resolve(cwd, "uploads");
+  if (fs.existsSync(local) ? writable(local) : writable(cwd)) return local;
+  return path.join(home, "uploads");
+}
+let warned = false;
+export const uploadDir = () => {
+  const d = resolveUploadDir();
+  if (!process.env.UPLOAD_DIR && !warned && d !== path.resolve(process.cwd(), "uploads")) { warned = true; console.warn(`photos: ./uploads is not writable, saving photos in ${d} (set UPLOAD_DIR to choose)`); }
+  return d;
+};
 const safe = (key: string) => { const k = path.normalize(key); if (k.startsWith("..") || path.isAbsolute(k)) throw new Error("bad photo key"); return k; };
 
 export const localStore = (): PhotoStore => ({

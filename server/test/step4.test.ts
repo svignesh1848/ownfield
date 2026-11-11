@@ -145,6 +145,9 @@ describe("visit photos", () => {
     const p = (await request(app).post(`/api/visits/${v.id}/photos`).set(as("rep")).field("caption", "Sample shelf").attach("photo", jpeg, "shelf.jpg").expect(201)).body;
     expect(p).toMatchObject({ mime: "image/jpeg", caption: "Sample shelf" });
     await request(app).post(`/api/visits/${v.id}/photos`).set(as("rep")).attach("photo", Buffer.from("not an image"), "x.jpg").expect(400);
+    // iPhone HEIC that the phone could not convert: a clear 400, never a 500
+    const heic = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypheic"), Buffer.alloc(16)]);
+    expect((await request(app).post(`/api/visits/${v.id}/photos`).set(as("rep")).attach("photo", heic, { filename: "IMG_0001.HEIC", contentType: "image/heic" }).expect(400)).body.error).toMatch(/JPEG, PNG or WebP/);
     await request(app).post(`/api/visits/${v.id}/photos`).set(as("rep2")).attach("photo", jpeg, "x.jpg").expect(404);
     const got = await request(app).get(`/api/photos/${p.id}`).set(as("mgr")).buffer(true).parse((res, cb) => { const c: Buffer[] = []; res.on("data", d => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); }).expect(200);
     expect(Buffer.compare(got.body, jpeg)).toBe(0);
