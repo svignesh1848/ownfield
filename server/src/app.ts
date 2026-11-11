@@ -38,6 +38,7 @@ import { registerApiV1 } from "./integrations/api.js";
 import { registerIntegrationRoutes, registerInbound } from "./integrations/admin.js";
 import "./connectors/service.js";
 import { diskStatus } from "./disk.js";
+import { backupStatus } from "./backup.js";
 import { registerCustomReportRoutes } from "./reports/routes.js";
 import { registerWorkspaceRoutes } from "./workspace/routes.js";
 import { registerHierarchyRoutes, teamIds, inTeam, resolveReportsTo, resolveTerritory } from "./hierarchy.js";
@@ -141,6 +142,9 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
   app.get("/api/system/disk", auth("platform_owner", "company_admin"), (_q, res) => {
     const d = diskStatus(); res.json(d ? { freePct: d.freePct, freeMB: Math.round(d.freeBytes / 1e6), alertPct: d.alertPct, low: d.low } : { low: false });
   });
+
+  // Backup status (last run, S3 upload, restore test). Platform owner only; no secrets or data in it.
+  app.get("/api/platform/backup-status", auth("platform_owner"), (_q, res) => { res.json(backupStatus()); });
 
   app.post("/api/auth/login", guard.ipLimiter, wrap(async (req, res) => {
     const { companyCode, email, password, totp, deviceId } = req.body || {};

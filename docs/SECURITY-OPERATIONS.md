@@ -5,6 +5,10 @@
 - **Encryption:** set `BACKUP_PASSPHRASE` (a long random string) in the server environment. Backups are then written as `db-YYYY-MM-DD.sql.gz.enc` (AES-256, openssl, PBKDF2 200k). Store the passphrase in a password manager **off the server**: without it backups cannot be restored.
 - **Off-server copy:** set `BACKUP_S3_BUCKET` and give the instance role `s3:PutObject` on that bucket (bucket: private, default encryption on, versioning + lifecycle e.g. 30 days). Without this, backups live on the same disk as the database.
 - Logs show `backup ok: <file>` or `backup: <error>` each night.
+- **Hosted server:** `deploy/options.env` sets `BACKUP_S3_BUCKET` and `AWS_DEFAULT_REGION`; `server-hook.sh` installs the official AWS CLI v2 (zip checked against the AWS CLI Team PGP key in `deploy/aws-cli-team.asc`) and passes `options.env` to the app through a systemd drop-in. Uploads use the EC2 instance role (no AWS keys on the server). After a deploy the app makes one backup ~2 minutes after start if nothing reached S3 that day.
+- **Status (no SSH):** platform owner → `GET /api/platform/backup-status`: last backup time, size, S3 upload ok/failed + key, and the latest restore test. No secrets or data in it.
+- **Automatic restore test:** a root timer (`fieldforce-oss-restore-test`, every 15 min check) restores the newest S3 backup into a scratch database `ownfield_restore_test` (never the app database), counts the tables, then drops it and deletes the download. It runs for the first backup, retries a failure every 6 h, and re-tests weekly after a pass. Force one: `sudo /usr/local/sbin/fieldforce-oss-restore-test --force`.
+- The AWS CLI signing key expires 2027-07-01; update `deploy/aws-cli-team.asc` from the AWS install docs before then (only matters for new servers).
 
 ### Restore (tested)
 ```sh
