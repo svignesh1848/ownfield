@@ -84,7 +84,7 @@ export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
   }));
   app.post("/api/me/totp/disable", auth(), wrap(async (req: any, res: any) => {
     const u = (await db.query("SELECT u.*, c.require_totp, c.require_totp_admins FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1", [req.user.uid])).rows[0];
-    if (u.require_totp || (u.require_totp_admins && u.role === "company_admin")) return res.status(403).json({ error: "Your company requires two-step sign-in" });
+    if (u.role === "platform_owner" || u.require_totp || (u.require_totp_admins && u.role === "company_admin")) return res.status(403).json({ error: u.role === "platform_owner" ? "Two-step sign-in is required for the platform owner" : "Your company requires two-step sign-in" });
     if (!totpVerify(openField(u.totp_secret)!, String(req.body?.code || ""))) return res.status(400).json({ error: "That code did not match" });
     await db.query("UPDATE users SET totp_enabled=FALSE, totp_secret=NULL WHERE id=$1", [u.id]);
     await log(req, "user.totp_disabled", u.email); res.json({ ok: true });

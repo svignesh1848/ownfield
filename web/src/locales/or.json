@@ -1442,5 +1442,8 @@
  "{0} can set their own password with this one-time link (valid {1} min):": "{0} ଏହି ଏକଥର ଲିଙ୍କ ଦ୍ୱାରା ନିଜ ପାସୱାର୍ଡ ନିଜେ ସେଟ କରିପାରିବେ ({1} ମିନିଟ ପାଇଁ ବୈଧ):",
  "No password needed. You get a one-time link to share, and they set their own password.": "ପାସୱାର୍ଡ ଦରକାର ନାହିଁ। ଆପଣ ସେୟାର କରିବା ପାଇଁ ଏକ ଏକଥର ଲିଙ୍କ ପାଇବେ, ଏବଂ ସେମାନେ ନିଜ ପାସୱାର୍ଡ ନିଜେ ସେଟ କରିବେ।",
  "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ଏହି ଆଉଟଲେଟ ଅନୁମୋଦନ ପାଇଁ ଅପେକ୍ଷା କରୁଛି, ତେଣୁ ଏବେ ଅର୍ଡର ନେଇପାରିବ ନାହିଁ। ଆମେ ଆପଣଙ୍କ ମ୍ୟାନେଜରଙ୍କୁ ଅନୁମୋଦନ ଦେବାକୁ ମନେ ପକାଇ ଦେଇଛୁ।",
- "This order goes to its distributor — the distributor accepts and delivers it": "ଏହି ଅର୍ଡର ଏହାର ବିତରକଙ୍କ ପାଖକୁ ଯାଏ — ବିତରକ ହିଁ ଏହାକୁ ଗ୍ରହଣ କରନ୍ତି ଏବଂ ଡେଲିଭରି କରନ୍ତି"
+ "This order goes to its distributor — the distributor accepts and delivers it": "ଏହି ଅର୍ଡର ଏହାର ବିତରକଙ୍କ ପାଖକୁ ଯାଏ — ବିତରକ ହିଁ ଏହାକୁ ଗ୍ରହଣ କରନ୍ତି ଏବଂ ଡେଲିଭରି କରନ୍ତି",
+  "Set up two-step sign-in to continue. This is required for the platform owner.": "Set up two-step sign-in to continue. This is required for the platform owner.",
+  "On. Two-step sign-in is required for the platform owner.": "On. Two-step sign-in is required for the platform owner.",
+  "Two-step sign-in is required for the platform owner": "Two-step sign-in is required for the platform owner"
 }

@@ -1,11 +1,12 @@
 version: 2
 updates:
+  # Root lockfile covers the server and web npm workspaces.
   - package-ecosystem: npm
     directory: "/"
     schedule: { interval: weekly, day: monday }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     ignore:
       - dependency-name: "xlsx" # installed from the SheetJS CDN tarball; update by hand
   - package-ecosystem: github-actions
     directory: "/"
-    schedule: { interval: weekly }
+    schedule: { interval: weekly, day: monday }

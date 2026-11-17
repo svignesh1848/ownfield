@@ -5,7 +5,7 @@ import { newDb } from "pg-mem";
 import { createApp, ensurePlatformOwner } from "../src/app.js";
 import { migrate } from "../src/db.js";
 import { totpCode } from "../src/accounts.js";
-import { sealField, openField } from "../src/fieldcrypt.js";
+import { sealField, openField, encryptConnectorSecrets } from "../src/fieldcrypt.js";
 
 process.env.DATA_ENCRYPTION_KEY = "test-only-key-not-secret";
 let app: any, db: any, owner: string, adm: string;
@@ -52,5 +52,27 @@ describe("two-step sign-in", () => {
     const acts = rows.map((r: any) => r.action);
     for (const a of ["platform.company_create", "login.success", "login.failed", "user.create", "company.security", "user.totp_enabled"]) expect(acts).toContain(a);
     await request(app).get("/api/platform/audit-log").set(H(adm)).expect(403);
+  });
+
+  it("encrypts connector passwords on write and migrates legacy plaintext", async () => {
+    await request(app).post("/api/integrations/connectors").set(H(adm)).send({ type: "custom-rest", name: "Secret box" }).expect(201);
+    const c = (await request(app).post("/api/integrations/connectors").set(H(adm)).send({ type: "custom-rest", name: "ERP" }).expect(201)).body;
+    await request(app).patch(`/api/integrations/connectors/${c.id}`).set(H(adm)).send({ config: { password: "plain-pass", apiKey: "plain-key" } }).expect(200);
+    const row = (await db.query("SELECT config FROM connectors WHERE id=$1", [c.id])).rows[0];
+    const stored = typeof row.config === "string" ? JSON.parse(row.config) : row.config;
+    expect(stored.password.startsWith("enc1:")).toBe(true);
+    expect(stored.apiKey.startsWith("enc1:")).toBe(true);
+    expect(stored.password).not.toContain("plain-pass");
+    const listed = (await request(app).get("/api/integrations/connectors").set(H(adm)).expect(200)).body.connectors.find((x: any) => x.id === c.id);
+    expect(listed.config.password).toBe("******");
+    // Legacy plaintext row is accepted and migrated.
+    await db.query("UPDATE connectors SET config=$1 WHERE id=$2", [JSON.stringify({ password: "legacy-secret", baseUrl: "https://example.com" }), c.id]);
+    const mig = await encryptConnectorSecrets(db);
+    expect(mig.updated).toBeGreaterThan(0);
+    const raw = (await db.query("SELECT config FROM connectors WHERE id=$1", [c.id])).rows[0].config;
+    const after = typeof raw === "string" ? JSON.parse(raw) : raw;
+    expect(after.password.startsWith("enc1:")).toBe(true);
+    expect(openField(after.password)).toBe("legacy-secret");
+    expect(after.baseUrl).toBe("https://example.com");
   });
 });
