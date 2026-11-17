@@ -28,4 +28,6 @@ systemctl daemon-reload && systemctl enable --now fieldforce-oss-bi-sync.timer >
 systemctl enable --now fieldforce-oss-restore-test.timer >/dev/null 2>&1 || echo "server-hook: restore-test timer failed"
 timeout 120 env APPU="$APPU" APPDB="$APPDB" /usr/local/sbin/fieldforce-oss-bi-sync || echo "server-hook: bi sync failed"
 timeout 300 bash "$D/domain-setup.sh" || echo "server-hook: domain setup failed"
+# Automatic Ubuntu security updates (security origin only; reboot 03:00 Asia/Kolkata).
+timeout 180 bash "$D/unattended-upgrades.sh" || echo "server-hook: unattended-upgrades step failed"
 exit 0

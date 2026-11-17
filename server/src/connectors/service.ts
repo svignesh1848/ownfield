@@ -10,10 +10,11 @@ import { parseFile } from "./plugins/file.js";
 import { upsertRows } from "../integrations/upserts.js";
 import { setConnectorDeliver } from "../integrations/webhooks.js";
 import type { Mapping, OutEntity, InEntity } from "./types.js";
+import { openConfig } from "../fieldcrypt.js";
 
 export const EVENT_ENTITY: Record<string, OutEntity> = { order: "orders", invoice: "invoices", collection: "collections", stock: "stock" };
 export type ConnRow = { id: number; company_id: number; name: string; type: string; enabled: boolean; mode: string; config: string; mapping: string; last_run_at: any; preset?: string | null; inbound_token?: string | null };
-export const conf = (c: ConnRow) => parseJson<Record<string, any>>(c.config, {});
+export const conf = (c: ConnRow) => openConfig(parseJson<Record<string, any>>(c.config, {}));
 export const maps = (c: ConnRow) => parseJson<Mapping>(c.mapping, {});
 
 async function records(db: Db, cid: number, entity: OutEntity, ids: number[] | null, since: string | null) {

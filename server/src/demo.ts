@@ -1,3 +1,4 @@
+process.env.OWNFIELD_DEMO = "1";
 // In-memory demo (no Postgres needed): `npm run demo -w server`. Uses SAMPLE data only.
 import { newDb } from "pg-mem";
 import fs from "node:fs";

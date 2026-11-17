@@ -1,4 +1,4 @@
-import { sealField } from "../fieldcrypt.js";
+import { sealField, sealConfig, connectorSecretKeys } from "../fieldcrypt.js";
 // Admin endpoints behind the Integrations screen (company_admin only), plus the public inbound webhook.
 import crypto from "node:crypto";
 import multer from "multer";
@@ -127,7 +127,7 @@ export function registerIntegrationRoutes({ app, db, auth, wrap, tenant }: Ctx) 
     if (Number((await db.query("SELECT COUNT(*) AS n FROM connectors WHERE company_id=$1", [cid])).rows[0].n) >= 20) throw bad("At most 20 connectors");
     const name = String(req.body?.name || pre?.label || type).slice(0, 60);
     const c = (await db.query("INSERT INTO connectors (company_id,name,type,preset,config,mapping,inbound_token) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [cid, name, type, pre?.id ?? null, JSON.stringify(pre?.config ?? {}), JSON.stringify(pre?.mapping ?? {}), crypto.randomBytes(18).toString("base64url")])).rows[0];
+      [cid, name, type, pre?.id ?? null, JSON.stringify(sealConfig(pre?.config ?? {})), JSON.stringify(pre?.mapping ?? {}), crypto.randomBytes(18).toString("base64url")])).rows[0];
     await log(req, cid, "connector.create", name, { type, preset: pre?.id });
     res.status(201).json(await publicConn(c));
   }));
@@ -151,7 +151,7 @@ export function registerIntegrationRoutes({ app, db, auth, wrap, tenant }: Ctx) 
     if (mode === "live" && c.preset === "logic-erp") throw bad("Logic ERP is parked: export files only, no live calls");
     const enabled = typeof b.enabled === "boolean" ? b.enabled : c.enabled;
     const name = b.name ? String(b.name).slice(0, 60) : c.name;
-    const u = (await db.query("UPDATE connectors SET name=$1, enabled=$2, mode=$3, config=$4, mapping=$5, updated_at=NOW() WHERE id=$6 RETURNING *", [name, enabled, mode, JSON.stringify(cfg), JSON.stringify(mapping), c.id])).rows[0];
+    const u = (await db.query("UPDATE connectors SET name=$1, enabled=$2, mode=$3, config=$4, mapping=$5, updated_at=NOW() WHERE id=$6 RETURNING *", [name, enabled, mode, JSON.stringify(sealConfig(cfg, connectorSecretKeys(p.configFields))), JSON.stringify(mapping), c.id])).rows[0];
     await log(req, cid, "connector.update", name, { enabled, mode, mappingChanged: !!b.mapping, configKeys: Object.keys(b.config || {}) });
     res.json(await publicConn(u));
   }));

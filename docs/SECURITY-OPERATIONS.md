@@ -20,7 +20,7 @@ Check counts in the restored DB, then point `DATABASE_URL` at it and restart. A 
 
 ## Encryption of stored data
 - **Disk:** the EC2 root/data EBS volume should be encrypted. Check: AWS console → EC2 → Volumes → "Encryption" column. If "Not encrypted": snapshot the volume → copy snapshot with encryption on → create volume from it → stop instance, swap volume, start (plan a short downtime). Also turn on "EBS encryption by default" for the region.
-- **App-level:** set `DATA_ENCRYPTION_KEY` (long random string, kept off the server too). New two-step (TOTP) secrets and webhook signing secrets are then stored AES-256-GCM encrypted (`enc1:` prefix). Old plain values keep working. Do not lose or change the key once set, or users with two-step sign-in must be reset by an admin.
+- **App-level:** set `DATA_ENCRYPTION_KEY` (long random string, kept off the server too). New two-step (TOTP) secrets, webhook signing secrets and connector passwords (API keys, tokens, client secrets) are then stored AES-256-GCM encrypted (`enc1:` prefix). Old plain values keep working and are encrypted the next time they are saved, or once at startup. Without the key the app keeps running and logs a warning (values stay as plain text). Do not lose or change the key once set, or users with two-step sign-in must be reset by an admin.
 - Passwords, reset codes and API keys are already stored only as hashes.
 
 ## Access record (audit log)
@@ -29,4 +29,7 @@ Check counts in the restored DB, then point `DATABASE_URL` at it and restart. A 
 - Platform owner: `GET /api/platform/audit-log[?companyId=]` across all companies.
 
 ## Two-step sign-in
-Users turn it on in their profile (authenticator app). Admins can require it for everyone, or only for admins ("Require two-step sign-in for admins"); both are off by default (demo company stays off).
+Users turn it on in their profile (authenticator app). Admins can require it for everyone, or only for admins ("Require two-step sign-in for admins"); both are off by default (demo company stays off). The platform owner must use two-step sign-in: they can still sign in and are sent to set it up, then cannot turn it off.
+
+## Hosted server updates
+On the hosted EC2 box, each deploy enables Ubuntu `unattended-upgrades` for the security origin only, with an automatic reboot at 03:00 Asia/Kolkata (21:30 UTC if the server clock is UTC).

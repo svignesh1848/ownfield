@@ -131,5 +131,8 @@
  "Wrong email or password": "ای میل یا پاس ورڈ غلط",
  "Yes": "آ",
  "You save": "تُہنٛز بچت",
- "cash=Cash;*=Bank": "cash=Cash;*=Bank"
+ "cash=Cash;*=Bank": "cash=Cash;*=Bank",
+  "Set up two-step sign-in to continue. This is required for the platform owner.": "Set up two-step sign-in to continue. This is required for the platform owner.",
+  "On. Two-step sign-in is required for the platform owner.": "On. Two-step sign-in is required for the platform owner.",
+  "Two-step sign-in is required for the platform owner": "Two-step sign-in is required for the platform owner"
 }

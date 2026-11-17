@@ -87,8 +87,9 @@ export function MyAccount({ s, onSignedOut }: { s: Session; onSignedOut: () => v
       <Field label={t("New password")} help={t("At least 8 characters, with a letter and a number.")}><input type="password" autoComplete="new-password" value={pw.password} onChange={e => setPw({ ...pw, password: e.target.value })} /></Field>
       <button>{t("Change password")}</button><p className="muted small">{t("Signs you out on all devices.")}</p></form>
     <div className="card"><h3>{t("Two-step sign-in")}</h3>
-      {me.totp_enabled ? <><p>{t("On. To turn off, enter a current code.")}</p><input inputMode="numeric" value={code} onChange={e => setCode(e.target.value)} />
-        <button className="ghost" onClick={() => run(async () => { await api(s, "/api/me/totp/disable", { method: "POST", body: JSON.stringify({ code }) }); setMe({ ...me, totp_enabled: false }); })}>{t("Turn off")}</button></>
+      {me.totp_enabled ? (s.user.role === "platform_owner" ? <p>{t("On. Two-step sign-in is required for the platform owner.")}</p>
+        : <><p>{t("On. To turn off, enter a current code.")}</p><input inputMode="numeric" value={code} onChange={e => setCode(e.target.value)} />
+        <button className="ghost" onClick={() => run(async () => { await api(s, "/api/me/totp/disable", { method: "POST", body: JSON.stringify({ code }) }); setMe({ ...me, totp_enabled: false }); })}>{t("Turn off")}</button></>)
         : setup ? <><p>{t("Scan with Google Authenticator, Microsoft Authenticator or similar, then enter the 6-digit code.")}</p><img src={setup.qr} alt={t("QR code")} width={180} height={180} /><p className="muted small">{t("Or type:")}{" "}<code>{setup.secret}</code></p>
           <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} /><button onClick={() => run(() => api(s, "/api/me/totp/enable", { method: "POST", body: JSON.stringify({ code }) }))}>{t("Turn on")}</button></>
         : <button onClick={() => run(async () => setSetup(await api(s, "/api/me/totp/setup", { method: "POST" })))}>{t("Set up")}</button>}</div></>;

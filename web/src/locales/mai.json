@@ -1442,5 +1442,8 @@
  "{0} can set their own password with this one-time link (valid {1} min):": "{0} एहि एक बेरक लिंक सँ अपन पासवर्ड स्वयं सेट क' सकैत छथि ({1} मिनट धरि मान्य):",
  "No password needed. You get a one-time link to share, and they set their own password.": "पासवर्डक आवश्यकता नहि। अहाँकेँ साझा करबाक लेल एक बेरक लिंक भेटत, आ ओ अपन पासवर्ड स्वयं सेट करताह।",
  "This outlet is waiting for approval, so it cannot take orders yet. We have reminded your manager to approve it.": "ई आउटलेट स्वीकृतिक प्रतीक्षामे अछि, तेँ एखन ऑर्डर नहि ल' सकैत अछि। हम अहाँक मैनेजरकेँ स्वीकृत करबाक लेल मोन पाड़ि देलियनि अछि।",
- "This order goes to its distributor — the distributor accepts and delivers it": "ई ऑर्डर अपन वितरक लग जाइत अछि — वितरके एकरा स्वीकार करैत छथि आ पहुँचबैत छथि"
+ "This order goes to its distributor — the distributor accepts and delivers it": "ई ऑर्डर अपन वितरक लग जाइत अछि — वितरके एकरा स्वीकार करैत छथि आ पहुँचबैत छथि",
+  "Set up two-step sign-in to continue. This is required for the platform owner.": "Set up two-step sign-in to continue. This is required for the platform owner.",
+  "On. Two-step sign-in is required for the platform owner.": "On. Two-step sign-in is required for the platform owner.",
+  "Two-step sign-in is required for the platform owner": "Two-step sign-in is required for the platform owner"
 }

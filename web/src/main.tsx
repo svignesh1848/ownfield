@@ -38,6 +38,7 @@ export const api = async (s: Session | null, url: string, opts: RequestInit = {}
   if (r.ok && m0 === "GET" && CACHE_GET.test(url)) { const c = r.clone(); c.text().then(t => { try { if (t.length < 500_000) localStorage.setItem("ff-c:" + url, t); } catch { /* storage full */ } }); }
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && s) { localStorage.removeItem("ff"); setTimeout(() => location.reload(), 1500); }
+  if (r.status === 403 && s && j.enrollTotp && !s.enrollTotp) { localStorage.setItem("ff", JSON.stringify({ ...s, enrollTotp: true })); location.reload(); return; }
   if (!r.ok) throw Object.assign(new Error(t(j.error || r.statusText)), { body: j });
   const m = (opts.method || "GET").toUpperCase();
   if (m !== "GET" && !/\/api\/(auth|orders\/preview|report-builder\/preview|data-workspace\/query)/.test(url)) toast(SAVED[m] || t("Saved"));
@@ -160,6 +161,13 @@ function Usage({ u }: { u: any }) {
     <div className="bar"><span style={{ width: `${Math.min(100, u.pct)}%` }} /></div></div>;
 }
 
+function PlatformHome({ s, onLogout }: { s: Session; onLogout: () => void }) {
+  if (s.enrollTotp) return <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header>
+    <section className="card"><p>{t("Set up two-step sign-in to continue. This is required for the platform owner.")}</p></section>
+    <MyAccount s={s} onSignedOut={onLogout} /></main>;
+  return <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header><Platform s={s} /></main>;
+}
+
 function Platform({ s }: { s: Session }) {
   const [list, setList] = useState<any[]>([]); const [msg, setMsg] = useState(""); const [tpl, setTpl] = useState<any[]>([]);
   const [f, setF] = useState({ code: "", name: "", userLimit: "10", email: "", adminName: "", password: "" }); const [industry, setIndustry] = useState("apparel");
@@ -256,8 +264,8 @@ function App() {
   useEffect(() => { const h = () => setHash(location.hash); addEventListener("hashchange", h); return () => removeEventListener("hashchange", h); }, []);
   if (!s && (hash === "#reset" || new URLSearchParams(location.search).has("reset"))) return <><ResetPassword onDone={() => { location.hash = ""; setHash(""); }} /><Toasts /></>;
   if (!s) return <>{hash === "#signup" ? <Signup onLogin={set} /> : <Login onLogin={set} />}<Toasts /></>;
-  return <>{s.user.role === "platform_owner" ? <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={() => set(null)}>{t("Sign out")}</button></header><Platform s={s} /></main>
-    : <Company s={s} onLogout={() => { set(null); location.hash = ""; }} />}<Toasts /></>;
+  if (s.user.role === "platform_owner") return <><PlatformHome s={s} onLogout={() => set(null)} /><Toasts /></>;
+  return <><Company s={s} onLogout={() => { set(null); location.hash = ""; }} /><Toasts /></>;
 }
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 createRoot(document.getElementById("root")!).render(<App />);

@@ -131,5 +131,8 @@
  "Wrong email or password": "इमेइल एबा पासवार्ड गोरोन्थि",
  "Yes": "अं",
  "You save": "नोंथांनि रैखाथि",
- "cash=Cash;*=Bank": "cash=Cash;*=Bank"
+ "cash=Cash;*=Bank": "cash=Cash;*=Bank",
+  "Set up two-step sign-in to continue. This is required for the platform owner.": "Set up two-step sign-in to continue. This is required for the platform owner.",
+  "On. Two-step sign-in is required for the platform owner.": "On. Two-step sign-in is required for the platform owner.",
+  "Two-step sign-in is required for the platform owner": "Two-step sign-in is required for the platform owner"
 }

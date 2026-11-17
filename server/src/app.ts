@@ -20,7 +20,8 @@ import { registerIncentiveRoutes } from "./incentives.js";
 import { getCompany } from "./catalog.js";
 import { INDUSTRIES, templateSettings } from "./templates.js";
 import { openField } from "./fieldcrypt.js";
-import { securityHeaders, tightCors, loginGuard, audit, errorHandler, HitCounter } from "./security.js";
+import { securityHeaders, tightCors, loginGuard, audit, errorHandler } from "./security.js";
+import rateLimit from "express-rate-limit";
 import { registerAccountRoutes, newDeviceCheck, totpVerify, issueResetCode } from "./accounts.js";
 import { registerVanRoutes } from "./van.js";
 import { registerFlowRoutes } from "./flow.js";
@@ -69,6 +70,15 @@ export function usageInfo(count: number, limit: number) {
 
 // No built-in fallback key: without JWT_SECRET a random key is used, so sign-ins simply reset on restart.
 const RANDOM_SECRET = randomBytes(32).toString("hex");
+
+/** Platform owner must set up two-step sign-in (they can sign in and are sent to setup). Tests opt in; the in-memory demo does not. */
+export function platformOwnerMustEnroll(u: { role?: string; totp_enabled?: boolean }) {
+  if (u.role !== "platform_owner" || u.totp_enabled) return false;
+  if (process.env.OWNFIELD_DEMO === "1") return false;
+  if (process.env.NODE_ENV === "test" && process.env.TEST_REQUIRE_OWNER_TOTP !== "1") return false;
+  return true;
+}
+
 export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECRET) {
   if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") console.warn("JWT_SECRET is not set: using a random key (users are signed out on every restart).");
   const app = express();
@@ -88,14 +98,15 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
     const h = req.headers.authorization || "";
     let c: Claims;
     try { c = jwt.verify(h.replace(/^Bearer /, ""), secret) as Claims; } catch { return res.status(401).json({ error: "unauthorized" }); }
-    db.query("SELECT u.active, u.token_version, c.idle_minutes FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1", [c.uid]).then(r => {
+    db.query("SELECT u.active, u.token_version, u.role, u.totp_enabled, c.idle_minutes FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1", [c.uid]).then(r => {
       const u = r.rows[0];
       if (!u || !u.active || Number(u.token_version || 0) !== Number(c.tv || 0)) return res.status(401).json({ error: "Your session has ended. Please sign in again." });
       const key = `${c.uid}:${c.tv || 0}:${(c as any).iat}`, now = Date.now(), last = lastSeen.get(key);
       const idle = u.idle_minutes ? Number(u.idle_minutes) * 60_000 : idleMs();
       if (last && now - last > idle) { lastSeen.delete(key); return res.status(401).json({ error: "Signed out after inactivity. Please sign in again." }); }
       lastSeen.set(key, now); if (lastSeen.size > 5000) for (const [k, t] of lastSeen) if (now - t > idle) lastSeen.delete(k);
-      if (c.enroll && !/^\/api\/me\/(totp|password)|^\/api\/me$/.test(req.path)) return res.status(403).json({ error: "Set up two-step sign-in first", enrollTotp: true });
+      const enroll = !!(c.enroll || platformOwnerMustEnroll(u));
+      if (enroll && !/^\/api\/me\/(totp|password)|^\/api\/me$/.test(req.path)) return res.status(403).json({ error: "Set up two-step sign-in first", enrollTotp: true });
       if (roles.length && !roles.includes(c.role)) return res.status(403).json({ error: "forbidden" });
       (req as AuthReq).user = c; next();
     }).catch(next);
@@ -144,9 +155,9 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
   });
 
   // Backup status (last run, S3 upload, restore test). Platform owner only; no secrets or data in it.
-  const bkHits = new HitCounter(30, 60_000);
-  app.get("/api/platform/backup-status", (req, res, next) => bkHits.hit(req.ip || "?") > bkHits.max ? res.status(429).json({ error: "Too many requests. Please wait a minute." }) : next(),
-    auth("platform_owner"), (_q, res) => { res.json(backupStatus()); });
+  // express-rate-limit on the route so CodeQL recognises the 30/minute cap.
+  const backupStatusLimit = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests. Please wait a minute." } });
+  app.get("/api/platform/backup-status", backupStatusLimit, auth("platform_owner"), (_q, res) => { res.json(backupStatus()); });
 
   app.post("/api/auth/login", guard.ipLimiter, wrap(async (req, res) => {
     const { companyCode, email, password, totp, deviceId } = req.body || {};
@@ -181,7 +192,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
     const ua = String(req.headers["user-agent"] || "").slice(0, 200);
     await newDeviceCheck(db, u, ip, ua);
     await audit(db, { companyId: u.company_id, userId: u.id, action: "login.success", target: mail, detail: { ua }, ip });
-    const enroll = (!!u.require_totp || (!!u.require_totp_admins && u.role === "company_admin")) && !u.totp_enabled;
+    const enroll = (!u.totp_enabled && (platformOwnerMustEnroll(u) || !!u.require_totp || (!!u.require_totp_admins && u.role === "company_admin")));
     const token = sign(u, enroll ? { enroll: true } : {});
     res.json({ token, idleMinutes: Number(u.idle_minutes || process.env.IDLE_LOGOUT_MIN || 60), user: { id: u.id, name: u.name, email: u.email, role: u.role, companyCode: u.code }, ...(enroll ? { enrollTotp: true } : {}) });
   }));

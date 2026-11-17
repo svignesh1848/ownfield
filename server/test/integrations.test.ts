@@ -6,6 +6,7 @@ import { migrate } from "../src/db.js";
 import { txDb } from "./txdb.js";
 import { drain, sign, backoffMs } from "../src/integrations/webhooks.js";
 import { applyMapping, formatDate } from "../src/connectors/mapping.js";
+import { openField } from "../src/fieldcrypt.js";
 import { tallyXml } from "../src/connectors/plugins/tally-xml.js";
 import { plugins } from "../src/connectors/registry.js";
 
@@ -151,7 +152,9 @@ describe("connectors", () => {
     await request(app).patch(`/api/integrations/connectors/${c.id}`).set(as("adm")).send({ config: { apiKey: "sample-secret" } }).expect(200);
     const again = (await request(app).patch(`/api/integrations/connectors/${c.id}`).set(as("adm")).send({ config: { apiKey: "******" }, enabled: true }).expect(200)).body;
     expect(again.config.apiKey).toBe("******");
-    expect(JSON.parse((await db.query("SELECT config FROM connectors WHERE id=$1", [c.id])).rows[0].config).apiKey).toBe("sample-secret");
+    const storedCfg = (await db.query("SELECT config FROM connectors WHERE id=$1", [c.id])).rows[0].config;
+    const parsed = typeof storedCfg === "string" ? JSON.parse(storedCfg) : storedCfg;
+    expect(openField(parsed.apiKey)).toBe("sample-secret");
     await request(app).patch(`/api/integrations/connectors/${c.id}`).set(as("adm")).send({ mapping: { orders: [{ transform: "x" }] } }).expect(400);
   });
   it("Logic ERP stays parked; file connector exports and imports with a mapping", async () => {
