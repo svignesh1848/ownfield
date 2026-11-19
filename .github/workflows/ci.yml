@@ -20,3 +20,74 @@ jobs:
         run: npm audit --audit-level=critical || true
       - run: npm run build
       - run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownfield
+          POSTGRES_PASSWORD: ownfield
+          POSTGRES_DB: ownfield_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://ownfield:ownfield@localhost:5432/ownfield_e2e
+      E2E_BASE_URL: http://127.0.0.1:8080
+      OWNER_EMAIL: owner@example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --no-fund
+      - run: npm run build
+      - name: Install Playwright Chromium
+        working-directory: e2e
+        run: |
+          set -euo pipefail
+          # apt mirrors on ubuntu-latest sometimes flake; retry a few times
+          for i in 1 2 3; do
+            if npx playwright install chromium --with-deps; then
+              exit 0
+            fi
+            echo "Playwright install failed (attempt $i), retrying in 20s..."
+            sleep 20
+          done
+          exit 1
+      - name: Start app and run Playwright
+        run: |
+          set -euo pipefail
+          umask 077
+          export OWNER_PASSWORD="$(python3 -c 'import secrets;print(secrets.token_urlsafe(18))')"
+          export E2E_PASSWORD="$(python3 -c 'import secrets;print(secrets.token_urlsafe(18))')"
+          export JWT_SECRET="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
+          bash e2e/run-server.sh > /tmp/ownfield-e2e-server.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8080/api/health >/dev/null; then
+              echo "server is up"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "server failed to start" >&2
+              cat /tmp/ownfield-e2e-server.log >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+          npm run test:e2e
+      - name: Upload screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: |
+            e2e/screenshots
+            e2e/playwright-report
+            e2e/test-results
+          if-no-files-found: ignore

@@ -140,5 +140,6 @@
   "The app had a burst of errors": "The app had a burst of errors",
   "A database backup failed": "A database backup failed",
   "A backup restore test failed": "A backup restore test failed",
-  "Photo backup to storage failed": "Photo backup to storage failed"
+  "Photo backup to storage failed": "Photo backup to storage failed",
+  "Download order file": "Download order file"
 }

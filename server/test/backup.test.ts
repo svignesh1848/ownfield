@@ -162,8 +162,12 @@ describe("unchanged-backup skip", () => {
 
   it("does not skip when S3 is configured but the last saved copy never uploaded", async () => {
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "bkskips3"));
-    const prevDir = process.env.BACKUP_DIR, prevBucket = process.env.BACKUP_S3_BUCKET;
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "awsstub"));
+    fs.writeFileSync(path.join(bin, "aws"), "#!/bin/sh\necho stub-aws-fail >&2\nexit 1\n");
+    fs.chmodSync(path.join(bin, "aws"), 0o755);
+    const prevDir = process.env.BACKUP_DIR, prevBucket = process.env.BACKUP_S3_BUCKET, prevPath = process.env.PATH;
     process.env.BACKUP_DIR = work;
+    process.env.PATH = `${bin}${path.delimiter}${prevPath || ""}`;
     delete process.env.BACKUP_S3_BUCKET; delete process.env.BACKUP_PASSPHRASE;
     try {
       const tmp1 = path.join(work, ".tmp-1.sql.gz");
@@ -184,8 +188,10 @@ describe("unchanged-backup skip", () => {
       expect(status2.s3.ok).toBe(false);
     } finally {
       process.env.BACKUP_DIR = prevDir;
+      process.env.PATH = prevPath;
       if (prevBucket === undefined) delete process.env.BACKUP_S3_BUCKET; else process.env.BACKUP_S3_BUCKET = prevBucket;
       fs.rmSync(work, { recursive: true, force: true });
+      fs.rmSync(bin, { recursive: true, force: true });
     }
   });
 });
@@ -208,11 +214,17 @@ describe("photo folder sync", () => {
     fs.rmSync(photos, { recursive: true, force: true });
   });
   it("exposes photo sync in backup status without a content stamp", () => {
+    const prevDir = process.env.BACKUP_DIR, prevBucket = process.env.BACKUP_S3_BUCKET;
+    process.env.BACKUP_DIR = dir;
     process.env.BACKUP_S3_BUCKET = "test-bucket";
-    fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify({ lastResult: "ok", photoSync: { ok: true, skipped: true, files: 3, at: "2026-11-19T02:31:00.000Z", stamp: "do-not-leak-photo-stamp" } }));
-    const r = backupStatus();
-    expect(r.photoSync).toEqual({ ok: true, skipped: true, files: 3, at: "2026-11-19T02:31:00.000Z", error: null });
-    expect(JSON.stringify(r)).not.toContain("do-not-leak-photo-stamp");
-    delete process.env.BACKUP_S3_BUCKET;
+    try {
+      fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify({ lastResult: "ok", photoSync: { ok: true, skipped: true, files: 3, at: "2026-11-19T02:31:00.000Z", stamp: "do-not-leak-photo-stamp" } }));
+      const r = backupStatus();
+      expect(r.photoSync).toEqual({ ok: true, skipped: true, files: 3, at: "2026-11-19T02:31:00.000Z", error: null });
+      expect(JSON.stringify(r)).not.toContain("do-not-leak-photo-stamp");
+    } finally {
+      if (prevDir === undefined) delete process.env.BACKUP_DIR; else process.env.BACKUP_DIR = prevDir;
+      if (prevBucket === undefined) delete process.env.BACKUP_S3_BUCKET; else process.env.BACKUP_S3_BUCKET = prevBucket;
+    }
   });
 });
