@@ -176,16 +176,15 @@ export async function shot(page: Page, name: string) {
 export async function uiLogin(page: Page, companyCode: string, email: string, password: string, totp?: string) {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "OwnField" })).toBeVisible();
-  await page.getByLabel("Company code").fill(companyCode);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  if (totp) {
-    const totpField = page.getByLabel(/6-digit code/);
-    if (await totpField.isVisible().catch(() => false)) await totpField.fill(totp);
-  }
+  await page.getByRole("textbox", { name: /^Company code/ }).fill(companyCode);
+  await page.getByRole("textbox", { name: /^Email/ }).fill(email);
+  // The password field's accessible name is "Password Show password" because the show/hide button sits inside the same label.
+  await page.locator("form.login input[autocomplete='current-password']").fill(password);
+  const totpBox = page.getByRole("textbox", { name: /6-digit code/ });
+  if (totp && await totpBox.isVisible().catch(() => false)) await totpBox.fill(totp);
   await page.getByRole("button", { name: "Sign in" }).click();
-  if (totp && await page.getByLabel(/6-digit code/).isVisible().catch(() => false)) {
-    await page.getByLabel(/6-digit code/).fill(totp);
+  if (totp && await totpBox.isVisible().catch(() => false)) {
+    await totpBox.fill(totp);
     await page.getByRole("button", { name: "Sign in" }).click();
   }
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({ timeout: 20_000 });
