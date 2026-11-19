@@ -71,9 +71,9 @@ test("admin enables stock and approval, then uploads users, outlets, SKUs and st
   expect(stock.inserted + stock.updated).toBe(2);
 
   await go(page, "users", "Users");
-  await expect(page.getByText("Sample E2E Manager")).toBeVisible();
-  await expect(page.getByText("Sample E2E Rep")).toBeVisible();
-  await expect(page.getByText("Sample E2E Distributor")).toBeVisible();
+  await expect(page.getByText("Sample E2E Manager").first()).toBeVisible();
+  await expect(page.getByText("Sample E2E Rep").first()).toBeVisible();
+  await expect(page.getByText("Sample E2E Distributor").first()).toBeVisible();
   await shot(page, "03-admin-users");
 
   await go(page, "shops", /Outlets|Shops/);
