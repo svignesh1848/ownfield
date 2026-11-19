@@ -181,13 +181,16 @@ export async function uiLogin(page: Page, companyCode: string, email: string, pa
   // The password field's accessible name is "Password Show password" because the show/hide button sits inside the same label.
   await page.locator("form.login input[autocomplete='current-password']").fill(password);
   const totpBox = page.getByRole("textbox", { name: /6-digit code/ });
+  const signOut = page.getByRole("button", { name: "Sign out" });
   if (totp && await totpBox.isVisible().catch(() => false)) await totpBox.fill(totp);
   await page.getByRole("button", { name: "Sign in" }).click();
-  if (totp && await totpBox.isVisible().catch(() => false)) {
+  if (totp) {
+    try { await expect(signOut).toBeVisible({ timeout: 5_000 }); return; } catch { /* totp field may appear next */ }
+    await expect(totpBox).toBeVisible({ timeout: 15_000 });
     await totpBox.fill(totp);
     await page.getByRole("button", { name: "Sign in" }).click();
   }
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({ timeout: 20_000 });
+  await expect(signOut).toBeVisible({ timeout: 20_000 });
 }
 
 export async function uiLogout(page: Page) {

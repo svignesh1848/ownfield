@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   CO, E2E_PASSWORD, OWNER_EMAIL, OWNER_PASSWORD, PLATFORM_CODE, ctx,
-  api, consoleBugs, go, importXlsx, loginApi, q, requireSecrets,
+  api, consoleBugs, enrollOwnerTotp, go, importXlsx, loginApi, q, requireSecrets,
   sampleProducts, sampleShops, sampleStock, sampleUsers, shot, tinyPng, totpCode,
   trackConsole, uiLogin, uiLogout,
 } from "./helpers.js";
@@ -17,20 +17,17 @@ test.beforeAll(async () => {
 });
 
 test("platform owner sets up two-step sign-in and creates a company", async ({ page }) => {
-  await uiLogin(page, PLATFORM_CODE, OWNER_EMAIL, OWNER_PASSWORD);
-  await expect(page.getByText(/Set up two-step sign-in to continue/)).toBeVisible();
-  await shot(page, "01-platform-totp-required");
-  await page.getByRole("button", { name: "Set up" }).click();
-  const secret = (await page.locator("code").first().textContent())?.trim();
-  expect(secret, "TOTP secret is shown").toBeTruthy();
-  await page.getByRole("textbox").or(page.locator("input[inputmode='numeric']")).last().fill(totpCode(secret!));
-  await page.getByRole("button", { name: "Turn on" }).click();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible({ timeout: 15_000 });
-  const code = totpCode(secret!);
+  const first = await api(null, "/api/auth/login", { method: "POST", body: JSON.stringify({ companyCode: PLATFORM_CODE, email: OWNER_EMAIL, password: OWNER_PASSWORD }) });
+  expect(first.status, `platform login: ${typeof first.body === "string" ? first.body : first.body?.error || first.raw}`).toBe(200);
+  expect(first.body?.token, "platform login should return a token so two-step can be set up").toBeTruthy();
+  const secret = await enrollOwnerTotp(first.body.token);
+  const code = totpCode(secret);
   const session = await loginApi(PLATFORM_CODE, OWNER_EMAIL, OWNER_PASSWORD, code);
   ctx.owner = session.token;
+
   await uiLogin(page, PLATFORM_CODE, OWNER_EMAIL, OWNER_PASSWORD, code);
   await expect(page.getByRole("heading", { name: "New company" })).toBeVisible({ timeout: 15_000 });
+  await shot(page, "01-platform-home");
   await page.getByText("Apparel / Kidswear").click();
   await page.getByPlaceholder("code").fill(CO.code);
   await page.getByPlaceholder("name").fill(CO.name);
