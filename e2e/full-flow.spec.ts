@@ -219,10 +219,10 @@ test("manager approves the new outlet and the order; dashboard totals match", as
   await expect.poll(async () => (await q("SELECT approval_status FROM shops WHERE id=$1", [ctx.newShopId]))[0].approval_status, { timeout: 15_000 }).toBe("approved");
 
   await go(page, "orders", "Orders");
-  await expect(page.getByText(/Waiting for approval/)).toBeVisible();
+  await expect(page.locator("span.pill.pending_approval")).toBeVisible();
   await shot(page, "13-manager-order-approval");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText(/^New$|placed/i).or(page.getByText("New"))).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("span.pill.placed")).toBeVisible({ timeout: 15_000 });
   const o = await q("SELECT status, approval_level FROM orders WHERE id=$1", [ctx.orderId]);
   expect(o[0].status).toBe("placed");
 
@@ -243,7 +243,7 @@ test("distributor accepts, delivers and downloads the order file", async ({ page
   await expect(page.getByText(CO.shopName)).toBeVisible();
   await shot(page, "15-distributor-inbox");
   await page.getByRole("button", { name: "Accept", exact: true }).click();
-  await expect(page.getByText("Accepted")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("span.pill.accepted")).toBeVisible({ timeout: 15_000 });
   expect((await q("SELECT status FROM orders WHERE id=$1", [ctx.orderId]))[0].status).toBe("accepted");
 
   const [download] = await Promise.all([
@@ -259,9 +259,9 @@ test("distributor accepts, delivers and downloads the order file", async ({ page
   await shot(page, "16-distributor-download");
 
   await page.getByRole("button", { name: "Out for delivery" }).click();
-  await expect(page.getByText("Dispatched")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("span.pill.dispatched")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Mark delivered" }).click();
-  await expect(page.getByText("Delivered")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("span.pill.fulfilled")).toBeVisible({ timeout: 15_000 });
   await shot(page, "17-distributor-delivered");
   expect((await q("SELECT status FROM orders WHERE id=$1", [ctx.orderId]))[0].status).toBe("fulfilled");
   const leftover = await q("SELECT qty FROM stock s JOIN variants v ON v.id=s.variant_id WHERE s.company_id=$1 AND v.sku=$2", [ctx.companyId, CO.sku]);
