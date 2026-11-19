@@ -285,15 +285,15 @@ const QtyEdit = ({ o, title, onSave, onClose }: { o: any; title: string; onSave:
     <input type="number" min={0} inputMode="numeric" value={q[l.id]} onChange={e => setQ({ ...q, [l.id]: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} /></label>)}
     <button className="sm" onClick={() => onSave(q)}>{title}</button> <button className="sm ghost" onClick={onClose}>{t("Close")}</button></div>;
 };
-export function Bell({ s, go }: { s: Session; go: (t: string) => void }) {
+export function Bell({ s, go, source = "/api/notifications" }: { s: Session; go?: (t: string) => void; source?: string }) {
   const [rows, setRows] = useState<any[]>([]); const [open, setOpen] = useState(false);
-  const load = () => api(s, "/api/notifications").then(setRows).catch(() => {});
+  const load = () => api(s, source).then(setRows).catch(() => {});
   useEffect(() => { load(); const h = setInterval(load, 60000); return () => clearInterval(h); }, []);
   const unread = rows.filter(r => !r.read_at).length;
-  const toggle = () => { setOpen(!open); if (!open && unread) api(s, "/api/notifications/read", { method: "POST", body: "{}" }).then(load).catch(() => {}); };
+  const toggle = () => { setOpen(!open); if (!open && unread) api(s, `${source}/read`, { method: "POST", body: "{}" }).then(load).catch(() => {}); };
   return <span className="bell"><button className="sm ghost" aria-label={t("Updates")} onClick={toggle}>🔔{unread > 0 && <b className="badge">{unread}</b>}</button>
     {open && <div className="bell-list">{!rows.length ? <p className="muted small">{t("No updates yet")}</p> : rows.map(r => <div key={r.id} className={`row small ${r.read_at ? "" : "unread"}`}
-      onClick={() => { setOpen(false); if (r.link) go(r.link.split("#")[0]); }}>{t(r.template, ...r.args.map((a: any) => typeof a === "string" ? (STATUS[a] || a) : a))}{r.note ? ` — ${r.note}` : ""}<div className="muted">{fmtDate(r.created_at, true)}</div></div>)}</div>}</span>;
+      onClick={() => { setOpen(false); if (r.link && go) go(r.link.split("#")[0]); }}>{t(r.template, ...r.args.map((a: any) => typeof a === "string" ? (STATUS[a] || a) : a))}{r.note ? ` — ${r.note}` : ""}<div className="muted">{fmtDate(r.created_at, true)}</div></div>)}</div>}</span>;
 }
 const OrderCard = ({ o, children }: { o: any; children?: any }) => <div className="row"><b>#{o.id} {o.shop_name}</b> <span className={`pill ${o.status}`}>{STATUS[o.status] || o.status}</span>{o.partial && <span className="pill">{t("Part delivered")}</span>}{o.placed_by_role === "retailer" && <span className="pill">{t("🏪 From the shop")}</span>}
   {o.status_reason && ["rejected", "cancelled"].includes(o.status) && <div className="muted small">{t("Reason: {0}", o.status_reason)}</div>}

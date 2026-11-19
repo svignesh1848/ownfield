@@ -69,6 +69,9 @@ export async function audit(db: Db, e: { companyId?: number | null; userId?: num
   } catch (err: any) { console.error("audit log write failed:", err.message); }
 }
 
+/** Set by startAlerts to count 5xx spikes. */
+export const onServerError: { record: null | (() => void) } = { record: null };
+
 /** Final error handler: users see a generic message; details stay in server logs. Deliberate 4xx messages pass through. */
 export function errorHandler(err: any, req: Request, res: Response, _n: NextFunction) {
   const dup = err.code === "23505" || /duplicate key|unique constraint/i.test(err.message || "");
@@ -79,5 +82,6 @@ export function errorHandler(err: any, req: Request, res: Response, _n: NextFunc
   const status = Number(err.status || err.statusCode) || 500;
   if (status < 500 && err.expose !== false && err.status) return res.status(status).json({ error: err.type === "entity.parse.failed" ? "Invalid request" : err.message });
   console.error(`[error] ${req.method} ${req.originalUrl}:`, err.stack || err);
+  if (status >= 500) try { onServerError.record?.(); } catch { /* never break the response */ }
   res.status(status >= 500 && status < 600 ? status : 500).json({ error: "Something went wrong. Please try again." });
 }
