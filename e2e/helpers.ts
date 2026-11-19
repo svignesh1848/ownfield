@@ -191,19 +191,39 @@ export async function uiLogin(page: Page, companyCode: string, email: string, pa
     await totpBox.fill(totp);
     await page.getByRole("button", { name: "Sign in" }).click();
   }
-  await expect(signOut).toBeVisible({ timeout: 20_000 });
+  // Platform shows Sign out in the header; company users on a phone keep it under More.
+  await expect(signOut.or(page.getByRole("button", { name: "More" })).or(page.getByRole("navigation"))).toBeVisible({ timeout: 20_000 });
 }
 
 export async function uiLogout(page: Page) {
   const btn = page.getByRole("button", { name: "Sign out" });
-  if (await btn.isVisible().catch(() => false)) {
-    await btn.click();
+  if (!(await btn.isVisible().catch(() => false))) {
+    const more = page.getByRole("navigation").getByRole("button", { name: "More" }).or(page.getByRole("button", { name: "More" }));
+    if (await more.first().isVisible().catch(() => false)) await more.first().click();
+  }
+  const signOut = page.getByRole("button", { name: "Sign out" });
+  if (await signOut.isVisible().catch(() => false)) {
+    await signOut.click();
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   }
 }
 
+const TAB_NAME: Record<string, string> = {
+  home: "Home", beat: "Today's beat", order: "New order", orders: "Orders", inbox: "New orders",
+  dashboard: "Team activity", beats: "Beat plans", shops: "Outlets", users: "Users",
+  addoutlet: "Add outlet", outletapprovals: "New outlets", catalog: "Products", import: "Upload data",
+};
+
 export async function go(page: Page, tab: string, heading?: string | RegExp) {
-  await page.evaluate((t) => { location.hash = t; }, tab);
+  const name = TAB_NAME[tab] || tab;
+  const navBtn = page.getByRole("navigation").getByRole("button", { name, exact: true });
+  if (await navBtn.isVisible().catch(() => false)) {
+    await navBtn.click();
+  } else {
+    // Company shell keeps the current tab in React state; on a phone the rest of the menu is under More.
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name, exact: true }).click();
+  }
   if (heading) await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 15_000 });
 }
 
