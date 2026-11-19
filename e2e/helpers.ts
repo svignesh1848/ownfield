@@ -191,8 +191,12 @@ export async function uiLogin(page: Page, companyCode: string, email: string, pa
     await totpBox.fill(totp);
     await page.getByRole("button", { name: "Sign in" }).click();
   }
-  // Platform shows Sign out in the header; company users on a phone keep it under More.
-  await expect(signOut.or(page.locator("nav.bottom"))).first().toBeVisible({ timeout: 20_000 });
+  await expectSignedIn(page);
+}
+
+/** Platform shows Sign out in the header; company users on a phone keep it under More. */
+export async function expectSignedIn(page: Page) {
+  await expect(page.getByRole("button", { name: "Sign out" }).or(page.locator("nav.bottom")).first()).toBeVisible({ timeout: 20_000 });
 }
 
 export async function uiLogout(page: Page) {

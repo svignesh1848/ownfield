@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   CO, E2E_PASSWORD, OWNER_EMAIL, OWNER_PASSWORD, PLATFORM_CODE, ctx,
-  api, consoleBugs, enrollOwnerTotp, go, importXlsx, loginApi, q, requireSecrets,
+  api, consoleBugs, enrollOwnerTotp, expectSignedIn, go, importXlsx, loginApi, q, requireSecrets,
   sampleProducts, sampleShops, sampleStock, sampleUsers, shot, tinyPng, totpCode,
   trackConsole, uiLogin, uiLogout,
 } from "./helpers.js";
@@ -273,7 +273,7 @@ test("distributor accepts, delivers and downloads the order file", async ({ page
 test("admin, manager and rep can still open the app after the full day", async ({ page }) => {
   for (const [role, email] of [["admin", CO.admin], ["manager", CO.manager], ["rep", CO.rep]] as const) {
     await uiLogin(page, CO.code, email, E2E_PASSWORD);
-    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expectSignedIn(page);
     await shot(page, `18-${role}-still-works`);
     expect(consoleBugs(page)).toEqual([]);
     await uiLogout(page);
