@@ -23,6 +23,6 @@ export default defineConfig({
     permissions: ["geolocation"],
   },
   projects: [
-    { name: "iphone-13", use: { ...devices["iPhone 13"] } },
+    { name: "iphone-13", use: { ...devices["iPhone 13"], browserName: "chromium" } },
   ],
 });
