@@ -29,12 +29,12 @@ test("platform owner sets up two-step sign-in and creates a company", async ({ p
   await expect(page.getByRole("heading", { name: "New company" })).toBeVisible({ timeout: 15_000 });
   await shot(page, "01-platform-home");
   await page.getByText("Apparel / Kidswear").click();
-  await page.getByPlaceholder("code").fill(CO.code);
-  await page.getByPlaceholder("name").fill(CO.name);
-  await page.getByPlaceholder("userLimit").fill("12");
-  await page.getByPlaceholder("email").fill(CO.admin);
-  await page.getByPlaceholder("adminName").fill("Sample E2E Admin");
-  await page.getByPlaceholder("password").fill(E2E_PASSWORD);
+  await page.getByPlaceholder("code", { exact: true }).fill(CO.code);
+  await page.getByPlaceholder("name", { exact: true }).fill(CO.name);
+  await page.getByPlaceholder("userLimit", { exact: true }).fill("12");
+  await page.getByPlaceholder("email", { exact: true }).fill(CO.admin);
+  await page.getByPlaceholder("adminName", { exact: true }).fill("Sample E2E Admin");
+  await page.getByPlaceholder("password", { exact: true }).fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("Created")).toBeVisible();
   await expect(page.getByText(CO.code)).toBeVisible();
