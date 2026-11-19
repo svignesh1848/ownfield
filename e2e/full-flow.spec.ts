@@ -215,13 +215,13 @@ test("manager approves the new outlet and the order; dashboard totals match", as
   await go(page, "outletapprovals", /New outlets|Waiting/);
   await expect(page.getByText(CO.newOutlet)).toBeVisible();
   await shot(page, "12-manager-outlet-approval");
-  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect.poll(async () => (await q("SELECT approval_status FROM shops WHERE id=$1", [ctx.newShopId]))[0].approval_status, { timeout: 15_000 }).toBe("approved");
 
   await go(page, "orders", "Orders");
   await expect(page.getByText(/Waiting for approval/)).toBeVisible();
   await shot(page, "13-manager-order-approval");
-  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByText(/^New$|placed/i).or(page.getByText("New"))).toBeVisible({ timeout: 15_000 });
   const o = await q("SELECT status, approval_level FROM orders WHERE id=$1", [ctx.orderId]);
   expect(o[0].status).toBe("placed");
@@ -242,7 +242,7 @@ test("distributor accepts, delivers and downloads the order file", async ({ page
   await go(page, "inbox", "Order inbox");
   await expect(page.getByText(CO.shopName)).toBeVisible();
   await shot(page, "15-distributor-inbox");
-  await page.getByRole("button", { name: "Accept" }).click();
+  await page.getByRole("button", { name: "Accept", exact: true }).click();
   await expect(page.getByText("Accepted")).toBeVisible({ timeout: 15_000 });
   expect((await q("SELECT status FROM orders WHERE id=$1", [ctx.orderId]))[0].status).toBe("accepted");
 
