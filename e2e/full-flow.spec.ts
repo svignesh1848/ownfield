@@ -149,7 +149,7 @@ test("rep logs in, adds an outlet, checks in, uploads a photo and places a stock
   await expect(page.getByText(/13\.08/)).toBeVisible({ timeout: 10_000 });
   await page.locator("form.card input[type='file']").setInputFiles({ name: "sample-photo.png", mimeType: "image/png", buffer: tinyPng });
   await page.getByRole("button", { name: "Send for approval" }).click();
-  await expect(page.getByText(/Sent for approval|Waiting/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Sent for approval/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(CO.newOutlet)).toBeVisible();
   await shot(page, "07-rep-add-outlet");
   const pending = await q("SELECT id, approval_status, company_id, added_by FROM shops WHERE company_id=$1 AND name=$2", [ctx.companyId, CO.newOutlet]);
