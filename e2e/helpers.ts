@@ -156,7 +156,8 @@ export function trackConsole(page: Page) {
   page.on("console", (m: ConsoleMessage) => {
     if (m.type() !== "error") return;
     const t = m.text();
-    if (/favicon|Download the React DevTools|net::ERR_ABORTED/i.test(t)) return;
+    // Chromium logs failed HTTP responses as console errors (e.g. a 401 on a background request).
+    if (/favicon|Download the React DevTools|net::ERR_ABORTED|Failed to load resource: the server responded with a status of [45]/i.test(t)) return;
     errs.push(t);
   });
 }
