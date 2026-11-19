@@ -40,6 +40,7 @@ import { registerIntegrationRoutes, registerInbound } from "./integrations/admin
 import "./connectors/service.js";
 import { diskStatus } from "./disk.js";
 import { backupStatus } from "./backup.js";
+import { noteFailedLogin } from "./alerts.js";
 import { registerCustomReportRoutes } from "./reports/routes.js";
 import { registerWorkspaceRoutes } from "./workspace/routes.js";
 import { registerHierarchyRoutes, teamIds, inTeam, resolveReportsTo, resolveTerritory } from "./hierarchy.js";
@@ -174,6 +175,7 @@ export function createApp(db: Db, secret = process.env.JWT_SECRET || RANDOM_SECR
     const fail = async (why: string) => {
       const n = guard.failed(acct);
       await audit(db, { companyId: u?.company_id, userId: u?.id, action: "login.failed", target: acct, detail: { why, n }, ip });
+      await noteFailedLogin(db, acct, ip, n).catch(() => {});
       return res.status(401).json({ error: "Wrong email or password" });
     };
     if (!u || !(await bcrypt.compare(String(password), u.password_hash))) return fail("password");

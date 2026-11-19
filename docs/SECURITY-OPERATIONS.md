@@ -33,3 +33,11 @@ Users turn it on in their profile (authenticator app). Admins can require it for
 
 ## Hosted server updates
 On the hosted EC2 box, each deploy enables Ubuntu `unattended-upgrades` for the security origin only, with an automatic reboot at 03:00 Asia/Kolkata (21:30 UTC if the server clock is UTC).
+
+## Hosted server WAF-lite and alerts
+On the hosted server, each deploy installs nginx rate limits (30 requests/second per IP generally, 10/minute on `/api/auth/*`) and returns 404 for obvious probe paths (`.env`, `.git`, WordPress/phpMyAdmin, path traversal). fail2ban bans an IP for 30 minutes after 8 failed or rate-limited sign-ins in 10 minutes, and keeps the sshd jail on. A failed `nginx -t` reverts the app site and does not reload a broken config. This is not a paid cloud firewall and does not close SSH; those remain AWS-console steps.
+
+The platform owner gets an in-app notification (bell on the platform screen) when there are many failed sign-ins, a backup or restore-test failure, or a burst of server errors. Email is sent only if `SMTP_HOST` is already set and the optional `nodemailer` package is installed; otherwise the alert stays in the app.
+
+## Photo copies with the nightly backup
+After each nightly (or catch-up) database backup, the app runs `aws s3 sync` of the local photo folder (`UPLOAD_DIR` or `~/uploads`) to `s3://$BACKUP_S3_BUCKET/fieldforce/photos/`, and skips the copy when the folder is empty or unchanged. The instance role already lists and reads `fieldforce/` for the restore test, and should also allow `s3:PutObject` (and `s3:GetObject` / `s3:ListBucket` for sync) under `fieldforce/photos/`. If the sync fails with AccessDenied, add those actions on that prefix; no bucket policy is changed from the app.

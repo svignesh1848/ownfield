@@ -165,7 +165,7 @@ function PlatformHome({ s, onLogout }: { s: Session; onLogout: () => void }) {
   if (s.enrollTotp) return <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header>
     <section className="card"><p>{t("Set up two-step sign-in to continue. This is required for the platform owner.")}</p></section>
     <MyAccount s={s} onSignedOut={onLogout} /></main>;
-  return <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header><Platform s={s} /></main>;
+  return <main><header className="top"><b>{t("OwnField · Platform")}</b><Bell s={s} source="/api/platform/notifications" /><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header><Platform s={s} /></main>;
 }
 
 function Platform({ s }: { s: Session }) {

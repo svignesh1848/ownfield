@@ -5,7 +5,7 @@ import fs from "node:fs"; import os from "node:os"; import path from "node:path"
 import { gzipSync } from "node:zlib";
 import { createApp, ensurePlatformOwner } from "../src/app.js";
 import { migrate } from "../src/db.js";
-import { uploadToS3, needsCatchUp, backupStatus, contentHashFromGzip, shouldSkipBackup, settleBackup, SKIP_REASON, SKIP_MAX_AGE_MS } from "../src/backup.js";
+import { uploadToS3, needsCatchUp, backupStatus, contentHashFromGzip, shouldSkipBackup, settleBackup, SKIP_REASON, SKIP_MAX_AGE_MS, photoTreeStamp, syncPhotosToS3 } from "../src/backup.js";
 
 let app: any, owner: string, adm: string, dir: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
@@ -187,5 +187,32 @@ describe("unchanged-backup skip", () => {
       if (prevBucket === undefined) delete process.env.BACKUP_S3_BUCKET; else process.env.BACKUP_S3_BUCKET = prevBucket;
       fs.rmSync(work, { recursive: true, force: true });
     }
+  });
+});
+
+describe("photo folder sync", () => {
+  it("skips an empty or unchanged folder and reports a missing aws CLI", async () => {
+    const photos = fs.mkdtempSync(path.join(os.tmpdir(), "photos"));
+    const empty = await syncPhotosToS3({ dir: photos, bucket: "b", cmd: "true" });
+    expect(empty).toMatchObject({ ok: true, skipped: true, files: 0 });
+    fs.writeFileSync(path.join(photos, "a.jpg"), "pic");
+    const first = await syncPhotosToS3({ dir: photos, bucket: "b", cmd: "true" });
+    expect(first).toMatchObject({ ok: true, files: 1 });
+    expect(first.skipped).toBeFalsy();
+    const again = await syncPhotosToS3({ dir: photos, bucket: "b", cmd: "true", lastStamp: first.stamp });
+    expect(again).toMatchObject({ ok: true, skipped: true, files: 1 });
+    expect((await syncPhotosToS3({ dir: photos, bucket: "b", cmd: "no-such-aws-cli-xyz" })).error).toBe("aws CLI not installed");
+    const st = photoTreeStamp(photos);
+    expect(st.files).toBe(1);
+    expect(st.stamp).toMatch(/^[0-9a-f]{64}$/);
+    fs.rmSync(photos, { recursive: true, force: true });
+  });
+  it("exposes photo sync in backup status without a content stamp", () => {
+    process.env.BACKUP_S3_BUCKET = "test-bucket";
+    fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify({ lastResult: "ok", photoSync: { ok: true, skipped: true, files: 3, at: "2026-11-19T02:31:00.000Z", stamp: "do-not-leak-photo-stamp" } }));
+    const r = backupStatus();
+    expect(r.photoSync).toEqual({ ok: true, skipped: true, files: 3, at: "2026-11-19T02:31:00.000Z", error: null });
+    expect(JSON.stringify(r)).not.toContain("do-not-leak-photo-stamp");
+    delete process.env.BACKUP_S3_BUCKET;
   });
 });

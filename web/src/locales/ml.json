@@ -1445,5 +1445,11 @@
  "This order goes to its distributor — the distributor accepts and delivers it": "ഈ ഓർഡർ അതിന്റെ വിതരണക്കാരനിലേക്ക് പോകുന്നു — വിതരണക്കാരനാണ് അത് സ്വീകരിച്ച് ഡെലിവർ ചെയ്യുന്നത്",
   "Set up two-step sign-in to continue. This is required for the platform owner.": "Set up two-step sign-in to continue. This is required for the platform owner.",
   "On. Two-step sign-in is required for the platform owner.": "On. Two-step sign-in is required for the platform owner.",
-  "Two-step sign-in is required for the platform owner": "Two-step sign-in is required for the platform owner"
+  "Two-step sign-in is required for the platform owner": "Two-step sign-in is required for the platform owner",
+  "Many failed sign-ins for {0}": "Many failed sign-ins for {0}",
+  "Many failed sign-ins from one network": "Many failed sign-ins from one network",
+  "The app had a burst of errors": "The app had a burst of errors",
+  "A database backup failed": "A database backup failed",
+  "A backup restore test failed": "A backup restore test failed",
+  "Photo backup to storage failed": "Photo backup to storage failed"
 }

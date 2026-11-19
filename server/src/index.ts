@@ -10,6 +10,7 @@ import { startMessageWorker } from "./messaging.js";
 import { startDiskWatch } from "./disk.js";
 import { startReportScheduler } from "./reports/schedule.js";
 import { encryptConnectorSecrets } from "./fieldcrypt.js";
+import { startAlerts } from "./alerts.js";
 const db = createPool();
 await migrate(db);
 await encryptConnectorSecrets(db).catch(e => console.warn("connector secret encryption skipped:", e.message));
@@ -22,3 +23,4 @@ if (process.env.NODE_ENV === "production") scheduleBackups();
 if (process.env.WEBHOOKS_DISABLED !== "1") { startWebhookWorker(db); startConnectorScheduler(db); startMessageWorker(db); }
 startDiskWatch();
 startReportScheduler(db);
+startAlerts(db);

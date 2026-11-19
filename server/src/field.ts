@@ -61,7 +61,7 @@ export async function orderEvent(q: Db, orderId: number, status: string, uid: nu
   await q.query("INSERT INTO order_events (order_id,status,user_id,note) VALUES ($1,$2,$3,$4)", [orderId, status, uid, note]);
 }
 /** In-app notification; template + args are translated in the app (t(template, ...args)). */
-export async function notify(q: Db, cid: number, userId: number, template: string, args: unknown[], note: string | null = null, link: string | null = null) {
+export async function notify(q: Db, cid: number | null, userId: number, template: string, args: unknown[], note: string | null = null, link: string | null = null) {
   await q.query("INSERT INTO notifications (company_id,user_id,template,args,note,link) VALUES ($1,$2,$3,$4,$5,$6)", [cid, userId, template, JSON.stringify(args), note, link]);
 }
 export const dayKey = (d: Date | string, tz = process.env.REPORT_TZ || "Asia/Kolkata") => new Date(d).toLocaleDateString("en-CA", { timeZone: tz });
@@ -473,6 +473,16 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     await db.query("UPDATE notifications SET read_at=NOW() WHERE company_id=$1 AND user_id=$2 AND read_at IS NULL", [cid, req.user.uid]);
     res.json({ ok: true });
   }));
+
+  app.get("/api/platform/notifications", auth("platform_owner"), wrap(async (req, res) => {
+    res.json((await db.query("SELECT id, template, args, note, link, created_at, read_at FROM notifications WHERE user_id=$1 AND company_id IS NULL ORDER BY id DESC LIMIT 50", [req.user.uid])).rows
+      .map(n => ({ ...n, args: parseJson(n.args, []) })));
+  }));
+  app.post("/api/platform/notifications/read", auth("platform_owner"), wrap(async (req, res) => {
+    await db.query("UPDATE notifications SET read_at=NOW() WHERE user_id=$1 AND company_id IS NULL AND read_at IS NULL", [req.user.uid]);
+    res.json({ ok: true });
+  }));
+
 
   // ---- Manager dashboard: visits & orders by rep/day ----
   app.get("/api/dashboard", auth(...MGR), wrap(async (req, res) => {

@@ -12,6 +12,7 @@ import { createGunzip } from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { uploadDir } from "./storage.js";
 
 export const backupDir = () => process.env.BACKUP_DIR || path.join(os.homedir(), "backups");
 export const SKIP_REASON = "skipped (no changes)";
@@ -73,6 +74,55 @@ export function uploadToS3(file: string, bucket: string, cmd = "aws"): Promise<{
   });
 }
 
+
+/** Fingerprint of a photo folder (relative path + size + mtime). Used to skip an unchanged sync. */
+export function photoTreeStamp(dir: string): { stamp: string; files: number } {
+  if (!fs.existsSync(dir)) return { stamp: "", files: 0 };
+  const parts: string[] = [];
+  const walk = (d: string) => {
+    for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+      const pth = path.join(d, ent.name);
+      if (ent.isDirectory()) walk(pth);
+      else { const st = fs.statSync(pth); parts.push(`${path.relative(dir, pth)}:${st.size}:${Math.floor(st.mtimeMs)}`); }
+    }
+  };
+  walk(dir);
+  parts.sort();
+  return { stamp: parts.length ? createHash("sha256").update(parts.join("\n")).digest("hex") : "", files: parts.length };
+}
+
+export type PhotoSyncResult = { ok: boolean; skipped?: boolean; files: number; at: string; error?: string; stamp?: string };
+
+/** Sync local photos to s3://bucket/fieldforce/photos/. Skips when the folder is empty or unchanged. Never rejects. */
+export function syncPhotosToS3(opts: { dir?: string; bucket?: string; cmd?: string; lastStamp?: string | null } = {}): Promise<PhotoSyncResult> {
+  const at = new Date().toISOString();
+  const dir = opts.dir || process.env.BACKUP_PHOTO_DIR || uploadDir();
+  const bucket = opts.bucket || process.env.BACKUP_S3_BUCKET;
+  const { stamp, files } = photoTreeStamp(dir);
+  if (!bucket) return Promise.resolve({ ok: true, skipped: true, files, at, stamp, error: undefined });
+  if (!files) return Promise.resolve({ ok: true, skipped: true, files: 0, at, stamp: "" });
+  if (opts.lastStamp && opts.lastStamp === stamp) return Promise.resolve({ ok: true, skipped: true, files, at, stamp });
+  const dest = `s3://${bucket}/fieldforce/photos/`;
+  const cmd = opts.cmd || "aws";
+  return new Promise(resolve => {
+    let err = "", done = false;
+    const end = (r: PhotoSyncResult) => { if (!done) { done = true; resolve(r); } };
+    const p = spawn(cmd, ["s3", "sync", "--only-show-errors", "--no-progress", dir, dest], { stdio: ["ignore", "ignore", "pipe"] });
+    p.stderr.on("data", d => { err += d; });
+    p.on("error", (e: any) => end({ ok: false, files, at, stamp, error: e.code === "ENOENT" ? "aws CLI not installed" : shortErr(e.message) }));
+    p.on("close", code => end(code === 0 ? { ok: true, files, at, stamp } : { ok: false, files, at, stamp, error: shortErr(err) || `aws exited ${code}` }));
+  });
+}
+
+async function attachPhotoSync(status: any) {
+  if (!process.env.BACKUP_S3_BUCKET) { writeStatus(status); return status; }
+  const photoSync = await syncPhotosToS3({ lastStamp: status?.photoSync?.stamp });
+  if (!photoSync.ok) console.error("backup: photo sync failed:", photoSync.error);
+  const next = { ...status, photoSync };
+  writeStatus(next);
+  return next;
+}
+
 function encryptGzip(src: string, dest: string, pass: string): Promise<{ ok: boolean; error?: string }> {
   return new Promise(resolve => {
     let err = "", done = false; const end = (r: { ok: boolean; error?: string }) => { if (!done) { done = true; resolve(r); } };
@@ -100,7 +150,7 @@ export async function settleBackup(tmp: string, startedAt: string, dest: string)
     lastS3OkAt: prev.lastS3OkAt, lastS3Ok: prev.s3?.ok, s3Configured: !!bucket,
   })) {
     fs.rmSync(tmp, { force: true });
-    writeStatus({ ...prev, lastAttemptAt: startedAt, lastSkipAt: new Date().toISOString(), lastResult: SKIP_REASON, lastError: null, contentHash: hash });
+    await attachPhotoSync({ ...prev, lastAttemptAt: startedAt, lastSkipAt: new Date().toISOString(), lastResult: SKIP_REASON, lastError: null, contentHash: hash });
     return SKIP_REASON;
   }
   const pass = process.env.BACKUP_PASSPHRASE;
@@ -119,10 +169,11 @@ export async function settleBackup(tmp: string, startedAt: string, dest: string)
   const bytes = fs.statSync(dest).size;
   const s3 = bucket ? { bucket, ...(await uploadToS3(dest, bucket)), at: new Date().toISOString() } : null;
   if (s3 && !s3.ok) console.error("backup: S3 upload failed:", s3.error);
-  writeStatus({
+  await attachPhotoSync({
     lastAttemptAt: startedAt, lastBackupAt: new Date().toISOString(), lastSkipAt: prev.lastSkipAt ?? null,
     lastResult: "ok", file: path.basename(dest), bytes, encrypted: !!pass, lastError: null, contentHash: hash,
     s3, lastS3OkAt: s3?.ok ? s3.at : prev.lastS3OkAt ?? null, lastS3OkKey: s3?.ok ? s3.key : prev.lastS3OkKey ?? null,
+    photoSync: prev.photoSync ?? null,
   });
   return dest;
 }
@@ -160,6 +211,7 @@ export function backupStatus() {
     s3Upload: s?.s3 ? { ok: !!s.s3.ok, key: s.s3.key, at: s.s3.at, error: s.s3.error ?? null } : null,
     lastS3OkAt: s?.lastS3OkAt ?? null, lastS3OkKey: s?.lastS3OkKey ?? null,
     restoreTest: r ? { at: r.at ?? null, key: r.key ?? null, s3Bytes: r.s3Bytes ?? null, ok: !!r.ok, tables: r.tables ?? null, errors: r.errors ?? null, error: r.error ?? null } : null,
+    photoSync: s?.photoSync ? { ok: !!s.photoSync.ok, skipped: !!s.photoSync.skipped, files: s.photoSync.files ?? null, at: s.photoSync.at ?? null, error: s.photoSync.error ?? null } : null,
   };
 }
 
