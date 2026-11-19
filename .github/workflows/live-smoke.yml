@@ -1,0 +1,53 @@
+name: Live smoke
+on:
+  push: { branches: [master] }
+  schedule: [{ cron: "*/30 * * * *" }]
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Wait for auto-deploy after a master push
+        if: github.event_name == 'push'
+        run: sleep 720
+      - name: Hit the live app
+        id: smoke
+        env:
+          OWNFIELD_DEMO_PASSWORD: ${{ secrets.OWNFIELD_DEMO_PASSWORD }}
+        run: node e2e/live-smoke.mjs
+      - name: Open or update a live-down issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="Live app smoke failed on app.ownfield.in"
+          BODY="The live smoke test failed at $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          This issue is opened automatically so you get a GitHub email. It will be closed when the next smoke run passes."
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label live-down --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh label create live-down --repo "$GITHUB_REPOSITORY" --description "Live app smoke test failed" --color B60205 2>/dev/null || true
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label live-down --body "$BODY"
+          fi
+      - name: Close the live-down issue after a pass
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label live-down --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "Live smoke passed in ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Closing."
+            gh issue close "$EXISTING" --repo "$GITHUB_REPOSITORY" --reason completed
+          fi

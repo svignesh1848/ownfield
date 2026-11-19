@@ -312,6 +312,7 @@ export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {
   const canEdit = (o: any) => ["placed", "pending_approval"].includes(o.status) && (mgr || s.user.role === "retailer" || o.rep_id === s.user.id);
   const save = (o: any, q: Record<number, number>) => go(() => api(s, `/api/orders/${o.id}`, { method: "PUT", body: JSON.stringify({ lines: o.lines.filter((l: any) => !l.free).map((l: any) => ({ variantId: l.variant_id, uom: l.uom, qty: q[l.id] })) }) }));
   return <><h2>{t("Orders")}</h2>{!rows.length && <Empty icon="📦" title={t("No orders yet")} text={s.user.role === "sales_rep" ? t("Orders you take will show here.") : t("Orders from your sales reps will appear here as soon as they're placed.")} />}{rows.map(o => <OrderCard key={o.id} o={o}>
+    {["placed", "accepted", "dispatched", "fulfilled"].includes(o.status) && <button className="sm ghost" onClick={() => go(() => downloadOrderFile(s, o))}>{t("Download order file")}</button>}
     {(admin || (mgr && !o.distributor_id)) && o.status === "placed" && <button className="sm" onClick={() => move(o, "accepted")}>{t("Accept")}</button>}
     {mgr && !o.distributor_id && o.status === "placed" && <button className="sm ghost" onClick={() => { const r = prompt(t("Why reject this order?")); if (r !== null) move(o, "rejected", r); }}>{t("Reject")}</button>}
     {mgr && !o.distributor_id && o.status === "accepted" && <button className="sm" onClick={() => move(o, "dispatched")}>{t("Out for delivery")}</button>}
@@ -326,6 +327,16 @@ export function Orders({ s, cfg }: { s: Session; cfg: Cfg }) {
   </OrderCard>)}<p className="err">{msg}</p></>;
 }
 
+
+const downloadOrderFile = async (s: Session, o: any) => {
+  const r = await fetch(`/api/orders/${o.id}/file`, { headers: { Authorization: `Bearer ${s.token}` } });
+  if (!r.ok) { let msg = r.statusText; try { msg = (await r.json()).error || msg; } catch { /* ignore */ } throw new Error(msg || "Download failed"); }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(await r.blob());
+  a.download = /filename="?([^";]+)/.exec(r.headers.get("Content-Disposition") || "")?.[1] || `order-${o.client_ref || o.id}.xlsx`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+
 export function Inbox({ s, cfg }: { s: Session; cfg: Cfg }) {
   const [rows, setRows] = useState<any[]>([]); const [msg, setMsg] = useState("");
   const load = () => api(s, "/api/orders").then(setRows); useEffect(() => { load(); }, []);
@@ -335,6 +346,7 @@ export function Inbox({ s, cfg }: { s: Session; cfg: Cfg }) {
   const cancel = async (id: number) => { const reason = prompt(t("Why cancel this order?")); if (!reason?.trim()) return; try { await api(s, `/api/orders/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }); load(); } catch (e: any) { setMsg(e.message); } };
   return <><h2>{t("Order inbox")}</h2>{!rows.length && <Empty icon="📥" title={t("No orders for you yet")} text={t("When a sales rep takes an order at one of your outlets, it lands here for you to accept.")} />}
     {rows.map(o => <OrderCard key={o.id} o={o}>
+      {["placed", "accepted", "dispatched", "fulfilled"].includes(o.status) && <button className="sm ghost" onClick={() => downloadOrderFile(s, o).catch(e => setMsg(e.message))}>{t("Download order file")}</button>}
       {o.status === "placed" && <><button className="sm" onClick={() => set(o.id, "accepted")}>{t("Accept")}</button> <button className="sm ghost" onClick={() => { const r = prompt(t("Why reject this order?")); if (r !== null) set(o.id, "rejected", r); }}>{t("Reject")}</button></>}
       {o.status === "accepted" && <><button className="sm" onClick={() => set(o.id, "dispatched")}>{t("Out for delivery")}</button> </>}
       {["accepted", "dispatched"].includes(o.status) && <><button className="sm" onClick={() => set(o.id, "fulfilled")}>{t("Mark delivered")}</button> {!o.invoice && <button className="sm ghost" onClick={() => setPart(o.id)}>{t("Part delivered")}</button>}{!o.invoice && <> <button className="sm ghost" onClick={() => cancel(o.id)}>{t("Cancel order")}</button></>}</>}

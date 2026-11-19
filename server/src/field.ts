@@ -6,6 +6,7 @@ import { geofenceCheck } from "./tracking.js";
 import type { Express, Request, Response, NextFunction } from "express";
 import { withTx, type Db } from "./db.js";
 import { getCompany, cleanCustom, fefoRows, parseJson } from "./catalog.js";
+import * as XLSX from "xlsx";
 import { getFlow } from "./flow.js";
 import type { Uom } from "./templates.js";
 import { activeSchemes, applySchemes } from "./schemes.js";
@@ -361,6 +362,26 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       o.partial = o.lines.some((l: any) => l.ordered_qty != null && Number(l.ordered_qty) > Number(l.qty));
     }
     res.json(orders);
+  }));
+  // Spreadsheet of one order for the distributor (or a manager) to upload into their own system.
+  app.get("/api/orders/:id/file", auth("distributor", "company_admin", "manager"), wrap(async (req, res) => {
+    const cid = tenant(req, res); if (cid == null) return;
+    const o = (await db.query(`SELECT o.*, s.name AS shop_name, s.code AS shop_code, u.name AS rep_name
+      FROM orders o JOIN shops s ON s.id=o.shop_id JOIN users u ON u.id=o.rep_id
+      WHERE o.id=$1 AND o.company_id=$2`, [Number(req.params.id), cid])).rows[0];
+    if (!o || (req.user.role === "distributor" && (o.distributor_id !== req.user.uid || o.status === "pending_approval"))) throw bad("order not found", 404);
+    const team = await teamIds(db, cid, req.user);
+    if (team && !team.includes(o.rep_id) && req.user.role === "manager") throw bad("order not found", 404);
+    const lines = (await db.query(`SELECT l.qty,l.uom,l.price,l.amount,l.free,v.sku,i.name AS item_name
+      FROM order_lines l JOIN variants v ON v.id=l.variant_id JOIN items i ON i.id=v.item_id
+      WHERE l.order_id=$1 ORDER BY l.id`, [o.id])).rows;
+    const head = [["Order", o.client_ref], ["Status", o.status], ["Outlet", `${o.shop_name} (${o.shop_code})`], ["Sales rep", o.rep_name], ["Total", Number(o.total)], []];
+    const cols = ["SKU", "Product", "Qty", "Unit", "Price", "Amount", "Free"];
+    const rows = lines.map((l: any) => [l.sku, l.item_name, Number(l.qty), l.uom, Number(l.price), Number(l.amount), l.free ? "Y" : ""]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([...head, cols, ...rows]), "Order");
+    const name = `order-${String(o.client_ref || o.id).replace(/[^A-Za-z0-9._-]+/g, "_")}.xlsx`;
+    res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").attachment(name).send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
   }));
   // Distributor orders: the distributor (or an admin). Company-direct orders (no distributor): an admin, or a manager for their own team.
   app.post("/api/orders/:id/status", auth("distributor", "company_admin", "manager"), wrap(async (req, res) => {
