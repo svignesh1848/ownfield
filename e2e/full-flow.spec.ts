@@ -144,9 +144,10 @@ test("rep logs in, adds an outlet, checks in, uploads a photo and places a stock
   await go(page, "addoutlet", "Add outlet");
   await page.getByLabel("Outlet name").fill(CO.newOutlet);
   await page.getByLabel("City").fill("Chennai");
-  await page.getByRole("button", { name: "Capture location" }).click();
+  // The location button sits inside the "GPS location" label, so that is its accessible name.
+  await page.getByRole("button", { name: /GPS location|Capture location/ }).click();
   await expect(page.getByText(/13\.08/)).toBeVisible({ timeout: 10_000 });
-  await page.getByLabel("Photo (optional)").setInputFiles({ name: "sample-photo.png", mimeType: "image/png", buffer: tinyPng });
+  await page.locator("form.card input[type='file']").setInputFiles({ name: "sample-photo.png", mimeType: "image/png", buffer: tinyPng });
   await page.getByRole("button", { name: "Send for approval" }).click();
   await expect(page.getByText(/Sent for approval|Waiting/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(CO.newOutlet)).toBeVisible();
