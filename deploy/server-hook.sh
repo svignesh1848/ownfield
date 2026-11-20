@@ -7,6 +7,17 @@ D=$(cd "$(dirname "$0")" && pwd)
 APPU=$(sed -n 's|^DATABASE_URL=postgres://\([a-z_][a-z0-9_]*\):.*|\1|p' /etc/fieldforce-oss.env | head -1)
 APPDB=$(sed -n 's|^DATABASE_URL=postgres://[^/]*/\([a-z_][a-z0-9_]*\).*|\1|p' /etc/fieldforce-oss.env | head -1)
 [ -n "$APPU" ] && [ -n "$APPDB" ] || exit 0
+# App-level encryption key (TOTP secrets, webhook/connector secrets). Created once, on the server only: never printed,
+# never in git. Keep a copy somewhere safe off the server; losing it means two-step sign-ins must be reset.
+if ! grep -q '^DATA_ENCRYPTION_KEY=.' /etc/fieldforce-oss.env; then
+  K=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  if [ ${#K} -eq 64 ]; then
+    [ -n "$(tail -c1 /etc/fieldforce-oss.env)" ] && echo >>/etc/fieldforce-oss.env
+    printf 'DATA_ENCRYPTION_KEY=%s\n' "$K" >>/etc/fieldforce-oss.env && echo "server-hook: data encryption key created"
+  fi
+  unset K
+fi
+chmod 600 /etc/fieldforce-oss.env
 echo "server-hook: data workspace DB privileges for $APPU"
 timeout 60 sudo -u postgres psql -qX -v ON_ERROR_STOP=1 -v app="$APPU" -d "$APPDB" <"$D/db-privileges.sql" || echo "server-hook: privileges step failed (app stays in views mode)"
 # BI connection sync (pg_hba allow-list). Installed outside the build dir so a rollback keeps a working copy.

@@ -25,7 +25,7 @@ async function authHeaders(c: Record<string, any>, f: typeof fetch): Promise<Rec
       const k = `${c.tokenUrl}|${c.clientId}`, hit = tokens.get(k);
       if (hit && hit.exp > Date.now()) return { Authorization: `Bearer ${hit.token}` };
       const bad = await checkUrl(String(c.tokenUrl || "")); if (bad) throw new Error(`token URL: ${bad}`);
-      const r = await f(c.tokenUrl, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(8000),
+      const r = await f(c.tokenUrl, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(8000),
         body: new URLSearchParams({ grant_type: "client_credentials", client_id: c.clientId || "", client_secret: c.clientSecret || "", ...(c.scope ? { scope: c.scope } : {}) }) });
       if (!r.ok) throw new Error(`token endpoint HTTP ${r.status}`);
       const j: any = await r.json(); tokens.set(k, { token: j.access_token, exp: Date.now() + (Number(j.expires_in) || 300) * 1000 - 30_000 });

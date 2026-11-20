@@ -150,15 +150,15 @@ export function registerVanRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       for (const l of sum!.lines) {
         const q = want.size ? (want.get(l.sku) ?? 0) : l.left; if (q <= 0) continue;
         if (q > l.left) throw bad(`only ${l.left} of ${l.sku} left on the van`, 409);
-        await tx.query("UPDATE van_lines SET unloaded=$1 WHERE load_id=$2 AND variant_id=$3", [l.unloaded + q, L.id, l.variant_id]);
+        if (!(await tx.query("UPDATE van_lines SET unloaded=$1 WHERE load_id=$2 AND variant_id=$3 AND unloaded=$4 RETURNING load_id", [l.unloaded + q, L.id, l.variant_id, l.unloaded])).rows[0]) throw bad("van changed — reload", 409);
         if (!L.from_stock) continue;
         let back = q;
         for (const tk of (await tx.query("SELECT * FROM van_takes WHERE load_id=$1 AND variant_id=$2 AND qty>0 ORDER BY expiry DESC NULLS FIRST, id DESC", [L.id, l.variant_id])).rows) {
           if (back <= 0) break; const n = Math.min(back, tk.qty);
-          await tx.query("UPDATE van_takes SET qty=$1 WHERE id=$2", [tk.qty - n, tk.id]);
+          if (!(await tx.query("UPDATE van_takes SET qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [tk.qty - n, tk.id, tk.qty])).rows[0]) throw bad("van changed — reload", 409);
           const d = L.source_distributor_id ?? null;
           const ex = (await tx.query(`SELECT id, qty FROM stock WHERE company_id=$1 AND variant_id=$2 AND batch_no=$3 AND ${d == null ? "distributor_id IS NULL" : "distributor_id=$4"}`, d == null ? [cid, l.variant_id, tk.batch_no] : [cid, l.variant_id, tk.batch_no, d])).rows[0];
-          if (ex) await tx.query("UPDATE stock SET qty=$1, updated_at=NOW() WHERE id=$2", [Number(ex.qty) + n, ex.id]);
+          if (ex) await tx.query("UPDATE stock SET qty=qty+$1, updated_at=NOW() WHERE id=$2", [n, ex.id]);
           else await tx.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, d, l.variant_id, tk.batch_no, tk.expiry, n]);
           await logMove(tx, cid, d, l.variant_id, tk.batch_no, n, "van_unload", `van ${L.id}`, req.user.uid);
           back -= n;

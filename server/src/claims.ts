@@ -67,7 +67,8 @@ export function registerClaimRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       if (s.features.stock && c.kind !== "scheme") for (const l of c.lines) {
         const st = (await tx.query("SELECT id, qty FROM stock WHERE company_id=$1 AND distributor_id=$2 AND variant_id=$3 AND batch_no=$4", [cid, c.distributor_id, l.variant_id, l.batch_no || ""])).rows[0];
         if (!st) continue; const take = Math.min(Number(st.qty), l.qty);
-        await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2", [Number(st.qty) - take, st.id]);
+        // Compare-and-set so a concurrent order/receipt on this batch is not overwritten.
+        if (!(await tx.query("UPDATE stock SET updated_at=NOW(), qty=$1 WHERE id=$2 AND qty=$3 RETURNING id", [Number(st.qty) - take, st.id, st.qty])).rows[0]) throw bad("stock changed — retry", 409);
         await logMove(tx, cid, c.distributor_id, l.variant_id, l.batch_no || "", -take, `claim_${c.kind}`, n, req.user.uid);
       }
       return n;
