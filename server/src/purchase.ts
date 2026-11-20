@@ -5,6 +5,7 @@ import { logMove } from "./inventory.js";
 import type { Express, Response, Request, NextFunction } from "express";
 import * as XLSX from "xlsx";
 import { withTx, type Db } from "./db.js";
+import { sanitizeRow } from "./csv.js";
 import { bad, getCompany, parseJson, parseDate, today, fefoRows } from "./catalog.js";
 import { getFlow } from "./flow.js";
 import { r2, nextNumber, formatNumber, fyOf, rateFor, esc, inr } from "./billing.js";
@@ -297,7 +298,7 @@ export function registerPurchaseRoutes({ app, db, auth, wrap, tenant }: Ctx) {
   }));
   app.get("/api/pos/:id/export", auth(...ALL), wrap(async (req, res) => {
     const cid = tenant(req, res); if (cid == null) return;
-    const po = await own(req, cid); const ws = XLSX.utils.json_to_sheet(poRows(po)); const name = String(po.number || `draft-${po.id}`).replace(/\//g, "-");
+    const po = await own(req, cid); const ws = XLSX.utils.json_to_sheet(poRows(po).map((r: Record<string, unknown>) => sanitizeRow(r))); const name = String(po.number || `draft-${po.id}`).replace(/\//g, "-");
     if (req.query.format === "xlsx") { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "PO"); return res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").attachment(`${name}.xlsx`).send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" })); }
     res.type("text/csv").attachment(`${name}.csv`).send(XLSX.utils.sheet_to_csv(ws));
   }));

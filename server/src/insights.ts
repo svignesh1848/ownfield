@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { Db } from "./db.js";
+import { sanitizeRow } from "./csv.js";
 import { bad, parseJson, parseDate, today } from "./catalog.js";
 import { dayKey } from "./field.js";
 import { photoStore } from "./storage.js";
@@ -133,7 +134,7 @@ export function registerInsightRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       case "returns": rows = await returnRows(db, cid, inRange, dayKey, team); break;
       default: throw bad("unknown report — use orders, visits, gst, stock, targets, schemes, returns or ageing", 404);
     }
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: "no rows for this period" }]);
+    const ws = XLSX.utils.json_to_sheet((rows.length ? rows : [{ note: "no rows for this period" }]).map(r => sanitizeRow(r)));
     const name = `${req.params.kind}-${from}-to-${to}`;
     if (req.query.format === "csv") return res.type("text/csv").attachment(`${name}.csv`).send(XLSX.utils.sheet_to_csv(ws));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, req.params.kind);

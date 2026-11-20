@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, Table, label, ROLE, type ViewProps, type Session } from "./main";
+import { clearSessionCaches } from "./session-cache";
 import { t } from "./i18n";
 import { Field, toast, Loading } from "./ui";
 
@@ -72,7 +73,7 @@ export function SecurityPage({ s }: ViewProps) {
       {["users", "shops", "orders", "invoices"].map(tb => <button key={tb} className="sm ghost" onClick={() => raw(s, `/api/company/export?format=csv&table=${tb}`).then(b => save(b, `${tb}.csv`))}>{t(label(tb))} {t("(CSV)")}</button>)}</div>
     <details><summary>{t("Delete company")}</summary><p className="muted">{t("Anonymises all users and outlet contact details and signs everyone out. This cannot be undone.")}</p>
       <Field label={t("Type your company code ({0}) to confirm", s.user.companyCode)}><input value={confirmCode} onChange={e => setConfirm(e.target.value)} /></Field>
-      <button className="danger" onClick={async () => { try { await api(s, "/api/company", { method: "DELETE", body: JSON.stringify({ confirm: confirmCode }) }); localStorage.removeItem("ff"); location.reload(); } catch (x: any) { toast(x.message, "err"); } }}>{t("Delete company")}</button></details></>;
+      <button className="danger" onClick={async () => { try { await api(s, "/api/company", { method: "DELETE", body: JSON.stringify({ confirm: confirmCode }) }); await clearSessionCaches(); location.reload(); } catch (x: any) { toast(x.message, "err"); } }}>{t("Delete company")}</button></details></>;
 }
 
 export function MyAccount({ s, onSignedOut }: { s: Session; onSignedOut: () => void }) {

@@ -1,7 +1,7 @@
 // Custom REST: any HTTP/JSON endpoint, configured entirely from the admin screen.
 import type { ConnectorPlugin } from "../types.js";
 import { get, fillTemplate } from "../mapping.js";
-import { checkUrl } from "../../integrations/webhooks.js";
+import { safeFetch } from "../../integrations/webhooks.js";
 
 /** Render a JSON template: "{{$mapped}}" -> the whole mapped record, "{{path}}" alone -> raw value, otherwise text substitution. */
 export function renderTemplate(t: unknown, ctx: Record<string, any>): unknown {
@@ -24,9 +24,8 @@ async function authHeaders(c: Record<string, any>, f: typeof fetch): Promise<Rec
     case "oauth2": {
       const k = `${c.tokenUrl}|${c.clientId}`, hit = tokens.get(k);
       if (hit && hit.exp > Date.now()) return { Authorization: `Bearer ${hit.token}` };
-      const bad = await checkUrl(String(c.tokenUrl || "")); if (bad) throw new Error(`token URL: ${bad}`);
-      const r = await f(c.tokenUrl, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(8000),
-        body: new URLSearchParams({ grant_type: "client_credentials", client_id: c.clientId || "", client_secret: c.clientSecret || "", ...(c.scope ? { scope: c.scope } : {}) }) });
+      const r = await safeFetch(String(c.tokenUrl || ""), { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(8000),
+        body: new URLSearchParams({ grant_type: "client_credentials", client_id: c.clientId || "", client_secret: c.clientSecret || "", ...(c.scope ? { scope: c.scope } : {}) }) }, f);
       if (!r.ok) throw new Error(`token endpoint HTTP ${r.status}`);
       const j: any = await r.json(); tokens.set(k, { token: j.access_token, exp: Date.now() + (Number(j.expires_in) || 300) * 1000 - 30_000 });
       return { Authorization: `Bearer ${j.access_token}` };
@@ -70,8 +69,7 @@ const plugin: ConnectorPlugin = {
       let t = JSON.stringify(request); for (const k of ["apiKey", "password", "token", "clientSecret"]) if (config[k]) t = t.split(String(config[k])).join("******");
       return { status: 0, request: JSON.parse(t) };
     }
-    const bad = await checkUrl(url); if (bad) throw new Error(bad);
-    const r = await fetchImpl(url, { method, redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "Content-Type": "application/json", ...(await authHeaders(config, fetchImpl)) }, body: method === "GET" ? undefined : JSON.stringify(body) });
+    const r = await safeFetch(url, { method, redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "Content-Type": "application/json", ...(await authHeaders(config, fetchImpl)) }, body: method === "GET" ? undefined : JSON.stringify(body) }, fetchImpl);
     const text = (await r.text()).slice(0, 500);
     if (r.status < 200 || r.status >= 300) throw Object.assign(new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`), { status: r.status });
     // JSON-RPC style errors come back as HTTP 200 with an "error" member.
@@ -82,9 +80,8 @@ const plugin: ConnectorPlugin = {
     const e = endpoint(config, entity);
     if (sample) return Array.isArray(e.sample) ? e.sample : [];
     const url = String(config.baseUrl || "").replace(/\/$/, "") + e.path, method = String(e.method || "GET").toUpperCase();
-    const bad = await checkUrl(url); if (bad) throw new Error(bad);
-    const r = await fetchImpl(url, { method, redirect: "manual", signal: AbortSignal.timeout(15_000), headers: { "Content-Type": "application/json", ...(await authHeaders(config, fetchImpl)) },
-      body: method === "GET" ? undefined : JSON.stringify(renderTemplate(e.template ?? {}, { config: { ...vars(config), apiKey: config.apiKey, password: config.password } })) });
+    const r = await safeFetch(url, { method, redirect: "manual", signal: AbortSignal.timeout(15_000), headers: { "Content-Type": "application/json", ...(await authHeaders(config, fetchImpl)) },
+      body: method === "GET" ? undefined : JSON.stringify(renderTemplate(e.template ?? {}, { config: { ...vars(config), apiKey: config.apiKey, password: config.password } })) }, fetchImpl);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const j: any = await r.json(); const rows = e.itemsPath ? get(j, e.itemsPath) : j;
     return Array.isArray(rows) ? rows.slice(0, 5000) : [];

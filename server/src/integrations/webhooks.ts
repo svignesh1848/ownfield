@@ -2,6 +2,9 @@ import { openField } from "../fieldcrypt.js";
 // Outgoing webhooks: a small DB-backed queue (webhook_deliveries) drained by an in-process timer. No extra infra.
 import crypto from "node:crypto";
 import dns from "node:dns/promises";
+import type { LookupAddress, LookupOptions } from "node:dns";
+import http from "node:http";
+import https from "node:https";
 import net from "node:net";
 import type { Db } from "../db.js";
 
@@ -27,19 +30,102 @@ function privateIp(ip: string) {
   if (ip.split(".").length !== 4 || [a, b].some(n => !Number.isInteger(n))) return true; // not a plain IPv4: refuse
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
+export type PinnedHost = { url: string; host: string; addresses: string[] };
+type LookupCb = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
+
+/** dns.lookup-compatible function that only returns already-validated addresses (no second resolve). */
+export function pinnedLookup(addresses: string[]) {
+  const all: LookupAddress[] = addresses.map(address => ({ address, family: (net.isIPv6(address) ? 6 : 4) as 4 | 6 }));
+  return (hostname: string, options: LookupOptions, cb?: LookupCb) => {
+    const fn = (typeof options === "function" ? options : cb) as LookupCb;
+    const opts = (typeof options === "function" ? {} : options) || {};
+    if (!all.length) { fn(Object.assign(new Error("No pinned address"), { code: "ENOTFOUND" }) as NodeJS.ErrnoException, "", 0); return; }
+    if (opts.all) fn(null, all);
+    else fn(null, all[0].address, all[0].family);
+  };
+}
+
+/**
+ * Resolve once, refuse if any address is private, and return the validated IPs so the later
+ * HTTP connect can pin them (closes the DNS-rebinding window between checkUrl and fetch).
+ */
+export async function pinUrl(raw: string, resolve = process.env.WEBHOOK_ALLOW_PRIVATE !== "1", lookup: typeof dns.lookup = dns.lookup): Promise<{ ok: true; pin: PinnedHost } | { ok: false; error: string }> {
+  let u: URL; try { u = new URL(raw); } catch { return { ok: false, error: "Enter a full URL, e.g. https://erp.example.com/hooks/ownfield" }; }
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && process.env.WEBHOOK_ALLOW_HTTP === "1")) return { ok: false, error: "URL must start with https://" };
+  if (u.username || u.password) return { ok: false, error: "Put credentials in your receiver, not in the URL" };
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (!resolve) return { ok: true, pin: { url: raw, host, addresses: [] } };
+  if (host === "localhost" || host.endsWith(".internal") || host.endsWith(".local")) return { ok: false, error: "Private addresses are not allowed" };
+  try {
+    const addrs = net.isIP(host) ? [host] : (await lookup(host, { all: true })).map(a => a.address);
+    if (!addrs.length || addrs.some(privateIp)) return { ok: false, error: "Private addresses are not allowed" };
+    return { ok: true, pin: { url: raw, host, addresses: addrs } };
+  } catch { return { ok: false, error: "Could not resolve that host" }; }
+}
+
 /** Webhook URLs must be https (http only when WEBHOOK_ALLOW_HTTP=1) and must not point at private/loopback/metadata addresses. */
 export async function checkUrl(raw: string, resolve = process.env.WEBHOOK_ALLOW_PRIVATE !== "1"): Promise<string | null> {
-  let u: URL; try { u = new URL(raw); } catch { return "Enter a full URL, e.g. https://erp.example.com/hooks/ownfield"; }
-  if (u.protocol !== "https:" && !(u.protocol === "http:" && process.env.WEBHOOK_ALLOW_HTTP === "1")) return "URL must start with https://";
-  if (u.username || u.password) return "Put credentials in your receiver, not in the URL";
-  if (!resolve) return null;
-  const host = u.hostname.replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host.endsWith(".internal") || host.endsWith(".local")) return "Private addresses are not allowed";
-  try {
-    const addrs = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true })).map(a => a.address);
-    if (!addrs.length || addrs.some(privateIp)) return "Private addresses are not allowed";
-  } catch { return "Could not resolve that host"; }
-  return null;
+  const r = await pinUrl(raw, resolve);
+  return r.ok ? null : r.error;
+}
+
+function bodyToBuffer(body: unknown): Buffer | undefined {
+  if (body == null) return undefined;
+  if (Buffer.isBuffer(body)) return body;
+  if (typeof body === "string") return Buffer.from(body);
+  if (body instanceof URLSearchParams) return Buffer.from(body.toString());
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  return Buffer.from(String(body));
+}
+
+/** Connect to the already-validated IP(s) while keeping the original Host header and TLS SNI. */
+export function pinnedRequest(pin: PinnedHost, init: RequestInit = {}): Promise<Response> {
+  const u = new URL(pin.url);
+  const isHttps = u.protocol === "https:";
+  const lib = isHttps ? https : http;
+  const lookup = pin.addresses.length ? pinnedLookup(pin.addresses) : undefined;
+  const headers = new Headers(init.headers);
+  const body = bodyToBuffer(init.body as any);
+  if (body && !headers.has("content-length")) headers.set("content-length", String(body.length));
+  const hdrs: http.OutgoingHttpHeaders = {};
+  headers.forEach((v, k) => { hdrs[k] = v; });
+  return new Promise((resolve, reject) => {
+    const req = lib.request({
+      protocol: u.protocol,
+      hostname: pin.host,
+      port: u.port || (isHttps ? 443 : 80),
+      path: `${u.pathname}${u.search}`,
+      method: (init.method || "GET").toUpperCase(),
+      headers: hdrs,
+      lookup: lookup as any,
+      servername: isHttps ? pin.host : undefined,
+      signal: init.signal as any,
+    }, res => {
+      const chunks: Buffer[] = [];
+      res.on("data", c => chunks.push(c as Buffer));
+      res.on("end", () => {
+        const h = new Headers();
+        for (const [k, v] of Object.entries(res.headers)) {
+          if (v == null) continue;
+          if (Array.isArray(v)) for (const x of v) h.append(k, x);
+          else h.set(k, v);
+        }
+        resolve(new Response(Buffer.concat(chunks), { status: res.statusCode || 0, statusText: res.statusMessage || "", headers: h }));
+      });
+    });
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+/** Validate (and pin) the URL, then fetch. A custom fetchImpl is only used in tests; production always pins the IP. */
+export async function safeFetch(raw: string, init: RequestInit = {}, fetchImpl?: typeof fetch): Promise<Response> {
+  const r = await pinUrl(raw, process.env.WEBHOOK_ALLOW_PRIVATE !== "1");
+  if (!r.ok) throw new Error(r.error);
+  const opts: RequestInit = { ...init, redirect: init.redirect ?? "manual" };
+  if (fetchImpl && fetchImpl !== fetch) return fetchImpl(raw, opts);
+  return pinnedRequest(r.pin, opts);
 }
 
 /** Queue an event for every active webhook of the company subscribed to it. Safe to call inside a transaction. */
@@ -95,11 +181,10 @@ export async function drain(db: Db, opts: { limit?: number; fetchImpl?: Fetch; t
         continue;
       } catch (e: any) { err = String(e.message || e).slice(0, 300); code = Number(e.status) || null; }
     } else try {
-      const bad = await checkUrl(d.url); if (bad) throw new Error(bad);
       const ts = String(Math.floor(Date.now() / 1000));
-      const r = await f(d.url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(opts.timeoutMs || 8000),
+      const r = await safeFetch(d.url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(opts.timeoutMs || 8000),
         headers: { "Content-Type": "application/json", "User-Agent": "OwnField-Webhooks/1", "X-FieldForce-Event": d.event, "X-FieldForce-Delivery": String(d.id),
-          "X-FieldForce-Timestamp": ts, "X-FieldForce-Signature": sign(openField(d.secret)!, ts, d.payload) }, body: d.payload });
+          "X-FieldForce-Timestamp": ts, "X-FieldForce-Signature": sign(openField(d.secret)!, ts, d.payload) }, body: d.payload }, opts.fetchImpl);
       code = r.status; if (r.status < 200 || r.status >= 300) err = `HTTP ${r.status}`;
     } catch (e: any) { err = String(e.message || e).slice(0, 300); }
     if (!err) await db.query("UPDATE webhook_deliveries SET status='delivered', attempts=$1, response_code=$2, last_error=NULL, delivered_at=NOW() WHERE id=$3", [attempts, code, d.id]);

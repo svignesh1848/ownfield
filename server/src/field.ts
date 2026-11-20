@@ -270,8 +270,12 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
     const { priced, total, savings, credit, loc } = await checkCart(cid, settings, shop, lines);
     const status = needsApproval(settings, total) ? "pending_approval" : "placed";
     const o = await withTx(db, async tx => {
-      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+      const o = (await tx.query("INSERT INTO orders (company_id,client_ref,rep_id,shop_id,distributor_id,total,savings,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (company_id, client_ref) DO NOTHING RETURNING *",
         [cid, String(clientRef), req.user.uid, shop.id, loc, total, savings, status])).rows[0];
+      if (!o) {
+        const existing = (await tx.query("SELECT * FROM orders WHERE company_id=$1 AND client_ref=$2", [cid, String(clientRef)])).rows[0];
+        return { ...existing, duplicate: true };
+      }
       await insertLines(tx, o.id, priced);
       // Hold stock the moment the order is placed (also while waiting for approval), so two orders cannot promise the same units.
       if (settings.features.stock) await allocateStock(tx, cid, o);
@@ -282,6 +286,7 @@ export function registerFieldRoutes({ app, db, auth, wrap, tenant }: Ctx) {
       await emit(tx, cid, "order.created", { id: o.id, client_ref: o.client_ref, shop_id: o.shop_id, distributor_id: o.distributor_id, total: Number(o.total), status: o.status });
       return o;
     });
+    if (o.duplicate) return res.status(200).json(o);
     res.status(201).json(credit.ok ? o : { ...o, creditWarning: credit.reasons });
   }));
   // Edit while the order is still new (not yet accepted): the order taker or a manager replaces the lines; prices/schemes/stock/credit are re-checked.

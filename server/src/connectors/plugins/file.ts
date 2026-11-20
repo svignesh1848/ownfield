@@ -1,6 +1,8 @@
 // File import/export: CSV, Excel or JSON, with the company's saved mapping. Optional server drop folder for scheduled exports.
 import * as XLSX from "xlsx";
 import type { ConnectorPlugin } from "../types.js";
+import { toCsv, sanitizeRow } from "../../csv.js";
+export { toCsv };
 
 /** One row per line item for documents with lines; header fields are repeated. Nested objects are flattened with dots. */
 export function flatten(rows: Record<string, any>[]): Record<string, unknown>[] {
@@ -19,11 +21,6 @@ export function flatten(rows: Record<string, any>[]): Record<string, unknown>[] 
     for (const l of arr[1] as any[]) res.push({ ...head, ...flat(l, `${arr[0]}.`) });
   }
   return res;
-}
-export function toCsv(rows: Record<string, unknown>[], delimiter = ",") {
-  const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
-  const q = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n\r]/.test(s) || s.includes(delimiter) ? `"${s.replace(/"/g, '""')}"` : s; };
-  return [cols.map(q).join(delimiter), ...rows.map(r => cols.map(c => q(r[c])).join(delimiter))].join("\r\n") + "\r\n";
 }
 /** Parse an uploaded CSV / Excel / JSON file into plain rows. */
 export function parseFile(buf: Buffer, name: string): Record<string, unknown>[] {
@@ -50,7 +47,7 @@ const plugin: ConnectorPlugin = {
     if (format === "json") return { filename: `${entity}-${stamp}.json`, contentType: "application/json", body: JSON.stringify(rows, null, 2) };
     const flat = flatten(rows);
     if (format === "xlsx") {
-      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flat), entity);
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flat.map(r => sanitizeRow(r))), entity);
       return { filename: `${entity}-${stamp}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer };
     }
     return { filename: `${entity}-${stamp}.csv`, contentType: "text/csv; charset=utf-8", body: toCsv(flat, config.delimiter || ",") };

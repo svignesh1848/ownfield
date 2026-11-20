@@ -6,6 +6,7 @@ import { getFlow } from "./flow.js";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { withTx, type Db } from "./db.js";
+import { csvCell } from "./csv.js";
 import { smallUpload, savePhoto } from "./photos.js";
 import { photoStore } from "./storage.js";
 import { TEMPLATES, INDUSTRIES, FEATURE_KEYS, FIELD_TYPES, ENTITIES, templateSettings, withDefaults, type Settings, type CustomField, type Uom } from "./templates.js";
@@ -340,10 +341,15 @@ async function importStock({ db, cid, s, role, uid }: Imp, r: any) {
   const batch = s.features.batches ? String(r.batch ?? r.batch_no ?? "").trim() : "";
   const expiry = s.features.batches ? parseDate(r.expiry ?? r.expiry_date) : null;
   if (s.features.batches && (!batch || !expiry)) throw bad("batch and expiry required");
+  // Excel qty is on-hand (physical count). Available qty stored on the row is on-hand minus units already reserved on open orders.
+  const onHand = qty * unit.factor;
   const ex = (await db.query(`SELECT id FROM stock WHERE company_id=$1 AND variant_id=$2 AND batch_no=$3 AND ${loc == null ? "distributor_id IS NULL" : "distributor_id=$4"}`,
     loc == null ? [cid, v.id, batch] : [cid, v.id, batch, loc])).rows[0];
-  if (ex) { await db.query("UPDATE stock SET updated_at=NOW(), qty=$1, expiry=$2 WHERE id=$3", [qty * unit.factor, expiry, ex.id]); return "updated"; }
-  await db.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, loc, v.id, batch, expiry, qty * unit.factor]);
+  const reserved = ex ? Number((await db.query("SELECT COALESCE(SUM(qty),0) AS n FROM order_allocations WHERE stock_id=$1", [ex.id])).rows[0].n) : 0;
+  if (onHand < reserved) throw bad(`cannot set on-hand qty to ${onHand} for ${r.sku}${batch ? ` (batch ${batch})` : ""}: ${reserved} units are reserved on open orders`);
+  const avail = onHand - reserved;
+  if (ex) { await db.query("UPDATE stock SET updated_at=NOW(), qty=$1, expiry=$2 WHERE id=$3", [avail, expiry, ex.id]); return "updated"; }
+  await db.query("INSERT INTO stock (company_id,distributor_id,variant_id,batch_no,expiry,qty) VALUES ($1,$2,$3,$4,$5,$6)", [cid, loc, v.id, batch, expiry, avail]);
   return "inserted";
 }
 
@@ -359,8 +365,9 @@ export async function importOne(c: Imp, kind: string, row: Record<string, unknow
   const fn = IMPORTERS[kind]; if (!fn) throw bad("unknown import type", 404);
   return fn(c, normRow(row)) as Promise<"inserted" | "updated">;
 }
-export async function runImport(c: Imp, kind: string, rows: Record<string, unknown>[]) {
-  const fn = IMPORTERS[kind]; if (!fn) throw bad("unknown import type", 404);
+export const STOCK_IMPORT_MAX_ROWS = 5000;
+
+async function runImportRows(c: Imp, fn: (c: Imp, r: any) => Promise<string>, rows: Record<string, unknown>[]) {
   const result = { inserted: 0, updated: 0, skipped: 0, errors: [] as { row: number; code?: string; error: string }[] };
   for (const [i, r] of rows.entries()) {
     const n = normRow(r);
@@ -368,6 +375,22 @@ export async function runImport(c: Imp, kind: string, rows: Record<string, unkno
     try { result[(await fn(c, n)) as "inserted" | "updated" | "skipped"]++; } catch (e: any) { result.errors.push({ row: i + 2, ...(n.code ? { code: String(n.code) } : {}), error: e.message }); }
   }
   return result;
+}
+
+export async function runImport(c: Imp, kind: string, rows: Record<string, unknown>[]) {
+  const fn = IMPORTERS[kind]; if (!fn) throw bad("unknown import type", 404);
+  if (kind === "stock") {
+    if (rows.length > STOCK_IMPORT_MAX_ROWS) throw bad(`Stock import is limited to ${STOCK_IMPORT_MAX_ROWS} rows. Split the file and try again.`);
+    return withTx(c.db, async tx => {
+      const result = await runImportRows({ ...c, db: tx }, fn, rows);
+      if (result.errors.length) {
+        const first = result.errors[0];
+        throw bad(`Stock import failed on row ${first.row}: ${first.error}. No rows were changed.`);
+      }
+      return result;
+    });
+  }
+  return runImportRows(c, fn, rows);
 }
 
 export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, companyUsage }: Ctx) {
@@ -522,7 +545,7 @@ export function registerCatalogRoutes({ app, db, auth, wrap, tenant, addUser, co
     const cf = settings.customFields.outlet.map(x => x.label).filter(l => !known.has(norm(l)));
     const head = [...SHOP_COLUMNS.slice(0, 13), ...(settings.features.drugLicence ? ["Drug Licence"] : []), ...SHOP_COLUMNS.slice(13), ...cf];
     const rows = SHOP_SAMPLE_ROWS.map(r => head.map(h => { const i = SHOP_COLUMNS.indexOf(h); return i >= 0 ? r[i] : ""; }));
-    const ws = XLSX.utils.aoa_to_sheet([head, ...rows]);
+    const ws = XLSX.utils.aoa_to_sheet([head, ...rows].map(row => row.map(csvCell)));
     if (req.query.format === "csv") return res.type("text/csv").attachment("retailer-master-template.csv").send(XLSX.utils.sheet_to_csv(ws));
     const help = XLSX.utils.aoa_to_sheet([["Retailer master — how to fill"], ["Rows whose Code starts with SAMPLE-ROW are examples and are skipped on upload. Replace them with your retailers."],
       ["Code is the key: uploading a Code that exists updates that retailer; a new Code adds one. Blank optional cells keep the current value."],

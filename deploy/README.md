@@ -2,7 +2,14 @@
 
 The hosted EC2 server (native PostgreSQL, app DB user `ffoss`) updates itself from `master` every ~10 minutes and runs `npm ci`
 as root. The root `package.json` `postinstall` runs `deploy/server-hook.sh`, which does nothing unless it is on that server
-(root + `/etc/fieldforce-oss.env`). There it:
+(root + `/etc/fieldforce-oss.env`). **Do not remove `postinstall` until the server unit is updated** — the hook is what applies
+DB privileges, certs, backups and WAF on each deploy.
+
+Safer install (deferred to an AWS/server session, because the auto-deploy unit lives on the box, not in this repo): run
+`npm ci --ignore-scripts` as the app user, then run `deploy/server-hook.sh` explicitly as root. Limit Dependabot auto-merge
+to patch updates; GitHub Actions in this repo are pinned by SHA.
+
+There it:
 
 1. applies `db-privileges.sql` as the `postgres` superuser (idempotent): a NOLOGIN `ff_ws_provisioner` role with only
    `CREATEROLE`, granted to the app user NOINHERIT — so the Data workspace runs in strong mode without giving the app user any

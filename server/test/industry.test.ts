@@ -102,7 +102,10 @@ describe("configurable products, units and custom fields (FMCG)", () => {
 
 describe("pharma batches & FEFO", () => {
   it("rejects stock without batch/expiry; allocates earliest non-expired batch first", async () => {
-    expect((await imp("PH", "stock", [["SKU", "Qty"], ["SPARA-650", 5]])).body.errors[0].error).toMatch(/batch and expiry/);
+    const badStock = await imp("PH", "stock", [["SKU", "Qty"], ["SPARA-650", 5]]);
+    expect(badStock.status).toBe(400);
+    expect(badStock.body.error).toMatch(/batch and expiry/);
+    expect(badStock.body.error).toMatch(/No rows were changed/);
     const sid = await shopId("PH");
     // SPARA-500 sample stock: expired 50 strips (excluded), SB-0127 30 strips, SB-0627 20 boxes = 200 strips
     const tooMuch = await request(app).post("/api/orders").set(as("PH_rep")).send({ clientRef: "ph0", shopId: sid, lines: [{ sku: "SPARA-500", qty: 24, uom: "BOX" }] });
