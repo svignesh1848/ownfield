@@ -16,8 +16,15 @@ export function sign(secret: string, timestamp: string, body: string) {
 }
 
 function privateIp(ip: string) {
-  if (net.isIPv6(ip)) { const l = ip.toLowerCase(); if (l.startsWith("::ffff:")) return privateIp(l.slice(7)); return l === "::1" || l === "::" || /^f[cd]|^fe80/.test(l); }
+  if (net.isIPv6(ip)) {
+    const l = ip.toLowerCase();
+    // IPv4-mapped / -compatible / NAT64 forms (::ffff:a9fe:a9fe, ::a9fe:a9fe, 64:ff9b::…) hide an IPv4 address: check that address.
+    const m = /^(?:::ffff:(?:0:)?|::|64:ff9b::)(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(l);
+    if (m) { if (m[1]) return privateIp(m[1]); const hi = parseInt(m[2], 16), lo = parseInt(m[3], 16); return privateIp(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`); }
+    return l === "::1" || l === "::" || /^f[cd]|^fe[89ab]|^ff|^2002:|^64:ff9b:/.test(l);
+  }
   const [a, b] = ip.split(".").map(Number);
+  if (ip.split(".").length !== 4 || [a, b].some(n => !Number.isInteger(n))) return true; // not a plain IPv4: refuse
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
 /** Webhook URLs must be https (http only when WEBHOOK_ALLOW_HTTP=1) and must not point at private/loopback/metadata addresses. */

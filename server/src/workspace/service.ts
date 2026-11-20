@@ -51,6 +51,7 @@ async function grantToApp(tx: Db, r: string, me: string) {
   catch { await tx.query("ROLLBACK TO SAVEPOINT g"); await tx.query(`GRANT ${r} TO ${qi(me)}`); }
 }
 
+let barrierWarned = false;
 const synced = new WeakMap<Db, Map<number, Promise<{ roles: boolean }>>>();
 /** Create/refresh the company's views, and (when the DB user may) a read-only role that can see only them. */
 export function syncCompanySchema(db: Db, cid: number, force = false) {
@@ -64,6 +65,9 @@ export function syncCompanySchema(db: Db, cid: number, force = false) {
       const body = `SELECT ${cols} FROM ${t.from || `public.${name} t`} WHERE ${t.where || "t.company_id"}=${cid}`;
       // Column list changed (or the database can't replace): drop and re-create.
       try { await db.query(`CREATE OR REPLACE VIEW ${s}.${name} AS ${body}`); } catch { await db.query(`DROP VIEW IF EXISTS ${s}.${name}`); await db.query(`CREATE VIEW ${s}.${name} AS ${body}`); }
+      // security_barrier: the company filter runs before any condition the user writes, so a cheap/leaky function
+      // (e.g. a temp function over a BI login) can never see other companies' rows. Not supported by the test database.
+      await db.query(`ALTER VIEW ${s}.${name} SET (security_barrier = true)`).catch((e: any) => { if (!barrierWarned) { barrierWarned = true; console.warn("workspace: security_barrier not applied:", String(e?.message || e).split("\n")[0]); } });
     }
     let roles = false;
     if (process.env.WORKSPACE_DB_ROLES !== "0") try {
