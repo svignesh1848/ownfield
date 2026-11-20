@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
 import type { Db } from "./db.js";
+import { toCsv } from "./csv.js";
 import { audit, HitCounter } from "./security.js";
 import { sealField, openField } from "./fieldcrypt.js";
 import { passwordProblem, PLATFORM_CODE } from "./app.js";
@@ -49,8 +50,6 @@ export async function newDeviceCheck(db: Db, u: any, ip: string, ua: string) {
 
 const EXPORT_TABLES = ["companies", "users", "shops", "items", "variants", "stock", "schemes", "beats", "visits", "orders", "invoices", "payments", "targets", "expenses", "leaves", "security_audit_log"];
 const USER_COLS = "id,company_id,email,name,phone,role,drug_licence,active,shop_id,consent_at,totp_enabled";
-const toCsv = (rows: any[]) => { if (!rows.length) return ""; const cols = Object.keys(rows[0]); const q = (v: unknown) => { const s = v == null ? "" : v instanceof Date ? v.toISOString() : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }; return [cols.join(","), ...rows.map(r => cols.map(c => q(r[c])).join(","))].join("\n"); };
-
 export function registerAccountRoutes({ app, db, auth, wrap, tenant }: any) {
   const admin = auth("company_admin");
   const own = async (cid: number, id: number) => (await db.query("SELECT * FROM users WHERE id=$1 AND company_id=$2", [id, cid])).rows[0];

@@ -3,6 +3,7 @@
 // CSV/Excel export, JSON import/export of definitions, templates, and scheduled-delivery config.
 import { teamIds } from "../hierarchy.js";
 import * as XLSX from "xlsx";
+import { sanitizeRow } from "../csv.js";
 import type { Db } from "../db.js";
 import { bad, parseJson } from "../catalog.js";
 import { type Ctx, MGR } from "../common.js";
@@ -61,7 +62,7 @@ const out = (r: any) => ({ id: r.id, name: r.name, description: r.description ||
 
 /** Turn a result into a CSV or Excel file (headers are the column labels). */
 export function toFile(res: RunResult, name: string, format: string) {
-  const data = res.rows.map(r => Object.fromEntries(res.columns.map(c => [c.label, r[c.key] ?? ""])));
+  const data = res.rows.map(r => sanitizeRow(Object.fromEntries(res.columns.map(c => [c.label, r[c.key] ?? ""]))));
   const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ Note: "No rows for this period" }], { header: data.length ? res.columns.map(c => c.label) : undefined });
   const safe = name.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "report";
   const file = `${safe}${res.range ? `-${res.range.from}-to-${res.range.to}` : ""}`;

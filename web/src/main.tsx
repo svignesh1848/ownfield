@@ -17,6 +17,7 @@ import { FlowSettings } from "./flow";
 import { t, t as i18n, LANGS, lang, setLang } from "./i18n";
 import { VanRep, VanAdmin, Inventory, Claims, Leads, Trail, useTracking, Coverage, Surveys, Messages } from "./ops";
 import { UsersAdmin, SecurityPage, MyAccount, ResetPassword, useIdleLogout, deviceId } from "./security";
+import { clearSessionCaches } from "./session-cache";
 import { TeamPage, OutletApprovals, AddOutlet, Returns, RetailerAccount, ProductForm } from "./gaps";
 import { AuditSetup, AuditFill, AuditReport, MyExpenses, ExpenseApprovals, MyLeave, LeaveApprovals, IncentiveRules, Incentives, RetailerHome } from "./phase3";
 
@@ -37,7 +38,7 @@ export const api = async (s: Session | null, url: string, opts: RequestInit = {}
   catch (e) { const c = m0 === "GET" && CACHE_GET.test(url) && localStorage.getItem("ff-c:" + url); if (c) return JSON.parse(c); throw e; }
   if (r.ok && m0 === "GET" && CACHE_GET.test(url)) { const c = r.clone(); c.text().then(t => { try { if (t.length < 500_000) localStorage.setItem("ff-c:" + url, t); } catch { /* storage full */ } }); }
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401 && s) { localStorage.removeItem("ff"); setTimeout(() => location.reload(), 1500); }
+  if (r.status === 401 && s) { void clearSessionCaches(); setTimeout(() => location.reload(), 1500); }
   if (r.status === 403 && s && j.enrollTotp && !s.enrollTotp) { localStorage.setItem("ff", JSON.stringify({ ...s, enrollTotp: true })); location.reload(); return; }
   if (!r.ok) throw Object.assign(new Error(t(j.error || r.statusText)), { body: j });
   const m = (opts.method || "GET").toUpperCase();
@@ -259,7 +260,11 @@ function Users({ s, cfg, go }: ViewProps) {
 
 function App() {
   const [s, setS] = useState<Session | null>(() => JSON.parse(localStorage.getItem("ff") || "null"));
-  const set = (v: Session | null) => { setS(v); v ? localStorage.setItem("ff", JSON.stringify(v)) : localStorage.removeItem("ff"); };
+  const set = (v: Session | null) => {
+    void clearSessionCaches({ keepSession: !!v });
+    if (v) localStorage.setItem("ff", JSON.stringify(v));
+    setS(v);
+  };
   const [hash, setHash] = useState(location.hash);
   useEffect(() => { const h = () => setHash(location.hash); addEventListener("hashchange", h); return () => removeEventListener("hashchange", h); }, []);
   if (!s && (hash === "#reset" || new URLSearchParams(location.search).has("reset"))) return <><ResetPassword onDone={() => { location.hash = ""; setHash(""); }} /><Toasts /></>;

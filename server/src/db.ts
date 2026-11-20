@@ -295,6 +295,52 @@ CREATE TABLE IF NOT EXISTS website_leads (id SERIAL PRIMARY KEY, created_at TIME
 export function createPool(url = process.env.DATABASE_URL): Db {
   return new pg.Pool({ connectionString: url }) as unknown as Db;
 }
+
+/** Statements of one migration, in order. Baseline is the current SCHEMA (all IF NOT EXISTS / ADD COLUMN IF NOT EXISTS). */
+const INDEXES = [
+  "CREATE INDEX IF NOT EXISTS order_lines_order ON order_lines (order_id)",
+  "CREATE INDEX IF NOT EXISTS order_allocations_line ON order_allocations (order_line_id)",
+  "CREATE INDEX IF NOT EXISTS order_allocations_stock ON order_allocations (stock_id)",
+  "CREATE INDEX IF NOT EXISTS stock_loc ON stock (company_id, variant_id, distributor_id)",
+  "CREATE INDEX IF NOT EXISTS visits_rep ON visits (company_id, rep_id, check_in_at)",
+  "CREATE INDEX IF NOT EXISTS shops_company ON shops (company_id)",
+  "CREATE INDEX IF NOT EXISTS orders_company_status ON orders (company_id, status)",
+  "CREATE INDEX IF NOT EXISTS invoices_company ON invoices (company_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS invoice_lines_invoice ON invoice_lines (invoice_id)",
+  "CREATE INDEX IF NOT EXISTS order_events_order ON order_events (order_id)",
+  "CREATE INDEX IF NOT EXISTS visit_photos_visit ON visit_photos (visit_id)",
+  "CREATE INDEX IF NOT EXISTS payments_company_shop ON payments (company_id, shop_id)",
+  "CREATE INDEX IF NOT EXISTS notifications_user ON notifications (company_id, user_id, id)",
+];
+
+export const MIGRATIONS: { id: string; up: (db: Db) => Promise<void> }[] = [
+  { id: "001_baseline", up: async db => {
+    // Existing production DBs already have this schema from previous startups. Re-running every
+    // CREATE TABLE IF NOT EXISTS is fine on Postgres, but skip it when the companies table is
+    // already there so a first deploy on a live database (and pg-mem tests) cannot fail on it.
+    try { await db.query("SELECT 1 FROM companies LIMIT 1"); return; } catch { /* fresh database */ }
+    for (const stmt of SCHEMA.split(";").map(s => s.trim()).filter(Boolean)) await db.query(stmt);
+  } },
+  { id: "002_perf_indexes", up: async db => { for (const sql of INDEXES) await db.query(sql); } },
+];
+
+export async function appliedMigrations(db: Db): Promise<string[]> {
+  try { return (await db.query("SELECT id FROM schema_migrations ORDER BY id")).rows.map(r => String(r.id)); }
+  catch { return []; }
+}
+
+/**
+ * Apply pending migrations. Existing production databases already have the baseline schema:
+ * 001 is idempotent (IF NOT EXISTS) and is stamped after a successful run, so a first deploy
+ * on a live DB does not fail on existing tables or columns.
+ */
 export async function migrate(db: Db) {
-  for (const stmt of SCHEMA.split(";").map(s => s.trim()).filter(Boolean)) await db.query(stmt);
+  try { await db.query("SELECT 1 FROM schema_migrations LIMIT 1"); }
+  catch { await db.query("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT NOW())"); }
+  const applied = new Set((await db.query("SELECT id FROM schema_migrations")).rows.map(r => String(r.id)));
+  for (const m of MIGRATIONS) {
+    if (applied.has(m.id)) continue;
+    await m.up(db);
+    await db.query("INSERT INTO schema_migrations (id) VALUES ($1)", [m.id]);
+  }
 }
