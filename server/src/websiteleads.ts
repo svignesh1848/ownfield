@@ -4,7 +4,7 @@
 // on the server — neither address is hardcoded here.
 import express, { Express, Request, Response, NextFunction } from "express";
 import type { Db } from "./db.js";
-import { HitCounter } from "./security.js";
+import rateLimit from "express-rate-limit";
 import { notify } from "./field.js";
 import { sendMailIfConfigured } from "./mail.js";
 
@@ -38,16 +38,15 @@ export function parseLeadContact(b: { contact?: string; email?: string; phone?: 
 }
 
 export function registerWebsiteLeadRoutes(app: Express, db: Db, auth: (...roles: any[]) => any) {
-  const hits = new HitCounter(Number(process.env.WEBSITE_LEAD_RATE_MAX || 5), 60 * 60_000);
-  const allowOrigin = (req: Request, res: Response) => { const o = req.headers.origin; if (o && SITE_ORIGINS.includes(o)) { res.setHeader("Access-Control-Allow-Origin", o); res.setHeader("Vary", "Origin"); } };
+  // express-rate-limit on the route so CodeQL recognises the per-IP cap (default 5 per hour).
+  const leadLimit = rateLimit({ windowMs: 60 * 60_000, max: Number(process.env.WEBSITE_LEAD_RATE_MAX || 5), standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests from this network. Please try again in an hour." } });
+  const allowOrigin = (req: Request, res: Response, next?: NextFunction) => { const o = req.headers.origin; if (o && SITE_ORIGINS.includes(o)) { res.setHeader("Access-Control-Allow-Origin", o); res.setHeader("Vary", "Origin"); } if (next) next(); };
   // Sent as text/plain JSON from the website so the browser needs no preflight.
-  app.post("/api/public/website-leads", express.text({ type: "text/plain", limit: "8kb" }), async (req: Request, res: Response, next: NextFunction) => {
+  app.post("/api/public/website-leads", allowOrigin, leadLimit, express.text({ type: "text/plain", limit: "8kb" }), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      allowOrigin(req, res);
       let b: any = req.body;
       if (typeof b === "string") { try { b = JSON.parse(b); } catch { return res.status(400).json({ error: "Invalid request" }); } }
       b = b && typeof b === "object" ? b : {};
-      if (hits.hit(req.ip || "?") > hits.max) return res.status(429).json({ error: "Too many requests from this network. Please try again in an hour." });
       if (b.website) return res.status(400).json({ error: "Invalid request" }); // honeypot
       const s = (k: string, max: number) => String(b[k] ?? "").trim().slice(0, max + 1);
       const kind = s("kind", 20) || "trial";
