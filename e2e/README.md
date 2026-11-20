@@ -10,7 +10,7 @@ On every pull request and push to master the `e2e` job:
 4. Checks the database after each step, including stock holds and company isolation.
 5. Saves a screenshot of each screen and fails if the layout overflows or the console reports an error.
 
-A separate `live-smoke` workflow hits https://app.ownfield.in after each deploy and every 30 minutes. If the demo admin login should run, add the repository secret `OWNFIELD_DEMO_PASSWORD` (the current demo password). The password is never printed. A failure opens or updates a GitHub issue labelled `live-down`.
+A separate `live-smoke` workflow hits https://app.ownfield.in after each deploy (push to master) and when run by hand (Actions → Live smoke → Run workflow). If the demo admin login should run, add the repository secret `OWNFIELD_DEMO_PASSWORD` (the current demo password). The password is never printed. A failure opens or updates a GitHub issue labelled `live-down`.
 
 ```bash
 # Local run (Postgres required)
