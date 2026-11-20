@@ -194,3 +194,34 @@ select{background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2
 .price .tag{position:absolute;top:-11px;left:16px;background:var(--accent,#0f766e);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px}
 .pnotes{margin-top:28px;border-top:1px solid #e2e8f0;padding-top:16px}.pnotes p{margin:6px 0}
 main.legal.pricing{max-width:1120px}@media (min-width:1000px){.price.p4{grid-template-columns:repeat(4,1fr)}}
+
+/* launch refresh: demo video, comparison, security highlights, 2-plan cards */
+#demo-video{scroll-margin-top:80px}
+.demo-vid{padding:48px 0 64px;background:#fff}
+.demo-vid .sh{margin-bottom:28px}
+.phone-vid{width:min(320px,86vw);margin:0 auto;border:10px solid #111;border-radius:36px;overflow:hidden;background:#111;box-shadow:0 24px 50px rgba(10,42,48,.22);line-height:0}
+.phone-vid video{display:block;width:100%;height:auto;max-height:min(72vh,640px);aspect-ratio:1080/1920;object-fit:contain;background:#000}
+.olist.o6{grid-template-columns:repeat(3,1fr)}
+@media(max-width:900px){.olist.o6{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.olist.o6{grid-template-columns:1fr}}
+.cmp{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:8px}
+.cmp-h,.cmp-r{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:0}
+.cmp-h{background:var(--navy);color:#fff;font-weight:700;font-size:15px}
+.cmp-h > div,.cmp-r > div,.cmp-r h3{padding:16px 18px;border-bottom:1px solid var(--line)}
+.cmp-r:last-child > *{border-bottom:0}
+.cmp-r h3{margin:0;font-size:16px;background:var(--tint)}
+.cmp-r .of{font-weight:600;color:var(--accent-d);background:#f3faf8}
+@media(max-width:760px){
+  .cmp-h{display:none}
+  .cmp-r{grid-template-columns:1fr;border-bottom:1px solid var(--line)}
+  .cmp-r:last-child{border-bottom:0}
+  .cmp-r h3{border-bottom:0}
+  .cmp-r > div:before{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .cmp-r > div.ex:before{content:"Existing field sales software"}
+  .cmp-r > div.of:before{content:"OwnField"}
+}
+.sec-hl{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+@media(max-width:700px){.sec-hl{grid-template-columns:1fr}}
+.sec-hl div{border:1px solid var(--line);border-radius:12px;padding:18px 20px;background:#fff}
+.price.p2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+@media(min-width:800px){.price.p2{grid-template-columns:1fr 1fr}}

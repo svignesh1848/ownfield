@@ -30,7 +30,7 @@ if [ $ok = 1 ] && [ -f "$WEB/index.html" ]; then
   mkdir -p $ROOT.new && cp -a "$WEB/." $ROOT.new/ && chmod -R a+rX $ROOT.new
   rm -rf $ROOT.old; [ -d $ROOT ] && mv $ROOT $ROOT.old; mv $ROOT.new $ROOT; rm -rf $ROOT.old
   R=/etc/nginx/sites-available/ownfield-site; L=/etc/letsencrypt/live/ownfield.in
-  LOC='  root /var/www/ownfield-site;\n  index index.html;\n  location / { try_files $uri $uri/ =404; }\n  location ~* \\.(png|svg|ico|css|webp|jpg)$ { expires 7d; add_header Cache-Control "public"; }\n  error_page 404 /index.html;\n  gzip on; gzip_types text/css application/javascript image/svg+xml application/xml;\n'
+  LOC='  root /var/www/ownfield-site;\n  index index.html;\n  location / { try_files $uri $uri/ =404; }\n  location ~* \\.(png|svg|ico|css|webp|jpg|mp4)$ { expires 7d; add_header Cache-Control "public"; }\n  error_page 404 /index.html;\n  gzip on; gzip_types text/css application/javascript image/svg+xml application/xml;\n'
   ACME='  location /.well-known/acme-challenge/ { root /var/www/html; }\n'
   if [ -f $L/fullchain.pem ] && covers ownfield.in www.ownfield.in; then
     OPT=""; [ -f /etc/letsencrypt/options-ssl-nginx.conf ] && OPT='  include /etc/letsencrypt/options-ssl-nginx.conf;\n'
