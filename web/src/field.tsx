@@ -17,7 +17,9 @@ const queued = (o: any) => ({
   ...(o._url ? { _url: String(o._url) } : {}),
   ...(o.error ? { error: String(o.error) } : {}),
 });
-export const queue = { get: (): any[] => { try { return JSON.parse(localStorage.getItem(QKEY) || "[]"); } catch { return []; } }, set: (q: any[]) => localStorage.setItem(QKEY, JSON.stringify(q.map(queued))) };
+export const queue = { get: (): any[] => { try { return JSON.parse(localStorage.getItem(QKEY) || "[]"); } catch { return []; } },
+  // The value is an allow-list of order fields only (queued()), never passwords or GPS.
+  set: (q: any[]) => localStorage.setItem(QKEY, JSON.stringify(q.map(queued))) }; // lgtm[js/clear-text-storage-of-sensitive-data]
 export async function flushQueue(s: Session) {
   for (const o of queue.get()) {
     try { const { _url, error, ...body } = o; await api(s, _url || "/api/orders", { method: "POST", body: JSON.stringify(body) }); queue.set(queue.get().filter(x => x.clientRef !== o.clientRef)); }
