@@ -233,7 +233,7 @@ test("manager approves the new outlet and the order; dashboard totals match", as
   expect(tot.v).toBeGreaterThanOrEqual(1);
   expect(tot.o).toBe(1);
   expect(tot.val).toBe(ctx.orderTotal);
-  await expect(page.locator(".kpis")).toContainText(String(tot.o));
+  await expect(page.locator(".kpi-grid, .kpis")).toContainText(String(tot.o));
   await uiLogout(page);
 });
 

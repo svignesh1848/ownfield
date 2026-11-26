@@ -2,8 +2,12 @@
 // © 2026 Vignesh S. OwnField is a trademark of Vignesh S. See TRADEMARKS.md.
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-500.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
 import "./style.css";
-import { Toasts, toast, Empty, Loading, Field, fmtCell, ICONS } from "./ui";
+import { Toasts, toast, Empty, Loading, Field, fmtCell, Icon } from "./ui";
 import { SetupChecklist, RepHome, DistributorHome, ManagerHome, DiskAlert } from "./home";
 import { Dashboard, Beats, Orders, MyBeat, OrderForm, Inbox, ShopsMap, OfflineBadge, queue, Bell } from "./field";
 import { Collections } from "./collect";
@@ -47,7 +51,7 @@ export const api = async (s: Session | null, url: string, opts: RequestInit = {}
 };
 
 function LangPicker() {
-  return <label className="lang-pick">🌐 {t("Language")} <select value={lang()} onChange={e => setLang(e.target.value)}>{Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>;
+  return <label className="lang-pick"><Icon name="🌐" size={16} /> {t("Language")} <select value={lang()} onChange={e => setLang(e.target.value)}>{Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>;
 }
 
 function Login({ onLogin }: { onLogin: (s: Session) => void }) {
@@ -163,10 +167,10 @@ function Usage({ u }: { u: any }) {
 }
 
 function PlatformHome({ s, onLogout }: { s: Session; onLogout: () => void }) {
-  if (s.enrollTotp) return <main><header className="top"><b>{t("OwnField · Platform")}</b><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header>
+  if (s.enrollTotp) return <main className="plat"><header className="top"><div className="hdr-t"><b>{t("OwnField · Platform")}</b></div><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header>
     <section className="card"><p>{t("Set up two-step sign-in to continue. This is required for the platform owner.")}</p></section>
     <MyAccount s={s} onSignedOut={onLogout} /></main>;
-  return <main><header className="top"><b>{t("OwnField · Platform")}</b><Bell s={s} source="/api/platform/notifications" /><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header><Platform s={s} /></main>;
+  return <main className="plat"><header className="top"><div className="hdr-t"><b>{t("OwnField · Platform")}</b></div><Bell s={s} source="/api/platform/notifications" /><button className="sm ghost" onClick={onLogout}>{t("Sign out")}</button></header><Platform s={s} /></main>;
 }
 
 function Platform({ s }: { s: Session }) {
@@ -175,23 +179,28 @@ function Platform({ s }: { s: Session }) {
   const [leads, setLeads] = useState<any[]>([]);
   const load = () => api(s, "/api/platform/companies").then(setList);
   useEffect(() => { load(); api(null, "/api/templates").then(setTpl); api(s, "/api/platform/leads").then(setLeads).catch(() => {}); }, []);
-  return <>
+  const labels: Record<string, string> = { code: t("Company code"), name: t("Company name"), userLimit: t("User limit"), email: t("Admin email"), adminName: t("Admin name"), password: t("Admin password") };
+  return <div className="home">
     <DiskAlert s={s} />
-    <section className="card"><h2>Website requests</h2>
-      {!leads.length && <p className="muted">No requests yet.</p>}
+    <div className="kpi-grid">
+      <div className="kpi"><span className="kpi-h"><span className="kpi-ic"><Icon name="users" size={18} /></span>{t("Companies")}</span><b className="kpi-v num">{list.length}</b></div>
+      <div className="kpi"><span className="kpi-h"><span className="kpi-ic"><Icon name="inbox" size={18} /></span>{t("Website requests")}</span><b className="kpi-v num">{leads.length}</b><span className="kpi-s">{leads.length ? t("waiting for you") : t("No requests yet.")}</span></div>
+    </div>
+    <section className="panel"><div className="panel-h"><b>Website requests</b></div>
+      {!leads.length && <p className="muted small empty-line">No requests yet.</p>}
       {leads.map(l => <div key={l.id} className="row"><b>{l.company}</b> {l.name} <span className="pill">{l.kind === "trial" ? "Start free trial" : "Book a demo"}</span>
         <div className="muted small">{l.email} · {l.phone} · {l.team_size} · {l.industry} · {new Date(l.created_at).toLocaleString()}</div>{l.message && <div className="small">{l.message}</div>}</div>)}
     </section>
-    <section className="card"><h2>{t("Companies")}</h2>
-      {list.map(c => <div key={c.id} className="row"><b>{c.code}</b> {c.name} <span className="pill">{c.industry}</span><Usage u={c.usage} />
+    <section className="panel"><div className="panel-h"><h2>{t("Companies")}</h2></div>
+      {list.map(c => <div key={c.id} className="row plat-co"><div className="plat-co-h"><b>{c.code}</b> {c.name} <span className="pill">{c.industry}</span></div><Usage u={c.usage} />
         <button className="sm" onClick={async () => { const v = prompt(t("New user limit"), c.user_limit); if (v) { await api(s, `/api/platform/companies/${c.id}`, { method: "PATCH", body: JSON.stringify({ userLimit: Number(v) }) }); load(); } }}>{t("Set limit")}</button></div>)}
     </section>
-    <form className="card" onSubmit={async e => { e.preventDefault(); try { await api(s, "/api/platform/companies", { method: "POST", body: JSON.stringify({ code: f.code, name: f.name, industry, userLimit: Number(f.userLimit), admin: { email: f.email, name: f.adminName, password: f.password } }) }); setMsg(t("Created")); load(); } catch (x: any) { setMsg(x.message); } }}>
+    <form className="panel" onSubmit={async e => { e.preventDefault(); try { await api(s, "/api/platform/companies", { method: "POST", body: JSON.stringify({ code: f.code, name: f.name, industry, userLimit: Number(f.userLimit), admin: { email: f.email, name: f.adminName, password: f.password } }) }); setMsg(t("Created")); load(); } catch (x: any) { setMsg(x.message); } }}>
       <h2>{t("New company")}</h2>
       <label>{t("Industry template")}</label>
       <div className="tpls">{tpl.map(t => <label key={t.id} className={`tpl ${industry === t.id ? "on" : ""}`}><input type="radio" name="ind" checked={industry === t.id} onChange={() => setIndustry(t.id)} /><b>{t.label}</b><span>{t.description}</span></label>)}</div>
-      {Object.keys(f).map(k => <input key={k} placeholder={k} value={(f as any)[k]} type={k === "password" ? "password" : "text"} onChange={e => setF({ ...f, [k]: e.target.value })} />)}
-      <button>{t("Create")}</button><p>{msg}</p></form></>;
+      {Object.keys(f).map(k => <Field key={k} label={labels[k] || k}><input placeholder={k} value={(f as any)[k]} type={k === "password" ? "password" : "text"} onChange={e => setF({ ...f, [k]: e.target.value })} /></Field>)}
+      <button>{t("Create")}</button><p>{msg}</p></form></div>;
 }
 
 export type Cfg = { industry: string; settings: { features: Record<string, boolean>; attributes: string[]; uoms: { code: string; factor: number }[]; customFields: Record<string, any[]>; po?: any; gst?: any } };
@@ -199,6 +208,7 @@ const WORDS: Record<string, string> = { shop_name: t("Outlet"), shop: t("Outlet"
   base_qty: t("Qty"), min_qty: t("Minimum qty"), tax_type: t("Tax"), taxable: t("Value before tax"), qty_base: t("Qty"), created_at: t("Created"), item_name: t("Product"), number: "No.", drug_licence: t("Drug licence"), active: t("Active") };
 export const label = (k: string) => t(WORDS[k] || k.replace(/_/g, " ").replace(/^./, c => c.toUpperCase()));
 
+const SHORT_LABEL: Record<string, string> = { beat: "Beat" };
 export const TAB_LABEL: Record<string, string> = { home: "Home", beat: "Today's beat", order: "New order", orders: "Orders", collect: "Collect", targets: "Targets", catalog: "Products",
   inbox: "New orders", invoices: "Invoices", collections: "Collections", POs: "Purchase orders", stock: "Stock", profile: "My profile", dashboard: "Team activity", beats: "Beat plans",
   visits: "Visits", reports: "Reports", shops: "Outlets", schemes: "Offers & schemes", distributors: "Distributors", users: "Users", settings: "Company settings", import: "Upload data", security: "Security & privacy", integrations: "Integrations", van: "My van", surveys: "Surveys", messages: "WhatsApp / SMS", vans: "Van sales", inventory: "Inventory", claims: "Claims", leads: "Leads", trail: "Location trail", coverage: "Coverage", account: "My account", more: "More", audit: "Store check", audits: "Store checks", checklists: "Store checklists", expenses: "Expenses", myexpenses: "My expenses", leave: "Leave & attendance", myleave: "My leave", incentives: "Incentives", rules: "Incentive rules", fieldrules: "Field rules", data: "Data workspace", team: "Team & territories", outletapprovals: "New outlets", addoutlet: "Add outlet", returns: "Sales returns", statement: "Account statement", productform: "Product form" };
@@ -232,19 +242,19 @@ function Company({ s, onLogout }: { s: Session; onLogout: () => void }) {
     catalog: Catalog, stock: Stock, invoices: Invoices, targets: Targets, reports: ReportsHub, visits: Visits, POs: PurchaseOrders, distributors: DistributorTerms, profile: DistributorTerms, schemes: Schemes,
     collections: Collections, collect: Collections, settings: SettingsPage, import: ImportPage, users: UsersAdmin, security: SecurityPage, integrations: Integrations, van: VanRep, vans: VanAdmin, inventory: Inventory, claims: Claims, leads: Leads, surveys: Surveys, messages: Messages, trail: Trail, coverage: Coverage, account: (p: ViewProps) => <><div className="card"><LangPicker /></div><MyAccount s={p.s} onSignedOut={onLogout} /></>, audit: AuditFill, audits: AuditReport, checklists: AuditSetup, expenses: ExpenseApprovals, myexpenses: MyExpenses, leave: LeaveApprovals, myleave: MyLeave, incentives: Incentives, rules: IncentiveRules, fieldrules: FlowSettings, data: DataWorkspace, team: TeamPage, outletapprovals: OutletApprovals, addoutlet: AddOutlet, returns: Returns, statement: RetailerAccount, productform: ProductForm };
   const C = views[cur];
-  const Item = ({ t }: { t: string }) => /* t is a tab id here */ <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden>{ICONS[t]}</span><span>{i18n(TAB_LABEL[t] || t)}</span></button>;
+  const Item = ({ t, short }: { t: string; short?: boolean }) => /* t is a tab id here */ <button className={`nav-item ${t === cur ? "on" : ""}`} onClick={() => setTab(t)}><span className="ic" aria-hidden><Icon name={t} /></span><span>{i18n((short && SHORT_LABEL[t]) || TAB_LABEL[t] || t)}</span></button>;
   return <div className="shell">
     <aside className="sidebar"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{t("OwnField")}</b></div>
       {groups.map(([g, ts]) => <div key={g} className="group"><div className="group-h">{t(g)}</div>{ts.map(t => <Item key={t} t={t} />)}</div>)}
       <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div>
       <p className="muted small copy">{t("OwnField — Own your sales.")}<br />© 2026 Vignesh S. OwnField is a trademark of Vignesh S. AGPL-3.0.</p></aside>
     <div className="content">
-      <header className="top"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><b>{s.user.companyCode}</b></div><Bell s={s} go={setTab} /><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
+      <header className="top"><div className="brand sm"><img className="logo" src="/logo-mark.svg" alt="OwnField" /><div className="hdr-t"><b>{i18n(TAB_LABEL[cur] || "OwnField")}</b><span className="co">{s.user.companyCode === "DEMO" ? t("Sample data") : s.user.companyCode}</span></div></div><Bell s={s} go={setTab} /><span className="who-sm" title={s.user.name}>{s.user.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span></header>
       {mgr && cur === "home" && <Usage u={usage} />}<OfflineBadge s={s} />{cur === "home" && role !== "retailer" && <PinnedReports s={s} go={setTab} />}
       <section className="card main-card"><C s={s} cfg={cfg} reload={reload} onUsage={setUsage} go={setTab} /></section>
     </div>
-    <nav className="bottom">{primary.map(t => <Item key={t} t={t} />)}
-      <button className={`nav-item ${more ? "on" : ""}`} onClick={() => setMore(!more)}><span className="ic" aria-hidden>{ICONS.more}</span><span>{t("More")}</span></button></nav>
+    <nav className="bottom">{primary.map(t => <Item key={t} t={t} short />)}
+      <button className={`nav-item ${more ? "on" : ""}`} onClick={() => setMore(!more)}><span className="ic" aria-hidden><Icon name="more" /></span><span>{t("More")}</span></button></nav>
     {more && <div className="sheet-bg" onClick={() => setMore(false)}><div className="sheet" onClick={e => e.stopPropagation()}>
       {groups.map(([g, ts]) => <div key={g}><div className="group-h">{t(g)}</div><div className="sheet-grid">{ts.map(t => <Item key={t} t={t} />)}</div></div>)}
       <div className="who"><b>{s.user.name}</b><span>{t(ROLE[role])} · {s.user.companyCode}</span><button className="ghost sm" onClick={onLogout}>{t("Sign out")}</button></div></div></div>}
