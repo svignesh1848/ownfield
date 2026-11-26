@@ -9,7 +9,15 @@ import { inr, inr0, fmtDate, Empty, toast, Term, Loading, Icon } from "./ui";
 
 // ---------- Offline order queue (localStorage; retried on reconnect; server dedupes by clientRef) ----------
 const QKEY = "ff-order-queue";
-export const queue = { get: (): any[] => JSON.parse(localStorage.getItem(QKEY) || "[]"), set: (q: any[]) => localStorage.setItem(QKEY, JSON.stringify(q)) };
+/** Only order fields are persisted — never passwords, GPS or other sensitive properties that might be attached to a payload. */
+const queued = (o: any) => ({
+  clientRef: String(o.clientRef || ""),
+  shopId: Number(o.shopId),
+  lines: Array.isArray(o.lines) ? o.lines.map((l: any) => ({ sku: l.sku, variantId: l.variantId, uom: l.uom, qty: Number(l.qty) })) : [],
+  ...(o._url ? { _url: String(o._url) } : {}),
+  ...(o.error ? { error: String(o.error) } : {}),
+});
+export const queue = { get: (): any[] => { try { return JSON.parse(localStorage.getItem(QKEY) || "[]"); } catch { return []; } }, set: (q: any[]) => localStorage.setItem(QKEY, JSON.stringify(q.map(queued))) };
 export async function flushQueue(s: Session) {
   for (const o of queue.get()) {
     try { const { _url, error, ...body } = o; await api(s, _url || "/api/orders", { method: "POST", body: JSON.stringify(body) }); queue.set(queue.get().filter(x => x.clientRef !== o.clientRef)); }
